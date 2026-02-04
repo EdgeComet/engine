@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy Mode Test Page</title>
+    <meta name="description" content="Test page for proxy mode (replicate_on_pull: false)">
+</head>
+<body>
+    <h1>Proxy Mode Test Page</h1>
+    <p>This is a test page for verifying proxy mode functionality in sharding.</p>
+    <div class="content">
+        <h2>Proxy Mode Behavior</h2>
+        <p>When replicate_on_pull is false, this cache should be:</p>
+        <ul>
+            <li>Pulled from remote EGs on cache miss</li>
+            <li>Served to client from memory</li>
+            <li>NOT stored locally on disk</li>
+            <li>NOT added to eg_ids list</li>
+        </ul>
+    </div>
+    <footer>
+        <p>Sharding Proxy Mode Test</p>
+    </footer>
+</body>
+</html>

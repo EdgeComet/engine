@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Query Parameter Test Page</title>
+    <meta name="description" content="Generic query parameter test page">
+</head>
+<body>
+    <h1>Query Parameter Test Page</h1>
+    <div id="query-params"></div>
+    <div id="test-marker">QPARAM_TEST_PAGE</div>
+
+    <script>
+        // Parse and display query parameters
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const container = document.getElementById('query-params');
+
+            if (params.toString()) {
+                const paramsList = [];
+                for (const [key, value] of params) {
+                    paramsList.push(`<li><strong>${key}</strong>: ${value}</li>`);
+                }
+                container.innerHTML = `<h2>Query Parameters:</h2><ul>${paramsList.join('')}</ul>`;
+            } else {
+                container.innerHTML = '<p>No query parameters provided</p>';
+            }
+
+            // Add mock AJAX request to keep network busy (required for Chrome rendering)
+            fetch('/api/mock-data?delay=100')
+                .then(response => response.json())
+                .catch(() => {
+                    // Ignore errors - this is just to trigger networkIdle event properly
+                });
+        });
+    </script>
+</body>
+</html>

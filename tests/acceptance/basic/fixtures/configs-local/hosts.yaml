@@ -1,0 +1,570 @@
+# Test Host Configuration for Acceptance Tests
+hosts:
+  - id: 1
+    # Multi-domain support: both localhost and 127.0.0.1 resolve to the same host
+    domain: ["localhost", "127.0.0.1"]
+    render_key: "sk_test_render_12345"
+    enabled: true
+
+    # Tracking parameter stripping configuration
+    tracking_params:
+      strip: true
+      params_add:
+        - "custom_ref"
+        - "custom_source"
+
+    render:
+      timeout: 15s       # 15 seconds for testing (faster than production)
+
+      # Blocked patterns for domain blocking tests
+      blocked_patterns:
+        - "*/api/tracking/*"      # Block custom tracking API
+        - "*/api/analytics/*"     # Block custom analytics API
+        - "*/ads/*"              # Block custom ads paths
+
+      cache:
+        ttl: 5m    # 5 minutes for faster testing
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - "*Googlebot*"
+            - "*Chrome*"
+            - "*Safari*"
+            - "*Mozilla*"
+        mobile:
+          id: 2
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - "*iPhone*"
+            - "*Android*"
+            - "*Mobile*"
+
+      events:
+        wait_for: "networkIdle"  # Wait for network to be idle
+        additional_wait: 500ms   # Additional 500ms wait
+
+    # Comprehensive URL rules for pattern matching tests
+    url_rules:
+      # --- TRACKING PARAMETER STRIPPING TESTS ---
+      # Special pattern: override with replace mode (only strip "special_only")
+      - match: "/tracking-params/special/*"
+        action: "render"
+        tracking_params:
+          params:
+            - "special_only"
+
+      # Disabled pattern: no stripping at all
+      - match: "/tracking-params/disabled/*"
+        action: "render"
+        tracking_params:
+          strip: false
+
+      # Wildcard pattern test
+      - match: "/tracking-params/wildcard-test/*"
+        action: "render"
+        tracking_params:
+          params_add:
+            - "utm_*"
+            - "ga_*"
+            - "fb_*"
+
+      # --- EXACT MATCH PATTERNS ---
+      - match: "/exact/path"
+        action: "status_403"
+        status:
+          reason: "Exact match test"
+
+      - match: "/admin/login"
+        action: "block"
+        status:
+          reason: "Admin exact match"
+
+      # --- WILDCARD PATTERNS (RECURSIVE) ---
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2h  # Long cache for blog content
+
+      - match: "/api/*"
+        action: "bypass"
+        bypass:
+          timeout: 10s
+
+      - match: "/admin/*"
+        action: "status_403"
+        status:
+          reason: "Admin area blocked"
+
+      - match: "/product/*/reviews"
+        action: "render"
+        render:
+          cache:
+            ttl: 1h  # Cache product reviews
+
+      # --- EXTENSION PATTERNS ---
+      - match: "*.pdf"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 24h
+            status_codes: [200, 404]
+
+      - match: "*.zip"
+        action: "status_403"
+        status:
+          reason: "Archive downloads blocked"
+
+      - match: "*.json"
+        action: "bypass"
+
+      # --- QUERY PARAMETER MATCHING TESTS (for query_param_matching_test.go) ---
+      # Comprehensive tests for match_query functionality
+
+      # Exact value matching - single parameter
+      - match: "/qparam-test/exact-match"
+        match_query:
+          category: "tech"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Wildcard matching - parameter must exist with non-empty value
+      - match: "/qparam-test/wildcard-required"
+        match_query:
+          q: "*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Array OR logic - multiple allowed values for same key
+      - match: "/qparam-test/array-or"
+        match_query:
+          category: ["tech", "science", "business"]
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Multiple parameters - AND logic (all must match)
+      - match: "/qparam-test/multi-and"
+        match_query:
+          q: "*"
+          category: ["tech", "science"]
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Regexp matching - case-sensitive
+      - match: "/qparam-test/regexp-sensitive"
+        match_query:
+          id: "~^[0-9]+$"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Regexp matching - case-insensitive
+      - match: "/qparam-test/regexp-insensitive"
+        match_query:
+          name: "~*^product-"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Complex combination - multiple conditions with different types
+      - match: "/qparam-test/complex"
+        match_query:
+          search: "*"
+          category: ["tech", "science"]
+          page: "~^[0-9]+$"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Priority test - query-specific rule before path-only rule
+      - match: "/qparam-test/priority"
+        match_query:
+          premium: "true"
+        action: "render"
+        render:
+          cache:
+            ttl: 1h
+
+      # Path-only fallback (no match_query)
+      - match: "/qparam-test/priority"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Status action with query parameter condition
+      - match: "/qparam-test/blocked"
+        match_query:
+          admin: "true"
+        action: "status_403"
+        status:
+          reason: "Admin parameter not allowed"
+
+      # Bypass action with query parameter condition
+      - match: "/qparam-test/api-call"
+        match_query:
+          format: "json"
+        action: "bypass"
+
+      # Multiple exact values
+      - match: "/qparam-test/exact-multi"
+        match_query:
+          type: "article"
+          status: "published"
+        action: "render"
+        render:
+          cache:
+            ttl: 10m
+
+      # Case-sensitive exact match
+      - match: "/qparam-test/case-sensitive"
+        match_query:
+          Code: "ABC123"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Empty value handling (should not match wildcard)
+      - match: "/qparam-test/non-empty"
+        match_query:
+          value: "*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Regexp with special characters
+      - match: "/qparam-test/regexp-special"
+        match_query:
+          email: "~^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Mixed array and single value
+      - match: "/qparam-test/mixed"
+        match_query:
+          section: "news"
+          category: ["tech", "business"]
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Fallback rule (path-only, no query conditions)
+      - match: "/qparam-test/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2m
+
+      # --- LEGACY QUERY PARAMETER PATTERNS (path-only) ---
+      - match: "/search*"
+        action: "render"
+        render:
+          cache:
+            ttl: 10m  # Short cache for search results
+
+      - match: "/api/v1/*"
+        action: "bypass"
+
+      # --- SPECIFIC BEFORE GENERAL (PRIORITY TEST) ---
+      - match: "/special/protected/page"
+        action: "status_403"
+        status:
+          reason: "Specific page blocked"
+
+      - match: "/special/*"
+        action: "render"
+
+      # --- STATUS CODE TESTS ---
+      - match: "/removed/*"
+        action: "status_404"
+        status:
+          reason: "Content removed"
+
+      - match: "/gone/*"
+        action: "status_410"
+        status:
+          reason: "Permanently removed"
+
+      - match: "/redirect-old"
+        action: "status"
+        status:
+          code: 301
+          headers:
+            Location: "http://localhost:9000/static/simple.html"
+
+      # --- STATUS ACTION TESTS (COMPREHENSIVE) ---
+      # Test cases for status_actions_test.go
+
+      # Basic status actions
+      - match: "/blocked/admin-area"
+        action: "status_403"
+        status:
+          reason: "Admin areas not available for bots"
+
+      - match: "/blocked/system-files"
+        action: "block"  # Alias for status_403
+
+      - match: "/removed/old-content"
+        action: "status_404"
+        status:
+          reason: "Content has been removed"
+          headers:
+            X-Removal-Date: "2024-01-15"
+
+      - match: "/discontinued/product"
+        action: "status_410"
+        status:
+          reason: "Product permanently discontinued"
+
+      # 3xx Redirects
+      - match: "/redirect/old-page"
+        action: "status"
+        status:
+          code: 301
+          headers:
+            Location: "/new-page"
+
+      - match: "/redirect/temporary"
+        action: "status"
+        status:
+          code: 302
+          headers:
+            Location: "/current-page"
+
+      - match: "/redirect/preserve-method"
+        action: "status"
+        status:
+          code: 307
+          headers:
+            Location: "/preserved-endpoint"
+
+      - match: "/redirect/absolute-url"
+        action: "status"
+        status:
+          code: 301
+          headers:
+            Location: "https://example.com/new-location"
+
+      # 4xx Client Errors
+      - match: "/errors/bad-request"
+        action: "status"
+        status:
+          code: 400
+          reason: "Invalid request parameters"
+
+      - match: "/errors/unauthorized"
+        action: "status"
+        status:
+          code: 401
+          reason: "Authentication required"
+          headers:
+            WWW-Authenticate: "Bearer"
+
+      - match: "/errors/rate-limited"
+        action: "status"
+        status:
+          code: 429
+          reason: "Too many requests"
+          headers:
+            Retry-After: "3600"
+
+      # 5xx Server Errors
+      - match: "/errors/server-error"
+        action: "status"
+        status:
+          code: 500
+          reason: "Internal processing error"
+
+      - match: "/errors/maintenance"
+        action: "status"
+        status:
+          code: 503
+          reason: "System under maintenance"
+          headers:
+            Retry-After: "7200"
+
+      # Custom headers and edge cases
+      - match: "/status/custom-content-type"
+        action: "status_403"
+        status:
+          reason: "Custom content type test"
+          headers:
+            Content-Type: "application/json"
+
+      - match: "/status/empty-reason"
+        action: "status_404"
+        status:
+          reason: ""
+
+      - match: "/status/long-reason"
+        action: "status_403"
+        status:
+          reason: "This is a very long custom reason message that contains more than five hundred characters to test how the system handles extremely long reason strings in status action responses. The system should be able to handle this without any issues and return the complete message to the client. This tests the robustness of the response writer and ensures that there are no arbitrary limits on the length of custom reason messages. The reason can contain multiple sentences and detailed explanations about why the request was blocked or returned a specific status code. It should preserve all the content exactly as configured."
+
+      # Pattern matching edge cases
+      - match: "/blocked/exact-path"
+        action: "status_403"
+        status:
+          reason: "Exact path blocked"
+
+      - match: "/blocked/special"
+        action: "status_404"
+        status:
+          reason: "Special case for priority testing"
+
+      # --- BYPASS CACHE TESTS (for bypass_cache_test.go) ---
+      # Test various bypass cache configurations
+      - match: "/bypass-test/default*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 30m
+            status_codes: [200]
+
+      - match: "/bypass-test/multi-status*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 30m
+            status_codes: [200, 404]
+
+      - match: "/bypass-test/with-redirects*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 30m
+            status_codes: [200, 301, 302]
+
+      - match: "/bypass-test/ttl-short*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200]
+
+      - match: "/bypass-test/disabled*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+
+      - match: "/bypass-test/ttl-zero*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 0s
+            status_codes: [200]
+
+      - match: "/bypass-test/partial-override"
+        action: "bypass"
+        bypass:
+          cache:
+            ttl: 10m  # Only override TTL, inherit other settings
+
+      # Catch-all pattern (MUST be last to allow specific patterns to match first)
+      - match: "/bypass-test/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+
+      # --- RENDER CACHE PRIORITY TESTS (for render_cache_priority_test.go) ---
+      # Test render vs bypass cache priority interactions
+
+      # Dual mode path - can be both rendered and bypassed
+      - match: "/priority-test/dual-mode*"
+        action: "render"
+        render:
+          cache:
+            ttl: 10m
+
+      # Bypass mode with caching enabled
+      - match: "/priority-test/bypass-mode*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+
+      # Short TTL for expiration tests
+      - match: "/priority-test/short-ttl*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2s
+
+  - id: 2
+    domain: "slow.test.com"
+    render_key: "slow-test-key-67890"
+    enabled: true
+
+    render:
+      timeout: 5s         # Very short timeout for testing failures
+
+      cache:
+        ttl: 1m     # Very short cache for timeout testing
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 100ms
+
+  - id: 3
+    domain: "disabled.test.com"
+    render_key: "disabled-test-key-11111"
+    enabled: false          # Disabled host for testing
+
+    render:
+      timeout: 10s
+
+      cache:
+        ttl: 5m
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+      events:
+        wait_for: "DOMContentLoaded"
+        additional_wait: 0s

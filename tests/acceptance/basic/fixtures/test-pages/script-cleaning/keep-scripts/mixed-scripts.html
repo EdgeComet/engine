@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Script Cleaning Test Page</title>
+    <meta name="description" content="Page with mixed scripts for testing script cleaning functionality">
+
+    <!-- JSON-LD structured data - should be PRESERVED -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Script Cleaning Test",
+        "description": "Test page for script cleaning functionality"
+    }
+    </script>
+
+    <!-- Executable script - should be REMOVED when strip_scripts=true -->
+    <script>
+        console.log('Executable script in head');
+        window.headScriptRan = true;
+    </script>
+
+    <!-- Module script - should be REMOVED when strip_scripts=true -->
+    <script type="module">
+        console.log('Module script');
+        window.moduleScriptRan = true;
+    </script>
+
+    <!-- External script - should be REMOVED when strip_scripts=true -->
+    <script src="/api/mock-data?format=js"></script>
+
+    <!-- Module preload link - should be REMOVED when strip_scripts=true -->
+    <link rel="modulepreload" href="/module.js">
+
+    <!-- Preload script link - should be REMOVED when strip_scripts=true -->
+    <link rel="preload" href="/app.js" as="script">
+
+    <!-- Regular stylesheet link - should be PRESERVED -->
+    <link rel="stylesheet" href="/styles.css">
+
+    <!-- Canonical link - should be PRESERVED -->
+    <link rel="canonical" href="https://example.com/script-cleaning/mixed-scripts.html">
+</head>
+<body>
+    <h1>Script Cleaning Test Page</h1>
+
+    <div id="content">
+        <p>This page contains a mix of script types to test the script cleaning functionality.</p>
+
+        <h2>Script Types Present:</h2>
+        <ul>
+            <li>JSON-LD structured data (should be preserved)</li>
+            <li>Executable inline scripts (should be removed)</li>
+            <li>Module scripts (should be removed)</li>
+            <li>External script tags (should be removed)</li>
+            <li>Module preload links (should be removed)</li>
+            <li>Preload as=script links (should be removed)</li>
+            <li>Template scripts (should be preserved)</li>
+            <li>JSON data scripts (should be preserved)</li>
+        </ul>
+    </div>
+
+    <!-- Template script - should be PRESERVED -->
+    <script type="text/template" id="item-template">
+        <div class="item">
+            <h3>{{title}}</h3>
+            <p>{{description}}</p>
+        </div>
+    </script>
+
+    <!-- Vue.js style template - should be PRESERVED -->
+    <script type="text/x-template" id="vue-template">
+        <div class="vue-component">{{ message }}</div>
+    </script>
+
+    <!-- JSON data script - should be PRESERVED -->
+    <script type="application/json" id="page-data">
+    {
+        "pageId": 12345,
+        "category": "test",
+        "items": ["item1", "item2", "item3"]
+    }
+    </script>
+
+    <!-- Import map - should be PRESERVED -->
+    <script type="importmap">
+    {
+        "imports": {
+            "lodash": "/vendor/lodash.js"
+        }
+    }
+    </script>
+
+    <!-- Executable script in body - should be REMOVED when strip_scripts=true -->
+    <script>
+        console.log('Executable script in body');
+        document.getElementById('content').innerHTML += '<p class="js-added">Content added by JavaScript</p>';
+    </script>
+
+    <!-- Another text/javascript script - should be REMOVED when strip_scripts=true -->
+    <script type="text/javascript">
+        console.log('text/javascript type script');
+    </script>
+
+    <!-- application/javascript script - should be REMOVED when strip_scripts=true -->
+    <script type="application/javascript">
+        console.log('application/javascript type script');
+    </script>
+
+    <!-- NoScript fallback - should be PRESERVED -->
+    <noscript>
+        <p class="noscript-message">This site requires JavaScript to be enabled.</p>
+    </noscript>
+
+    <footer>
+        <p>End of test page</p>
+    </footer>
+</body>
+</html>

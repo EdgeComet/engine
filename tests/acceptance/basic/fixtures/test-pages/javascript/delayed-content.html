@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delayed Content Test</title>
+    <meta name="description" content="Testing content that appears with various delays">
+</head>
+<body>
+    <div class="container">
+        <h1>Delayed Content Loading Test</h1>
+        <p>This page tests content that appears at different intervals via AJAX requests.</p>
+
+        <!-- Immediate content -->
+        <section class="immediate-content" data-load-time="0">
+            <h2>Immediate Content</h2>
+            <p>This content is available immediately.</p>
+        </section>
+
+        <!-- Quick content (0.5s delay) -->
+        <section id="quick-content" class="loading" data-expected-delay="500">
+            <div class="placeholder">
+                <p>Quick content loading... (0.5s)</p>
+                <div class="spinner">⟳</div>
+            </div>
+        </section>
+
+        <!-- Medium content (2s delay) -->
+        <section id="medium-content" class="loading" data-expected-delay="2000">
+            <div class="placeholder">
+                <p>Medium content loading... (2s)</p>
+                <div class="spinner">⟳</div>
+            </div>
+        </section>
+
+        <!-- Slow content (4s delay) -->
+        <section id="slow-content" class="loading" data-expected-delay="4000">
+            <div class="placeholder">
+                <p>Slow content loading... (4s)</p>
+                <div class="spinner">⟳</div>
+            </div>
+        </section>
+
+        <!-- Progress indicator -->
+        <section class="progress-section">
+            <h3>Loading Progress</h3>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+            <p id="progress-text">0% complete</p>
+        </section>
+    </div>
+
+    <script>
+        const loadingStates = {
+            quick: false,
+            medium: false,
+            slow: false
+        };
+
+        function updateProgress() {
+            const completed = Object.values(loadingStates).filter(state => state).length;
+            const total = Object.keys(loadingStates).length;
+            const percentage = Math.round((completed / total) * 100);
+
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+
+            progressFill.style.width = percentage + '%';
+            progressText.textContent = `${percentage}% complete (${completed}/${total} sections loaded)`;
+
+            if (percentage === 100) {
+                document.body.setAttribute('data-all-content-loaded', 'true');
+                document.dispatchEvent(new CustomEvent('allContentLoaded'));
+            }
+        }
+
+        // Load quick content via AJAX (0.5s delay)
+        function loadQuickContent() {
+            return fetch('/api/mock-data?delay=500')
+                .then(response => response.json())
+                .then(result => {
+                    const quickContent = document.getElementById('quick-content');
+                    const data = result.data;
+
+                    quickContent.className = 'loaded';
+                    quickContent.innerHTML = `
+                        <h2 class="quick-loaded">Quick Content Loaded!</h2>
+                        <p>This content appeared after 0.5 seconds.</p>
+                        <ul>
+                            ${data.items.map(item => `<li>${item.name}: ${item.description}</li>`).join('')}
+                        </ul>
+                    `;
+                    quickContent.setAttribute('data-loaded-at', data.metadata.loadTime);
+                    loadingStates.quick = true;
+                    updateProgress();
+                })
+                .catch(error => {
+                    console.error('Failed to load quick content:', error);
+                    document.getElementById('quick-content').innerHTML = '<p>Error loading quick content</p>';
+                });
+        }
+
+        // Load medium content via AJAX (2s delay)
+        function loadMediumContent() {
+            return fetch('/api/mock-data?delay=2000')
+                .then(response => response.json())
+                .then(result => {
+                    const mediumContent = document.getElementById('medium-content');
+                    const data = result.data;
+
+                    mediumContent.className = 'loaded';
+                    mediumContent.innerHTML = `
+                        <h2 class="medium-loaded">Medium Content Loaded!</h2>
+                        <p>This content appeared after 2 seconds.</p>
+                        <div class="content-grid">
+                            ${data.items.slice(0, 2).map(item => `
+                                <div class="content-item">
+                                    <h4>${item.name}</h4>
+                                    <p>${item.description}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    mediumContent.setAttribute('data-loaded-at', data.metadata.loadTime);
+                    loadingStates.medium = true;
+                    updateProgress();
+                })
+                .catch(error => {
+                    console.error('Failed to load medium content:', error);
+                    document.getElementById('medium-content').innerHTML = '<p>Error loading medium content</p>';
+                });
+        }
+
+        // Load slow content via AJAX (4s delay)
+        function loadSlowContent() {
+            return fetch('/api/mock-data?delay=4000')
+                .then(response => response.json())
+                .then(result => {
+                    const slowContent = document.getElementById('slow-content');
+                    const data = result.data;
+
+                    slowContent.className = 'loaded';
+                    slowContent.innerHTML = `
+                        <h2 class="slow-loaded">Slow Content Finally Loaded!</h2>
+                        <p>This content appeared after 4 seconds - simulating heavy processing or slow API.</p>
+                        <div class="slow-content-details">
+                            <h4>Detailed Information from API</h4>
+                            <table border="1" style="border-collapse: collapse; width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.items.map(item => `
+                                        <tr>
+                                            <td>${item.id}</td>
+                                            <td>${item.name}</td>
+                                            <td>${item.description}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            <p>Source: ${data.metadata.source}</p>
+                        </div>
+                    `;
+                    slowContent.setAttribute('data-loaded-at', data.metadata.loadTime);
+                    loadingStates.slow = true;
+                    updateProgress();
+                })
+                .catch(error => {
+                    console.error('Failed to load slow content:', error);
+                    document.getElementById('slow-content').innerHTML = '<p>Error loading slow content</p>';
+                });
+        }
+
+        // Initialize and start loading all content
+        document.addEventListener('DOMContentLoaded', () => {
+            updateProgress();
+
+            // Start all three AJAX requests concurrently
+            loadQuickContent();
+            loadMediumContent();
+            loadSlowContent();
+        });
+    </script>
+
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        section {
+            margin: 2rem 0;
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .immediate-content {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+        }
+
+        .loading {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+        }
+
+        .loaded {
+            background: #d1ecf1;
+            border: 2px solid #17a2b8;
+        }
+
+        .placeholder {
+            text-align: center;
+            color: #856404;
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            font-size: 1.5em;
+            margin: 0.5rem;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .progress-section {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #28a745, #20c997);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .content-item {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+
+        .quick-loaded { color: #28a745; }
+        .medium-loaded { color: #17a2b8; }
+        .slow-loaded { color: #dc3545; }
+
+        table {
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 0.5rem;
+            text-align: left;
+        }
+
+        th {
+            background: #f8f9fa;
+        }
+    </style>
+</body>
+</html>

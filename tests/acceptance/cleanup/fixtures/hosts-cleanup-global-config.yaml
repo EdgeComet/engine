@@ -1,0 +1,14 @@
+hosts:
+  - id: 555
+    domain: "host555.test"
+    render_key: "test-key-555"
+    enabled: true
+    render:
+      timeout: 10s
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          match_ua:
+            - "*"

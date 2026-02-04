@@ -1,0 +1,24 @@
+hosts:
+  - id: 1
+    domain: "shop.example.com"
+    render_key: "shop-key-123"
+    render:
+      timeout: 60s
+      dimensions:
+        mobile:
+          id: 2
+          width: 375
+          height: 667
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"
+          match_ua:
+            - "*iPhone*"
+    bothit_recache:
+      enabled: true
+      interval: 30m
+      match_ua:
+        - $GooglebotSearchMobile
+        - $BingbotMobile
+        - "*ShopBot*"
+    url_rules:
+      - match: "/api/*"
+        action: "bypass"

@@ -1,0 +1,54 @@
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+server:
+  listen: ":10070"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+storage:
+  base_path: "/tmp/cache"
+
+render:
+  cache:
+    ttl: 1h
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 1h
+  dimensions:
+    desktop:
+      id: 1
+      width: 1920
+      height: 1080
+      render_ua: "TestAgent"
+      match_ua:
+        - $UnknownBotAlias
+        - $AnotherUnknownBot
+
+bypass:
+  timeout: 20s
+  user_agent: "TestAgent"
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "json"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"

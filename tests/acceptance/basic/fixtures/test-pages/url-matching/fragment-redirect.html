@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fragment Test Page</title>
+</head>
+<body>
+    <h1>Fragment URL Test</h1>
+    <div id="content">
+        <p>This page tests URL fragment handling</p>
+        <div class="status">Status: <span id="status">Loading...</span></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate async operation with fetch to keep network busy
+            fetch('/api/mock-data?delay=500')
+                .then(response => response.json())
+                .then(data => {
+                    // Update status
+                    document.getElementById('status').textContent = 'Loaded';
+
+                    // Add fragment to URL (this happens during page load)
+                    if (!window.location.hash) {
+                        window.location.hash = '#section-1';
+                    }
+
+                    // Add rendered marker
+                    document.body.setAttribute('data-fragment-test', 'complete');
+                })
+                .catch(err => {
+                    document.getElementById('status').textContent = 'Error: ' + err.message;
+                });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Mixed Scripts</title>
+<script type="application/ld+json">{"@type": "WebPage"}</script>
+<script>console.log('executable');</script>
+<link rel="modulepreload" href="/module.js">
+</head>
+<body>
+<script type="text/template"><div>Template</div></script>
+<script type="module">import './app.js';</script>
+</body>
+</html>

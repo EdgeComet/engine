@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slow Loading Page - Timeout Test</title>
+    <meta name="description" content="This page simulates very slow loading for timeout testing">
+</head>
+<body>
+    <div id="container">
+        <h1>Slow Loading Page</h1>
+        <p>This page simulates extremely slow loading times using real AJAX requests to test timeout handling.</p>
+
+        <div class="loading-section">
+            <h2>Loading Status</h2>
+            <div id="loading-progress">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <p id="status-text">Initializing slow loading simulation with AJAX requests...</p>
+            </div>
+        </div>
+
+        <div id="content-sections">
+            <!-- Content will be loaded via AJAX requests -->
+        </div>
+
+        <div id="network-status">
+            <h3>Network Requests Status</h3>
+            <div id="request-list"></div>
+        </div>
+    </div>
+
+    <script>
+        let progress = 0;
+        let activeRequests = [];
+        let completedRequests = 0;
+
+        // Define slow API endpoints to fetch from (these will likely fail/timeout)
+        const slowEndpoints = [
+            {
+                url: '/api/slow-data-1?delay=5000',
+                delay: 5000, // Expected delay in ms
+                title: "Section 1 - Basic Content",
+                id: "section-1"
+            },
+            {
+                url: '/api/slow-data-2?delay=10000',
+                delay: 10000,
+                title: "Section 2 - More Content",
+                id: "section-2"
+            },
+            {
+                url: '/api/slow-data-3?delay=20000',
+                delay: 20000,
+                title: "Section 3 - Even Slower",
+                id: "section-3"
+            },
+            {
+                url: '/api/slow-data-4?delay=30000',
+                delay: 30000,
+                title: "Section 4 - Extremely Slow",
+                id: "section-4"
+            },
+            {
+                url: '/api/slow-data-5?delay=45000',
+                delay: 45000,
+                title: "Section 5 - Ultra Slow",
+                id: "section-5"
+            },
+            {
+                url: '/api/final-data?delay=60000',
+                delay: 60000,
+                title: "Final Section - Maximum Delay",
+                id: "final-section"
+            }
+        ];
+
+        function updateProgress(percentage, statusText) {
+            const progressFill = document.getElementById('progress-fill');
+            const statusTextElement = document.getElementById('status-text');
+
+            if (progressFill) {
+                progressFill.style.width = percentage + '%';
+            }
+
+            if (statusTextElement) {
+                statusTextElement.textContent = statusText;
+            }
+        }
+
+        function addRequestIndicator(requestData, status) {
+            const requestList = document.getElementById('request-list');
+            if (!requestList) return;
+
+            const indicator = document.createElement('div');
+            indicator.className = `request-indicator ${status}`;
+            indicator.id = `request-${requestData.id}`;
+            indicator.innerHTML = `
+                <span class="request-status">${status === 'pending' ? '⏳' : status === 'success' ? '✅' : '❌'}</span>
+                <span class="request-url">${requestData.url}</span>
+                <span class="request-delay">(${requestData.delay}ms expected)</span>
+            `;
+
+            requestList.appendChild(indicator);
+            return indicator;
+        }
+
+        function updateRequestIndicator(id, status) {
+            const indicator = document.getElementById(`request-${id}`);
+            if (!indicator) return;
+
+            indicator.className = `request-indicator ${status}`;
+            const statusIcon = indicator.querySelector('.request-status');
+            if (statusIcon) {
+                statusIcon.textContent = status === 'success' ? '✅' : status === 'error' ? '❌' : '⏳';
+            }
+        }
+
+        function loadContentViaAjax(requestData) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => {
+                controller.abort();
+            }, requestData.delay + 5000); // Add 5s buffer to expected delay
+
+            activeRequests.push({
+                controller: controller,
+                data: requestData
+            });
+
+            // Add visual indicator that request is pending
+            addRequestIndicator(requestData, 'pending');
+
+            // Make actual fetch request
+            fetch(requestData.url, {
+                signal: controller.signal,
+                method: 'GET',
+                headers: {
+                    'X-Test-Request': 'slow-loading-test'
+                }
+            })
+            .then(response => {
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                return response.text();
+            })
+            .then(data => {
+                // Request succeeded (unlikely for these endpoints)
+                updateRequestIndicator(requestData.id, 'success');
+                completedRequests++;
+
+                const contentContainer = document.getElementById('content-sections');
+                if (!contentContainer) return;
+
+                const sectionElement = document.createElement('div');
+                sectionElement.className = 'content-section loaded success';
+                sectionElement.id = requestData.id;
+                sectionElement.innerHTML = `
+                    <h3>${requestData.title}</h3>
+                    <p>Content loaded successfully via AJAX!</p>
+                    <p class="load-info">
+                        <small>Loaded at: ${new Date().toISOString()}</small><br>
+                        <small>Expected delay: ${requestData.delay / 1000} seconds</small><br>
+                        <small>Response: ${data.substring(0, 100)}...</small>
+                    </p>
+                `;
+
+                contentContainer.appendChild(sectionElement);
+                updateContentProgress();
+            })
+            .catch(error => {
+                clearTimeout(timeoutId);
+
+                // Request failed or timed out (expected behavior)
+                const isAborted = error.name === 'AbortError';
+                const isTimeout = error.message.includes('timeout') || isAborted;
+
+                updateRequestIndicator(requestData.id, 'error');
+                completedRequests++;
+
+                const contentContainer = document.getElementById('content-sections');
+                if (!contentContainer) return;
+
+                const sectionElement = document.createElement('div');
+                sectionElement.className = 'content-section loaded error';
+                sectionElement.id = requestData.id;
+                sectionElement.innerHTML = `
+                    <h3>${requestData.title}</h3>
+                    <p class="error-message">⚠️ AJAX request failed (expected for timeout testing)</p>
+                    <p class="load-info">
+                        <small>Failed at: ${new Date().toISOString()}</small><br>
+                        <small>Expected delay: ${requestData.delay / 1000} seconds</small><br>
+                        <small>Error: ${isTimeout ? 'Request timed out or aborted' : error.message}</small>
+                    </p>
+                `;
+
+                contentContainer.appendChild(sectionElement);
+                updateContentProgress();
+            });
+        }
+
+        function updateContentProgress() {
+            const totalSections = slowEndpoints.length;
+            const progressPercent = Math.round((completedRequests / totalSections) * 100);
+
+            updateProgress(
+                progressPercent,
+                `Processed ${completedRequests}/${totalSections} AJAX requests (${progressPercent}%)`
+            );
+
+            if (completedRequests === totalSections) {
+                document.body.setAttribute('data-all-content-loaded', 'true');
+                updateProgress(100, 'All AJAX requests completed! (Many likely timed out)');
+
+                const contentContainer = document.getElementById('content-sections');
+                const completionMessage = document.createElement('div');
+                completionMessage.className = 'completion-message';
+                completionMessage.innerHTML = `
+                    <h2>🎉 AJAX Loading Test Complete!</h2>
+                    <p>All network requests have finished (either succeeded or failed/timed out).</p>
+                    <p><strong>Total requests:</strong> ${totalSections}</p>
+                    <p>This page was designed to test timeout scenarios with real AJAX requests.</p>
+                `;
+                contentContainer.appendChild(completionMessage);
+
+                document.dispatchEvent(new CustomEvent('slowLoadingComplete'));
+            }
+        }
+
+        // Simulate slow network requests with visible tracking
+        function simulateSlowNetwork() {
+            const networkEndpoints = [
+                { url: '/api/analytics/track', delay: 8000 },
+                { url: '/api/user/preferences', delay: 15000 },
+                { url: '/api/content/recommendations', delay: 25000 },
+                { url: '/api/metrics/collect', delay: 40000 }
+            ];
+
+            networkEndpoints.forEach((endpoint, index) => {
+                const controller = new AbortController();
+
+                // Make actual background fetch request
+                fetch(endpoint.url + `?delay=${endpoint.delay}`, {
+                    signal: controller.signal,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Background-Request': 'true'
+                    },
+                    body: JSON.stringify({
+                        timestamp: new Date().toISOString(),
+                        testId: `background-request-${index}`
+                    })
+                })
+                .then(response => response.json())
+                .catch(error => {
+                    console.log(`Background request failed: ${endpoint.url}`, error);
+
+                    // Show visual indicator of failure
+                    const indicator = document.createElement('div');
+                    indicator.className = 'network-indicator';
+                    indicator.textContent = `📡 Background request failed: ${endpoint.url} (${error.message})`;
+                    indicator.style.cssText = `
+                        position: fixed;
+                        top: ${20 + (index * 30)}px;
+                        right: 20px;
+                        background: #dc3545;
+                        color: white;
+                        padding: 0.5rem 1rem;
+                        border-radius: 4px;
+                        font-size: 0.8rem;
+                        z-index: 1000;
+                        animation: slideIn 0.3s ease-out;
+                    `;
+
+                    document.body.appendChild(indicator);
+
+                    // Remove indicator after 3 seconds
+                    setTimeout(() => {
+                        if (indicator.parentNode) {
+                            indicator.parentNode.removeChild(indicator);
+                        }
+                    }, 3000);
+                });
+            });
+        }
+
+        // Add CSS animation for network indicators
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Start the slow loading simulation when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            updateProgress(0, 'Starting slow AJAX loading simulation...');
+
+            // Start loading content sections via AJAX immediately
+            slowEndpoints.forEach(endpoint => {
+                loadContentViaAjax(endpoint);
+            });
+
+            // Simulate background slow network requests
+            simulateSlowNetwork();
+
+            // Add immediate content that shows the page started loading
+            const immediateSection = document.createElement('div');
+            immediateSection.className = 'content-section immediate';
+            immediateSection.innerHTML = `
+                <h3>⏰ Immediate Content</h3>
+                <p>This content loaded immediately to show the page is working.</p>
+                <p>Now making ${slowEndpoints.length} slow AJAX requests...</p>
+                <div class="warning-box">
+                    <strong>⚠️ Warning:</strong> This page makes real AJAX requests to endpoints
+                    that don't exist or respond very slowly. Most render engines should timeout
+                    before all requests complete.
+                </div>
+            `;
+            document.getElementById('content-sections').appendChild(immediateSection);
+            updateProgress(5, 'Immediate content loaded, AJAX requests in progress...');
+        });
+
+        // Track page visibility to see if rendering times out
+        let renderStartTime = Date.now();
+
+        window.addEventListener('beforeunload', function() {
+            const renderDuration = Date.now() - renderStartTime;
+            console.log(`Page was active for ${renderDuration}ms before unload`);
+        });
+
+        // Add marker that JavaScript executed
+        document.body.setAttribute('data-js-loaded', 'true');
+        document.body.setAttribute('data-load-start', new Date().toISOString());
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #ffeb3b 0%, #ff9800 100%);
+        }
+
+        #container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #d32f2f;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .loading-section {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 8px;
+            padding: 2rem;
+            margin: 2rem 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        #status-text {
+            text-align: center;
+            font-weight: bold;
+            color: #e65100;
+        }
+
+        #network-status {
+            background: #f5f5f5;
+            border: 2px solid #9e9e9e;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+
+        #network-status h3 {
+            margin-top: 0;
+            color: #424242;
+        }
+
+        .request-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .request-indicator.pending {
+            background: #fff9c4;
+            border-left: 4px solid #fbc02d;
+        }
+
+        .request-indicator.success {
+            background: #c8e6c9;
+            border-left: 4px solid #4caf50;
+        }
+
+        .request-indicator.error {
+            background: #ffcdd2;
+            border-left: 4px solid #f44336;
+        }
+
+        .request-status {
+            font-size: 1.2rem;
+        }
+
+        .request-url {
+            font-family: monospace;
+            flex: 1;
+        }
+
+        .request-delay {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        .content-section {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+
+        .content-section.loaded.success {
+            background: #e8f5e8;
+            border-color: #4caf50;
+        }
+
+        .content-section.loaded.error {
+            background: #ffebee;
+            border-color: #f44336;
+        }
+
+        .content-section.immediate {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .error-message {
+            color: #c62828;
+            font-weight: bold;
+        }
+
+        .load-info {
+            background: #f0f0f0;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+
+        .load-info small {
+            color: #666;
+        }
+
+        .warning-box {
+            background: #ffecb3;
+            border: 2px solid #ffa000;
+            border-radius: 6px;
+            padding: 1rem;
+            margin: 1rem 0;
+            color: #e65100;
+        }
+
+        .completion-message {
+            background: linear-gradient(135deg, #4caf50, #8bc34a);
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .network-indicator {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</body>
+</html>

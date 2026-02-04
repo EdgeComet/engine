@@ -1,0 +1,17 @@
+hosts:
+  - id: 666
+    domain: "host666.test"
+    render_key: "test-key-666"
+    enabled: true
+    render:
+      timeout: 10s
+      cache:
+        ttl: 5m
+        # NO expired section - should inherit global config
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          match_ua:
+            - "*"

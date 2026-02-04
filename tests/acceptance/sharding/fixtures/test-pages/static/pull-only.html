@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pull-Only Sharding Test Page</title>
+    <meta name="description" content="Test page for pull-only sharding behavior">
+</head>
+<body>
+    <h1>Pull-Only Sharding Test Page</h1>
+    <p>This page is configured with push_on_render: false for testing pull-only behavior.</p>
+    <div class="content">
+        <h2>Pull-Only Test Content</h2>
+        <p>When this page is rendered, the cache will NOT be pushed to other Edge Gateways.</p>
+        <p>Other EGs must pull the cache from the cluster when they receive a request.</p>
+        <ul>
+            <li>Push on render: Disabled</li>
+            <li>Pull on request: Enabled</li>
+            <li>Self-healing: Expected to add self to eg_ids when under-replicated</li>
+        </ul>
+    </div>
+    <footer>
+        <p>Sharding Test Suite - Pull-Only Configuration</p>
+    </footer>
+</body>
+</html>

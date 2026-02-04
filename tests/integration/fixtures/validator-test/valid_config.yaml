@@ -1,0 +1,35 @@
+# Valid configuration for testing validation
+# Minimal valid config that passes all validator checks
+
+server:
+  listen: ":10070"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+internal:
+  listen: ":10071"
+  auth_key: "test-internal-auth-key-123456"
+
+storage:
+  base_path: "/tmp/edgecomet-validator-test"
+
+render:
+  cache:
+    ttl: 1h
+
+bypass:
+  timeout: 30s
+  user_agent: "Test"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+
+hosts:
+  include: "hosts.d/"

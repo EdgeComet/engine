@@ -1,0 +1,74 @@
+# Host-specific bot alias configuration
+# Tests bot alias expansion at host level, overriding global dimensions
+
+hosts:
+  - id: 1
+    domain: "bottest.example.com"
+    render_key: "test-render-key-bot-aliases"
+    enabled: true
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "bypass"
+
+      cache:
+        ttl: 1h
+
+      # Host-specific dimensions with bot aliases
+      # These completely override global dimensions
+      dimensions:
+        host_bing_mobile:
+          id: 10
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - $BingbotMobile
+            - $GooglebotSearchMobile
+
+        host_multi_bot:
+          id: 11
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - $ChatGPTTrainingBot
+            - $PerplexityUserBot
+            - $AnthropicUserBot
+            - $AnthropicSearchBot
+
+        host_mixed_patterns:
+          id: 12
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - $GooglebotSearchDesktop
+            - $BingbotDesktop
+            - "*CustomHostBot*"
+            - "~^HostBot/\\d+\\.\\d+"
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 500ms
+
+  - id: 2
+    domain: "alias-test.example.com"
+    render_key: "test-render-key-aliases-2"
+    enabled: true
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "default_dimension"
+
+      dimensions:
+        default_dimension:
+          id: 20
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - $GooglebotSearchDesktop
+            - $GooglebotSearchMobile
+            - $BingbotDesktop
+            - $BingbotMobile

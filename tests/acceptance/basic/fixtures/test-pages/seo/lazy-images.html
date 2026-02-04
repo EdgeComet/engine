@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lazy Loading Images Test</title>
+    <meta name="description" content="Testing lazy-loaded images for SEO crawler rendering">
+</head>
+<body>
+    <div class="container">
+        <h1>Lazy Loading Images Test</h1>
+        <p>This page tests various lazy loading scenarios that search engines need to handle.</p>
+
+        <!-- Hero section with immediate image -->
+        <section class="hero-section">
+            <h2>Hero Section</h2>
+            <img src="/images/hero.png"
+                 alt="Hero image - immediately loaded"
+                 class="hero-image">
+            <p>This hero image loads immediately for above-the-fold content.</p>
+        </section>
+
+        <!-- Lazy loaded images with data-src -->
+        <section class="product-gallery">
+            <h2>Product Gallery (Lazy Loaded)</h2>
+            <p>These images start with data-src and should be converted to src by JavaScript.</p>
+
+            <div class="image-grid">
+                <div class="image-item" data-image-id="1">
+                    <img data-src="/images/product1.png"
+                         alt="Product 1 - Lazy loaded image"
+                         class="lazy-image"
+                         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23f8f9fa'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='0.35em' fill='%23666'%3ELoading...%3C/text%3E%3C/svg%3E">
+                    <h3>Product 1</h3>
+                    <p>Description for product 1</p>
+                </div>
+
+                <div class="image-item" data-image-id="2">
+                    <img data-src="/images/product2.png"
+                         alt="Product 2 - Lazy loaded image"
+                         class="lazy-image"
+                         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23f8f9fa'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='0.35em' fill='%23666'%3ELoading...%3C/text%3E%3C/svg%3E">
+                    <h3>Product 2</h3>
+                    <p>Description for product 2</p>
+                </div>
+
+                <div class="image-item" data-image-id="3">
+                    <img data-src="/images/product3.png"
+                         alt="Product 3 - Lazy loaded image"
+                         class="lazy-image"
+                         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23f8f9fa'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='0.35em' fill='%23666'%3ELoading...%3C/text%3E%3C/svg%3E">
+                    <h3>Product 3</h3>
+                    <p>Description for product 3</p>
+                </div>
+
+                <div class="image-item" data-image-id="4">
+                    <img data-src="/images/product4.png"
+                         alt="Product 4 - Lazy loaded image"
+                         class="lazy-image"
+                         src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23f8f9fa'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='0.35em' fill='%23666'%3ELoading...%3C/text%3E%3C/svg%3E">
+                    <h3>Product 4</h3>
+                    <p>Description for product 4</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Images loaded via JavaScript after delay -->
+        <section class="dynamic-gallery">
+            <h2>Dynamically Added Images</h2>
+            <p>These images are added to the DOM after the page loads.</p>
+            <div id="dynamic-images-container" class="image-grid">
+                <!-- Images will be added here by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Background images via CSS -->
+        <section class="css-background-section">
+            <h2>CSS Background Images</h2>
+            <div class="bg-image-container" id="css-bg-1" data-bg-image="/images/background1.png">
+                <div class="bg-content">
+                    <h3>CSS Background 1</h3>
+                    <p>This background will be set via JavaScript</p>
+                </div>
+            </div>
+            <div class="bg-image-container" id="css-bg-2" data-bg-image="/images/background2.png">
+                <div class="bg-content">
+                    <h3>CSS Background 2</h3>
+                    <p>This background will be set via JavaScript</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate lazy loading with intersection observer behavior
+            setTimeout(() => {
+                loadLazyImages();
+                addDynamicImages();
+                setCSSBackgrounds();
+            }, 100); // 100ms delay to simulate lazy loading
+        });
+
+        function loadLazyImages() {
+            const lazyImages = document.querySelectorAll('.lazy-image[data-src]');
+
+            lazyImages.forEach((img, index) => {
+                // Add a staggered delay to simulate real lazy loading
+                setTimeout(() => {
+                    const dataSrc = img.getAttribute('data-src');
+                    if (dataSrc) {
+                        img.src = dataSrc;
+                        img.removeAttribute('data-src');
+                        img.classList.add('loaded');
+                        img.setAttribute('data-loaded-at', new Date().toISOString());
+
+                        // Add loading event listener
+                        img.addEventListener('load', () => {
+                            img.classList.add('fade-in');
+                        });
+                    }
+                }, index * 50); // Stagger by 50ms
+            });
+        }
+
+        function addDynamicImages() {
+            const container = document.getElementById('dynamic-images-container');
+            const dynamicImages = [
+                {
+                    src: '/images/dynamic1.png',
+                    alt: 'Dynamic Image 1',
+                    title: 'Dynamic Product 1',
+                    description: 'This image was added dynamically'
+                },
+                {
+                    src: '/images/dynamic2.png',
+                    alt: 'Dynamic Image 2',
+                    title: 'Dynamic Product 2',
+                    description: 'This image was added dynamically'
+                },
+                {
+                    src: '/images/dynamic3.png',
+                    alt: 'Dynamic Image 3',
+                    title: 'Dynamic Product 3',
+                    description: 'This image was added dynamically'
+                }
+            ];
+
+            dynamicImages.forEach((imageData, index) => {
+                setTimeout(() => {
+                    const imageItem = document.createElement('div');
+                    imageItem.className = 'image-item dynamic-item';
+                    imageItem.setAttribute('data-image-id', `dynamic-${index + 1}`);
+
+                    imageItem.innerHTML = `
+                        <img src="${imageData.src}"
+                             alt="${imageData.alt}"
+                             class="dynamic-image loaded"
+                             data-added-at="${new Date().toISOString()}">
+                        <h3>${imageData.title}</h3>
+                        <p>${imageData.description}</p>
+                    `;
+
+                    container.appendChild(imageItem);
+                }, index * 50); // Stagger by 50ms
+            });
+
+            // Mark dynamic images as complete
+            setTimeout(() => {
+                container.setAttribute('data-dynamic-images-loaded', 'true');
+            }, 200);
+        }
+
+        function setCSSBackgrounds() {
+            const bgElements = document.querySelectorAll('[data-bg-image]');
+
+            bgElements.forEach((element, index) => {
+                setTimeout(() => {
+                    const bgImage = element.getAttribute('data-bg-image');
+                    element.style.backgroundImage = `url('${bgImage}')`;
+                    element.classList.add('bg-loaded');
+                    element.setAttribute('data-bg-set-at', new Date().toISOString());
+                }, index * 50);
+            });
+
+            // Mark backgrounds as complete
+            setTimeout(() => {
+                document.body.setAttribute('data-css-backgrounds-loaded', 'true');
+            }, 150);
+        }
+
+        // Mark all lazy loading as complete
+        setTimeout(() => {
+            document.body.setAttribute('data-lazy-loading-complete', 'true');
+            document.dispatchEvent(new CustomEvent('lazyLoadingComplete'));
+        }, 500);
+    </script>
+
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        section {
+            margin: 3rem 0;
+        }
+
+        .hero-section {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .hero-image {
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .image-item {
+            text-align: center;
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .image-item img {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 6px;
+            transition: opacity 0.3s ease;
+        }
+
+        .lazy-image:not(.loaded) {
+            opacity: 0.7;
+        }
+
+        .lazy-image.loaded {
+            opacity: 1;
+        }
+
+        .lazy-image.fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0.7; }
+            to { opacity: 1; }
+        }
+
+        .dynamic-item {
+            border-color: #007acc;
+            background: #e3f2fd;
+        }
+
+        .dynamic-image {
+            border: 2px solid #007acc;
+        }
+
+        .css-background-section {
+            margin: 3rem 0;
+        }
+
+        .bg-image-container {
+            width: 100%;
+            height: 300px;
+            margin: 1rem 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .bg-image-container:not(.bg-loaded) {
+            background-color: #e9ecef;
+            border: 2px dashed #6c757d;
+        }
+
+        .bg-content {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2rem;
+            border-radius: 6px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .bg-loaded .bg-content {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        h3 {
+            color: #2c3e50;
+            margin: 1rem 0 0.5rem 0;
+        }
+
+        p {
+            color: #5a6c7d;
+            line-height: 1.6;
+        }
+    </style>
+</body>
+</html>

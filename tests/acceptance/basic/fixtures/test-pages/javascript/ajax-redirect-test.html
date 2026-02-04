@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AJAX Redirect Test</title>
+    <meta name="description" content="Testing that AJAX 301 redirect doesn't overwrite page status">
+</head>
+<body>
+    <div id="container">
+        <h1>AJAX Redirect Test Page</h1>
+        <div id="page-info">
+            <p>This page has status 200</p>
+            <p>JavaScript will make an AJAX request that receives 301 redirect</p>
+            <p>The page status should remain 200, not be overwritten by the AJAX redirect</p>
+        </div>
+        <div id="ajax-status" class="pending">
+            <p>AJAX request status: <span id="ajax-status-code">Pending...</span></p>
+        </div>
+    </div>
+
+    <script>
+        // Make AJAX request to endpoint that returns 301 redirect
+        function makeRedirectRequest() {
+            // Make real HTTP request to bypass-test endpoint with 301 status
+            return fetch('/bypass-test/?status=301')
+                .then(response => {
+                    // Fetch automatically follows redirects by default
+                    // The response we get here is after following the redirect
+                    document.getElementById('ajax-status-code').textContent =
+                        `${response.status} (followed redirect)`;
+                    return response;
+                })
+                .catch(error => {
+                    console.error('AJAX request failed:', error);
+                    document.getElementById('ajax-status-code').textContent =
+                        `Error: ${error.message}`;
+                    throw error;
+                });
+        }
+
+        // Execute AJAX request when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            // Keep network busy with an initial request
+            fetch('/api/mock-data?delay=500')
+                .then(() => {
+                    // Then make the redirect request
+                    return makeRedirectRequest();
+                })
+                .then(() => {
+                    // Mark as complete
+                    document.getElementById('ajax-status').className = 'complete';
+                    document.body.setAttribute('data-ajax-complete', 'true');
+
+                    // Dispatch completion event
+                    document.dispatchEvent(new CustomEvent('ajaxRedirectTestComplete'));
+                })
+                .catch(error => {
+                    // Handle error gracefully
+                    document.getElementById('ajax-status').className = 'error';
+                });
+        });
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        #container {
+            border: 2px solid #2196F3;
+            padding: 2rem;
+            border-radius: 8px;
+            background: #f5f9ff;
+        }
+
+        #page-info {
+            background: #e3f2fd;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+
+        #ajax-status {
+            background: #fff;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+
+        #ajax-status.pending {
+            border-left: 4px solid #ff9800;
+        }
+
+        #ajax-status.complete {
+            border-left: 4px solid #4caf50;
+        }
+
+        #ajax-status.error {
+            border-left: 4px solid #f44336;
+        }
+
+        #ajax-status-code {
+            font-weight: bold;
+            color: #1976d2;
+        }
+    </style>
+</body>
+</html>

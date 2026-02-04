@@ -1,0 +1,10 @@
+hosts:
+  - id: 3
+    domain: "blog.example.com"
+    render_key: "test-render-key-blog"
+    enabled: true
+
+    render:
+      timeout: 30s
+      cache:
+        ttl: 1h

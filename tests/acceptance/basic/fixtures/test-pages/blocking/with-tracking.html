@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Tracking Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .blocked { background-color: #d4edda; color: #155724; }
+        .loaded { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Page with Custom Tracking</h1>
+    <div id="main-content">Main content loaded successfully</div>
+    <div id="tracking-status" class="status">Checking tracking...</div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Try to load tracking pixel (should be blocked by */api/tracking/* pattern)
+        fetch('/api/tracking/pixel')
+            .then(response => response.json())
+            .then(data => {
+                // This should NOT execute if blocking works
+                var status = document.getElementById('tracking-status');
+                status.textContent = 'Tracking Active: ' + data.pixel_id;
+                status.className = 'status loaded';
+            })
+            .catch(error => {
+                // This should execute when request is blocked
+                var status = document.getElementById('tracking-status');
+                status.textContent = 'Tracking Blocked';
+                status.className = 'status blocked';
+            });
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Science Category Page</title>
+    <meta name="description" content="Science category content">
+</head>
+<body>
+    <h1>Science Category</h1>
+    <div class="category-marker">CATEGORY_SCIENCE</div>
+    <div id="query-info"></div>
+
+    <section class="content">
+        <h2>Latest Science Articles</h2>
+        <p>This page shows science-related content.</p>
+        <ul>
+            <li>Quantum Computing Breakthroughs</li>
+            <li>Space Exploration Updates</li>
+            <li>Medical Research Findings</li>
+        </ul>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const container = document.getElementById('query-info');
+
+            const category = params.get('category');
+            if (category) {
+                container.innerHTML = `<p>Viewing category: <strong>${category}</strong></p>`;
+            }
+
+            // Keep network busy for proper rendering
+            fetch('/api/mock-data?delay=100')
+                .then(response => response.json())
+                .catch(() => {});
+        });
+    </script>
+</body>
+</html>

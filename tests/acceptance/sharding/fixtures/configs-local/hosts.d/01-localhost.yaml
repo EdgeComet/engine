@@ -1,0 +1,129 @@
+# Test Host Configuration for Sharding Acceptance Tests
+hosts:
+  - id: 1
+    domain: "localhost"
+    render_key: "sk_test_sharding_12345"
+    enabled: true
+
+    render:
+      timeout: 15s
+
+      cache:
+        ttl: 5m
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - "*Googlebot*"
+            - "*Chrome*"
+            - "*Safari*"
+            - "*Mozilla*"
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 500ms
+
+    url_rules:
+      - match: "/static/test.html"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+        cache_sharding:
+          push_on_render: true
+          replicate_on_pull: true
+
+      - match: "/static/pull-only.html"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+        cache_sharding:
+          push_on_render: false
+
+      - match: "/static/proxy-mode.html"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+        cache_sharding:
+          replicate_on_pull: false
+
+      - match: "/static/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+
+      # Compression replication tests
+      - match: "/compression-test/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+          events:
+            wait_for: "networkIdle"
+        cache_sharding:
+          push_on_render: true
+          replicate_on_pull: true
+
+      # Compression pull-only tests (large content, no push)
+      - match: "/compression-pull-only/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+          events:
+            wait_for: "networkIdle"
+        cache_sharding:
+          push_on_render: false
+          replicate_on_pull: true
+
+      # Bypass cache sharding tests
+      - match: "/api/large-json*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+
+      - match: "/api/small-redirect*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200, 302]
+
+      - match: "/api/small-response*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+
+      - match: "/api/status-filter*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200, 404]
+
+      # Bypass cache replication tests
+      - match: "/bypass-test/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+        cache_sharding:
+          push_on_render: true
+          replicate_on_pull: true

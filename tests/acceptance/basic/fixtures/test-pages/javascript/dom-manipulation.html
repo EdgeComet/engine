@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOM Manipulation Test</title>
+    <meta name="description" content="Testing DOM manipulation and modifications">
+</head>
+<body>
+    <div class="container">
+        <h1>DOM Manipulation Test</h1>
+
+        <div id="original-content">
+            <p class="original-text">This is the original content.</p>
+            <ul class="original-list">
+                <li>Original item 1</li>
+                <li>Original item 2</li>
+            </ul>
+        </div>
+
+        <div id="dynamic-content">
+            <!-- Content will be added here -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Modify existing elements
+            const originalText = document.querySelector('.original-text');
+            originalText.textContent = 'This content was modified by JavaScript';
+            originalText.className = 'modified-by-js';
+
+            // 2. Add attributes to existing elements
+            const originalList = document.querySelector('.original-list');
+            originalList.setAttribute('data-processed', 'true');
+            originalList.setAttribute('data-modification-time', new Date().toISOString());
+
+            // 3. Add new list items
+            const newItems = [
+                'JavaScript added item 1',
+                'JavaScript added item 2',
+                'JavaScript added item 3'
+            ];
+
+            newItems.forEach((itemText, index) => {
+                const li = document.createElement('li');
+                li.textContent = itemText;
+                li.className = 'js-added';
+                li.setAttribute('data-index', index + 3);
+                originalList.appendChild(li);
+            });
+
+            // 4. Create completely new content
+            const dynamicContent = document.getElementById('dynamic-content');
+            dynamicContent.innerHTML = `
+                <section class="js-section" data-created-by="javascript">
+                    <h2 class="js-heading">JavaScript Generated Section</h2>
+                    <p class="js-paragraph">This entire section was created dynamically.</p>
+
+                    <div class="js-widget" data-widget-type="counter">
+                        <h3>Dynamic Counter</h3>
+                        <p>Count: <span id="counter">0</span></p>
+                        <button id="increment-btn" data-action="increment">Increment</button>
+                    </div>
+
+                    <div class="js-form" data-form-generated="true">
+                        <h3>Dynamic Form</h3>
+                        <form id="dynamic-form">
+                            <input type="text" id="dynamic-input" placeholder="Enter text..." data-js-created="true">
+                            <button type="submit" data-js-button="true">Submit</button>
+                        </form>
+                        <div id="form-output" class="output"></div>
+                    </div>
+                </section>
+            `;
+
+            // 5. Add event handlers and interactivity
+            let counter = 0;
+            const counterSpan = document.getElementById('counter');
+            const incrementBtn = document.getElementById('increment-btn');
+
+            incrementBtn.addEventListener('click', () => {
+                counter++;
+                counterSpan.textContent = counter;
+                counterSpan.setAttribute('data-value', counter);
+            });
+
+            // 6. Handle form submission
+            const dynamicForm = document.getElementById('dynamic-form');
+            const formOutput = document.getElementById('form-output');
+
+            dynamicForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const input = document.getElementById('dynamic-input');
+                const value = input.value;
+
+                if (value) {
+                    formOutput.innerHTML = `
+                        <p class="form-result" data-submitted="true">
+                            You entered: <strong>${value}</strong>
+                        </p>
+                    `;
+                    input.value = '';
+                }
+            });
+
+            // 7. Mark body as fully processed
+            setTimeout(() => {
+                document.body.setAttribute('data-dom-manipulation-complete', 'true');
+                document.body.className += ' js-processed';
+
+                // Dispatch completion event
+                document.dispatchEvent(new CustomEvent('domManipulationComplete'));
+            }, 500); // Small delay to ensure all modifications are complete
+        });
+    </script>
+
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .modified-by-js {
+            color: blue;
+            font-weight: bold;
+        }
+
+        .js-added {
+            color: green;
+            font-style: italic;
+        }
+
+        .js-section {
+            border: 2px dashed #007acc;
+            padding: 1rem;
+            margin: 1rem 0;
+            background: #f0f8ff;
+        }
+
+        .js-widget {
+            background: #e6f3ff;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .js-form {
+            background: #f0f0f0;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 4px;
+        }
+
+        .form-result {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        input[type="text"] {
+            padding: 0.5rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 0.5rem;
+        }
+    </style>
+</body>
+</html>

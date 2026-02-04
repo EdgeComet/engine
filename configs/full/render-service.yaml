@@ -1,0 +1,223 @@
+# Render Service - Complete Configuration Reference
+# This file contains ALL possible configuration options with realistic values.
+# Comments document each option's purpose, defaults, and valid values.
+
+# =============================================================================
+# SERVER CONFIGURATION
+# =============================================================================
+
+server:
+  # Unique identifier for this Render Service instance
+  # Used for registration in Redis, logging, and metrics
+  # Must be unique across all RS instances in the cluster
+  # Required
+  id: "rs-1"
+
+  # HTTP server listen address
+  # Format: ":port" or "ip:port"
+  # Required
+  listen: "0.0.0.0:10080"
+
+# =============================================================================
+# REDIS CONFIGURATION
+# =============================================================================
+# Redis is used for service registry (RS registration/heartbeat) and
+# coordination with Edge Gateway instances
+
+redis:
+  # Redis server address
+  # Format: "host:port"
+  # Required
+  addr: "localhost:6379"
+
+  # Redis authentication password
+  # Default: "" (no password)
+  password: ""
+
+  # Redis database number
+  # Default: 0
+  # Range: 0-15
+  db: 0
+
+# =============================================================================
+# CHROME POOL CONFIGURATION
+# =============================================================================
+# Manages headless Chrome instances for JavaScript rendering
+# Each Chrome instance can process one render at a time
+
+chrome:
+  # -------------------------------------------------------------------------
+  # POOL SIZE
+  # -------------------------------------------------------------------------
+  # Number of Chrome instances in the pool
+  # Options: "auto" or positive integer (e.g., "10", "20")
+  # Required
+  #
+  # Auto calculation formula:
+  #   pool_size = (Available_RAM - 2GB) / 500MB
+  #   Minimum: 2 instances
+  #   Maximum: 50 instances
+  #
+  # Example: Server with 16GB RAM
+  #   (16384MB - 2048MB) / 500MB = 28 instances
+  #
+  # Recommendation:
+  # - Use "auto" for dynamic environments (containers, VMs)
+  # - Use explicit number for dedicated servers with known workload
+  pool_size: "auto"
+
+  # -------------------------------------------------------------------------
+  # WARMUP CONFIGURATION
+  # -------------------------------------------------------------------------
+  # Chrome instances are warmed up on startup to reduce first-render latency
+  # Warmup navigates to a URL and ensures the browser is responsive
+
+  warmup:
+    # URL to navigate during warmup
+    # Should be a lightweight, fast-loading page
+    # Use your own domain or example.com for testing
+    # Required
+    url: "https://example.com/"
+
+    # Maximum time to wait for warmup navigation to complete
+    # Format: Go duration string (s, m, h)
+    # Required, must be positive
+    timeout: 10s
+
+  # -------------------------------------------------------------------------
+  # RESTART POLICY
+  # -------------------------------------------------------------------------
+  # Chrome instances are periodically restarted to prevent memory leaks
+  # and ensure stability. Restart triggers when EITHER condition is met.
+
+  restart:
+    # Restart Chrome instance after this many renders
+    # Prevents memory accumulation from DOM operations
+    # Required, must be positive
+    # Recommendation: 50-200 depending on page complexity
+    after_count: 100
+
+    # Restart Chrome instance after this runtime duration
+    # Ensures fresh state even for low-traffic instances
+    # Format: Go duration string (s, m, h)
+    # Required, must be positive
+    # Recommendation: 15m-1h
+    after_time: 30m
+
+  # -------------------------------------------------------------------------
+  # RENDER CONFIGURATION
+  # -------------------------------------------------------------------------
+  render:
+    # Maximum render timeout (hard limit)
+    # Cancels renders that exceed this duration
+    # Protects against stuck pages (infinite loops, hung resources)
+    # Format: Go duration string (s, m, h)
+    # Required, must be positive
+    #
+    # Server timeout is auto-calculated as: max_timeout + 10s safety margin
+    # This ensures FastHTTP doesn't kill connections before render completes
+    #
+    # Example: max_timeout: 50s results in server timeout of 60s
+    #
+    # Recommendation: 30s-90s depending on page complexity
+    max_timeout: 50s
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+log:
+  # Global log level (applies to all outputs unless overridden)
+  # Options: debug, info, warn, error, dpanic, panic, fatal
+  # Required
+  level: "info"
+
+  # Console output configuration
+  console:
+    # Enable console logging
+    # Default: true (or true if no outputs enabled)
+    enabled: true
+
+    # Output format
+    # Options: "console" (colored, human-readable), "json"
+    # Default: "console"
+    format: "console"
+
+    # Override global log level for console
+    # Useful for showing only warnings in terminal while logging debug to file
+    # Optional
+    # level: "warn"
+
+  # File output configuration
+  file:
+    # Enable file logging
+    # Default: false
+    enabled: true
+
+    # Log file path
+    # Required if enabled
+    path: "/var/log/edgecomet/render-service.log"
+
+    # Output format
+    # Options: "text" (plain, no colors), "json"
+    # Default: "text"
+    format: "json"
+
+    # Override global log level for file
+    # Useful for capturing debug logs to file only
+    # Optional
+    level: "debug"
+
+    # Log rotation settings
+    rotation:
+      # Maximum file size in MB before rotation
+      # Must be >= 0 (0 = no size limit)
+      max_size: 100
+
+      # Maximum age in days to retain old log files
+      # Must be >= 0 (0 = no age limit)
+      max_age: 30
+
+      # Maximum number of old log files to retain
+      # Must be >= 0 (0 = no backup limit)
+      max_backups: 10
+
+      # Compress rotated log files with gzip
+      # Default: false
+      compress: true
+
+# =============================================================================
+# METRICS CONFIGURATION
+# =============================================================================
+# Prometheus metrics endpoint for monitoring Chrome pool and render performance
+
+metrics:
+  # Enable metrics endpoint
+  # Default: false
+  enabled: true
+
+  # Listen address for metrics server
+  # MUST differ from server.listen port when enabled
+  # Required if enabled
+  #
+  # IMPORTANT: Metrics ALWAYS run on a separate HTTP server when enabled.
+  # This provides:
+  # - Network isolation (firewall metrics port to monitoring systems only)
+  # - Security (main application traffic unaffected by metrics scraping)
+  # - Configuration validation will fail if metrics.listen port == server.listen port
+  listen: ":10089"
+
+  # Metrics endpoint path
+  # Default: "/metrics"
+  # Must start with "/"
+  path: "/metrics"
+
+  # Prometheus metric namespace prefix
+  # Default: "edgecomet"
+  # Must match pattern: [a-zA-Z_][a-zA-Z0-9_]*
+  #
+  # Example metrics with namespace "edgecomet":
+  # - edgecomet_rs_chrome_pool_size
+  # - edgecomet_rs_chrome_active_renders
+  # - edgecomet_rs_render_duration_seconds
+  namespace: "edgecomet"

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Rendered Content Test</title>
+    <meta name="description" content="Testing client-side JavaScript rendering">
+</head>
+<body>
+    <div id="app">
+        <div class="loading-spinner">Loading...</div>
+    </div>
+
+    <script>
+        // Simulate client-side rendering with a delay
+        setTimeout(() => {
+            const appElement = document.getElementById('app');
+            appElement.innerHTML = `
+                <header>
+                    <h1>JavaScript Rendered Content</h1>
+                    <p class="js-rendered">This content was added by JavaScript.</p>
+                </header>
+
+                <main>
+                    <section class="dynamic-section">
+                        <h2>Dynamic Section</h2>
+                        <p>This section demonstrates client-side content generation.</p>
+                        <ul class="dynamic-list">
+                            <li data-item="1">First dynamic item</li>
+                            <li data-item="2">Second dynamic item</li>
+                            <li data-item="3">Third dynamic item</li>
+                        </ul>
+                    </section>
+
+                    <section class="stats">
+                        <h3>Page Statistics</h3>
+                        <p>Rendered at: <span id="render-time">${new Date().toISOString()}</span></p>
+                        <p>User Agent: <span id="user-agent">${navigator.userAgent}</span></p>
+                    </section>
+                </main>
+
+                <footer>
+                    <p class="js-footer">© 2024 - Rendered by JavaScript</p>
+                </footer>
+            `;
+
+            // Add a data attribute to indicate rendering is complete
+            document.body.setAttribute('data-js-rendered', 'true');
+
+            // Dispatch a custom event to signal completion
+            document.dispatchEvent(new CustomEvent('contentReady'));
+        }, 1000); // 1 second delay to simulate loading
+    </script>
+</body>
+</html>

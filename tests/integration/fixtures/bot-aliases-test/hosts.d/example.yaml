@@ -1,0 +1,36 @@
+hosts:
+  - id: 1
+    domain: "test.example.com"
+    render_key: "test-key-bot-aliases"
+    enabled: true
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "bypass"
+
+      cache:
+        ttl: 1h
+
+      dimensions:
+        mobile:
+          id: 5
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - $GooglebotSearchMobile
+            - $BingbotMobile
+            - "*CustomBot*"
+
+        tablet:
+          id: 15
+          width: 768
+          height: 1024
+          render_ua: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - $AnthropicBot
+            - $ChatGPTUserBot
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 500ms

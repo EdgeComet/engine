@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lazy Replication Test Page</title>
+    <meta name="description" content="Test page for lazy replication with push_on_render=false">
+</head>
+<body>
+    <h1>Lazy Replication Test Page</h1>
+    <p>This page tests lazy replication behavior when push_on_render=false.</p>
+    <div class="content">
+        <h2>Test Scenario</h2>
+        <p>This test verifies that:</p>
+        <ul>
+            <li>Initial render stores cache only on rendering EG (no push)</li>
+            <li>Pull requests from other EGs succeed</li>
+            <li>Cache is replicated lazily after pull (when replicate_on_pull=true)</li>
+        </ul>
+    </div>
+    <footer>
+        <p>Sharding Configuration Test Suite</p>
+    </footer>
+</body>
+</html>

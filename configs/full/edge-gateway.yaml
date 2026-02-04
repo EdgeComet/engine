@@ -1,0 +1,535 @@
+# Edge Gateway - Complete Configuration Reference
+# This file contains ALL possible configuration options with realistic values.
+# Comments document each option's purpose, defaults, and valid values.
+
+# =============================================================================
+# SERVER CONFIGURATION
+# =============================================================================
+
+server:
+  # HTTP server listen address
+  # Format: ":port" or "ip:port"
+  # Required
+  listen: ":10070"
+
+  # Request timeout duration
+  # Format: Go duration string (s, m, h)
+  # Required
+  timeout: 120s
+
+# =============================================================================
+# INTERNAL SERVER (for sharding/clustering)
+# =============================================================================
+# Required if cache_sharding.enabled is true
+# Used for inter-EG communication and daemon-to-EG communication
+
+internal:
+  # Listen address for internal API endpoints
+  # Format: "ip:port" - must be a specific reachable IP (not 0.0.0.0)
+  # Other EG instances need to connect to this address for cache replication
+  # Required if sharding enabled
+  listen: "192.168.1.10:10071"
+
+  # Authentication key for internal APIs (X-Internal-Auth header)
+  # Must match across all EG instances in the cluster
+  # Required if sharding enabled
+  auth_key: "your-internal-auth-secret-key"
+
+# =============================================================================
+# EDGE GATEWAY INSTANCE ID
+# =============================================================================
+# Unique identifier for this EG instance in a cluster
+# Required for cache sharding to work correctly
+
+eg_id: "eg-1"
+
+# =============================================================================
+# REDIS CONFIGURATION
+# =============================================================================
+
+redis:
+  # Redis server address
+  # Format: "host:port"
+  # Required
+  addr: "localhost:6379"
+
+  # Redis authentication password
+  # Default: "" (no password)
+  password: ""
+
+  # Redis database number
+  # Default: 0
+  # Range: 0-15
+  db: 0
+
+# =============================================================================
+# STORAGE CONFIGURATION
+# =============================================================================
+# Filesystem storage for cached HTML content
+
+storage:
+  # Base directory for cached HTML files
+  # File structure: {base_path}/{host_id}/{year}/{month}/{day}/{hour}/{minute}/{url_hash}_{dimension}.html
+  # Required
+  base_path: "/var/cache/edgecomet"
+
+  # Cache compression algorithm
+  # Options: "none", "snappy", "lz4"
+  # Default: "snappy"
+  # "snappy" - fast compression, good balance
+  # "lz4" - faster decompression, slightly larger files
+  compression: "snappy"
+
+  cleanup:
+    # Enable filesystem cleanup worker
+    # Removes orphaned cache files
+    # Required
+    enabled: true
+
+    # How often cleanup runs
+    # Format: Go duration string
+    # Required
+    interval: 1h
+
+    # Extra time beyond stale_ttl before deleting files
+    # Prevents deletion of recently-expired cache that may still be useful
+    # Required
+    safety_margin: 2h
+
+# =============================================================================
+# GLOBAL RENDER CONFIGURATION
+# =============================================================================
+# Default settings for Chrome rendering (can be overridden at host/pattern level)
+
+render:
+  # -------------------------------------------------------------------------
+  # CACHE SETTINGS
+  # -------------------------------------------------------------------------
+  cache:
+    # Default cache TTL for rendered pages
+    # Default: 1h
+    ttl: 24h
+
+    # HTTP status codes to cache
+    # Default: [200, 301, 302, 307, 308, 404]
+    status_codes: [200, 301, 302, 307, 308, 404]
+
+    # Expired cache handling strategy
+    expired:
+      # Strategy for handling expired cache
+      # Options: "delete", "serve_stale"
+      # Default: "delete"
+      # "serve_stale" - continue serving expired cache while re-rendering
+      strategy: "serve_stale"
+
+      # How long to keep stale cache available
+      # Only used when strategy is "serve_stale"
+      stale_ttl: 48h
+
+  # -------------------------------------------------------------------------
+  # LIFECYCLE EVENTS
+  # -------------------------------------------------------------------------
+  events:
+    # Page lifecycle event to wait for before capturing content
+    # Options: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+    # Default: "networkIdle"
+    # "DOMContentLoaded" - DOM parsed, external resources may not be loaded
+    # "load" - page fully loaded including images
+    # "networkIdle" - no network activity for 500ms (recommended for JS-heavy pages)
+    # "networkAlmostIdle" - max 2 network connections for 500ms
+    wait_for: "networkIdle"
+
+    # Additional wait time after lifecycle event fires
+    # Useful for JavaScript that runs after page load
+    # Default: 0s
+    additional_wait: 500ms
+
+  # -------------------------------------------------------------------------
+  # DIMENSION HANDLING
+  # -------------------------------------------------------------------------
+  # Action when User-Agent doesn't match any dimension
+  # Options: "bypass", "block", or dimension name (e.g., "desktop")
+  # Default: "bypass"
+  # "bypass" - fetch directly from origin without rendering
+  # "block" - return 403 Forbidden
+  # dimension name - use specified dimension for unmatched UAs
+  unmatched_dimension: "bypass"
+
+  # -------------------------------------------------------------------------
+  # DIMENSIONS
+  # -------------------------------------------------------------------------
+  # Viewport and User-Agent configurations for different device types
+  # Each dimension creates separate cache entries
+  # Dimensions at host level REPLACE global dimensions (no merge)
+  dimensions:
+    desktop:
+      # Unique numeric identifier (prevents cache invalidation when adding dimensions)
+      # Required, must be unique per host
+      id: 1
+
+      # Viewport width in pixels
+      # Required
+      width: 1920
+
+      # Viewport height in pixels
+      # Required
+      height: 1080
+
+      # User-Agent string sent to origin during rendering
+      # Required
+      render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+      # User-Agent patterns to match for this dimension
+      # Supports: exact, wildcard (*), regexp (~), case-insensitive regexp (~*)
+      # Bot aliases supported: $GooglebotSearchDesktop, $BingbotDesktop, etc.
+      # Required
+      match_ua:
+        - "*Googlebot*"
+        - "*Bingbot*"
+        - "*bingbot*"
+        - "$GooglebotSearchDesktop"
+        - "$BingbotDesktop"
+        - "~(GPTBot|ChatGPT-User)"
+        - "~*anthropic"
+
+    mobile:
+      id: 2
+      width: 390
+      height: 844
+      render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+      match_ua:
+        - "*Googlebot-Mobile*"
+        - "$GooglebotSearchMobile"
+        - "$BingbotMobile"
+        - "~Mobile.*Bot"
+
+  # -------------------------------------------------------------------------
+  # RESOURCE BLOCKING
+  # -------------------------------------------------------------------------
+  # Block certain resource types during rendering to speed up page load
+  # Valid types: Document, Stylesheet, Image, Media, Font, Script, TextTrack,
+  #              XHR, Fetch, Prefetch, EventSource, WebSocket, Manifest,
+  #              SignedExchange, Ping, CSPViolationReport, Preflight, Other
+  # Default: []
+  # Arrays at host/pattern level REPLACE parent arrays (no merge)
+  blocked_resource_types:
+    - "Image"
+    - "Media"
+    - "Font"
+
+  # Block requests matching these URL patterns
+  # Supports: exact, wildcard (*), regexp (~, ~*)
+  # Default: []
+  # Arrays at host/pattern level REPLACE parent arrays (no merge)
+  blocked_patterns:
+    - "*.google-analytics.com/*"
+    - "*.googletagmanager.com/*"
+    - "*.doubleclick.net/*"
+    - "*.facebook.net/*"
+    - "*.hotjar.com/*"
+    - "~.*\\.(png|jpg|jpeg|gif|webp|svg|ico)$"
+
+# =============================================================================
+# GLOBAL BYPASS CONFIGURATION
+# =============================================================================
+# Settings for direct origin fetches (when not rendering)
+
+bypass:
+  # Timeout for bypass requests (read + write)
+  # Default: 30s
+  timeout: 30s
+
+  # User-Agent sent to origin for bypass requests
+  # Required
+  user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0; +https://edgecomet.com/bot)"
+
+  # Bypass response caching (separate from render cache)
+  cache:
+    # Enable bypass response caching
+    # Default: false
+    enabled: true
+
+    # Cache TTL for bypass responses
+    # Default: 30m
+    ttl: 30m
+
+    # HTTP status codes to cache for bypass
+    # Default: [200]
+    status_codes: [200, 301, 302]
+
+# =============================================================================
+# REGISTRY CONFIGURATION
+# =============================================================================
+# Render service selection strategy
+
+registry:
+  # Strategy for selecting render service instances
+  # Options: "least_loaded", "most_available"
+  # Default: "least_loaded"
+  # "least_loaded" - prefer instance with fewest active renders
+  # "most_available" - prefer instance with most available Chrome slots
+  selection_strategy: "least_loaded"
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+log:
+  # Global log level (applies to all outputs unless overridden)
+  # Options: debug, info, warn, error, dpanic, panic, fatal
+  # Default: "info"
+  level: "info"
+
+  # Console output configuration
+  console:
+    # Enable console logging
+    # Default: true (or true if no outputs enabled)
+    enabled: true
+
+    # Output format
+    # Options: "console" (colored, human-readable), "json"
+    # Default: "console"
+    format: "console"
+
+    # Override global log level for console
+    # Optional
+    level: "info"
+
+  # File output configuration
+  file:
+    # Enable file logging
+    # Default: false
+    enabled: true
+
+    # Log file path
+    # Required if enabled
+    path: "/var/log/edgecomet/edge-gateway.log"
+
+    # Output format
+    # Options: "text", "json"
+    # Default: "text"
+    format: "json"
+
+    # Override global log level for file
+    # Optional
+    level: "debug"
+
+    # Log rotation settings
+    rotation:
+      # Maximum file size in MB before rotation
+      max_size: 100
+
+      # Maximum age in days to retain old log files
+      max_age: 30
+
+      # Maximum number of old log files to retain
+      max_backups: 10
+
+      # Compress rotated log files with gzip
+      # Default: false
+      compress: true
+
+# =============================================================================
+# METRICS CONFIGURATION
+# =============================================================================
+# Prometheus metrics endpoint
+
+metrics:
+  # Enable metrics endpoint
+  # Default: false
+  enabled: true
+
+  # Listen address for metrics server
+  # MUST differ from server.listen when enabled
+  # Required if enabled
+  listen: ":10079"
+
+  # Metrics endpoint path
+  # Default: "/metrics"
+  path: "/metrics"
+
+  # Prometheus metric namespace prefix
+  # Default: "edgecomet"
+  namespace: "edgecomet"
+
+# =============================================================================
+# TRACKING PARAMETERS CONFIGURATION
+# =============================================================================
+# URL parameter normalization for cache key generation
+
+tracking_params:
+  # Enable parameter stripping
+  # Default: true
+  strip: true
+
+  # Custom parameters to strip (REPLACES default list)
+  # Use this to completely replace the built-in list
+  # Mutually exclusive with params_add
+  # Default built-in params: utm_*, gclid, fbclid, msclkid, _ga, _gl, mc_cid, mc_eid, _ke, ref, referrer
+  # params:
+  #   - "my_custom_param"
+
+  # Additional parameters to strip (EXTENDS default list)
+  # Use this to add to the built-in list
+  # Mutually exclusive with params
+  params_add:
+    - "sid"
+    - "session_*"
+    - "tracking_*"
+    - "affiliate_*"
+
+# =============================================================================
+# BOT HIT AUTOMATIC RECACHE
+# =============================================================================
+# Automatically trigger recache when bots access pages
+
+bothit_recache:
+  # Enable bot hit recache
+  # Default: false
+  enabled: true
+
+  # Recache interval after bot hit
+  # Range: 30m to 24h
+  # Default: "24h"
+  interval: "12h"
+
+  # Bot User-Agent patterns that trigger recache
+  # Supports: exact, wildcard (*), regexp (~, ~*), bot aliases ($...)
+  # Required if enabled
+  match_ua:
+    - "*Googlebot*"
+    - "*Bingbot*"
+    - "~(GPTBot|ChatGPT-User|PerplexityBot)"
+    - "$AnthropicBot"
+
+# =============================================================================
+# CACHE SHARDING CONFIGURATION
+# =============================================================================
+# Distribute cache across multiple EG instances
+
+cache_sharding:
+  # Enable cache sharding
+  # Requires internal server and eg_id to be configured
+  # Default: false
+  enabled: true
+
+  # Number of EG instances to replicate cache to
+  # Default: 2
+  replication_factor: 2
+
+  # Cache distribution strategy
+  # Options: "hash_modulo", "random", "primary_only"
+  # Default: "hash_modulo"
+  # "hash_modulo" - consistent hashing based on URL
+  # "random" - random replica selection
+  # "primary_only" - no replication, single instance only
+  distribution_strategy: "hash_modulo"
+
+  # Push cache to replicas after rendering
+  # Default: true
+  push_on_render: true
+
+  # Store pulled cache locally
+  # Default: true
+  replicate_on_pull: true
+
+# =============================================================================
+# GLOBAL HEADERS CONFIGURATION
+# =============================================================================
+# HTTP headers forwarding rules
+# Merge behavior: field-level deep merge (host/pattern can override specific fields)
+
+headers:
+  # Request headers to forward to origin (same-origin requests only)
+  # REPLACES inherited list (mutually exclusive with safe_request_add)
+  # Deny-list (always blocked): Host, Content-Length, Transfer-Encoding, Connection,
+  #                             Upgrade, Keep-Alive, Proxy-*, TE, Trailer
+  safe_request:
+    - "Authorization"
+    - "Cookie"
+    - "X-Forwarded-For"
+    - "X-Real-IP"
+    - "Accept-Language"
+
+  # Add to inherited request headers (mutually exclusive with safe_request)
+  # safe_request_add:
+  #   - "X-Custom-Header"
+
+  # Response headers to return to client
+  # REPLACES inherited list (mutually exclusive with safe_response_add)
+  # Default: Content-Type, Cache-Control, Expires, Last-Modified, ETag, Location
+  safe_response:
+    - "Content-Type"
+    - "Cache-Control"
+    - "Expires"
+    - "Last-Modified"
+    - "ETag"
+    - "Location"
+    - "Content-Language"
+    - "Vary"
+
+  # Add to inherited response headers (mutually exclusive with safe_response)
+  # safe_response_add:
+  #   - "X-Custom-Response"
+
+# =============================================================================
+# CLIENT IP CONFIGURATION
+# =============================================================================
+# Extract client's real IP from HTTP headers (for deployments behind proxies).
+# Headers are checked in order; first non-empty value wins.
+# Falls back to RemoteAddr if all headers are empty or not configured.
+# Host-level client_ip completely replaces this global list.
+
+client_ip:
+  headers:
+    - "X-Real-IP"
+    - "X-Forwarded-For"
+
+# =============================================================================
+# EVENT LOGGING CONFIGURATION
+# =============================================================================
+# Access log for request/response events
+
+event_logging:
+  file:
+    # Enable event logging to file
+    enabled: true
+
+    # Log file path
+    path: "/var/log/edgecomet/access.log"
+
+    # Log format template
+    # Available placeholders:
+    # Request: {timestamp}, {request_id}, {eg_instance_id}
+    # Host/URL: {host}, {host_id}, {url}, {url_hash}, {matched_rule}
+    # Metadata: {event_type}, {dimension}, {user_agent}, {client_ip}, {source}
+    # Response: {status_code}, {page_size}, {serve_time}, {cache_age}, {title}
+    # Render: {render_service_id}, {render_time}, {chrome_id}
+    # Metrics: {metrics.final_url}, {metrics.total_requests}, {metrics.total_bytes},
+    #          {metrics.status_2xx}, {metrics.status_3xx}, {metrics.status_4xx}, {metrics.status_5xx}
+    template: "{timestamp}\t{request_id}\t{host}\t{url}\t{status_code}\t{event_type}\t{source}\t{dimension}\t{serve_time}\t{cache_age}"
+
+    # Log rotation settings
+    rotation:
+      # Maximum file size in MB before rotation
+      max_size: 100
+
+      # Maximum age in days to retain old log files
+      max_age: 30
+
+      # Maximum number of old log files to retain
+      max_backups: 10
+
+      # Compress rotated log files with gzip
+      # Default: false
+      compress: true
+
+# =============================================================================
+# HOSTS CONFIGURATION
+# =============================================================================
+# Reference to host configuration files
+
+hosts:
+  # Glob pattern or directory for host configuration files
+  # Required
+  include: "hosts.d/*.yaml"

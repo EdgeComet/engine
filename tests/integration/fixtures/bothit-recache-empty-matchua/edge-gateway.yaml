@@ -1,0 +1,48 @@
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+server:
+  listen: ":10070"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+storage:
+  base_path: "/tmp/cache"
+
+render:
+  cache:
+    ttl: 1h
+  dimensions:
+    desktop:
+      id: 1
+      width: 1920
+      height: 1080
+      render_ua: "Mozilla/5.0"
+      match_ua:
+        - "*Googlebot*"
+  events:
+    wait_for: "networkIdle"
+
+bothit_recache:
+  enabled: false
+  interval: 30m
+  match_ua: []
+
+bypass:
+  timeout: 20s
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+
+metrics:
+  enabled: false
+
+hosts:
+  include: "hosts.d/"

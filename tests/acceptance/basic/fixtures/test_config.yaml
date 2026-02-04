@@ -1,0 +1,73 @@
+# EdgeComet Test Environment Configuration
+# Single source of truth for all test ports, addresses, and test-specific settings
+# Used by acceptance tests to generate temporary daemon configs
+
+# Test HTTP server (serves test pages/fixtures)
+test_server:
+  port: 9081
+  address: "localhost:9081"
+
+# Edge Gateway test configuration
+edge_gateway:
+  port: 9130
+  address: "localhost:9130"
+  timeout: 120s
+
+  storage:
+    base_path: "./tests/temp/cache"
+
+  # Render configuration is automatically calculated per-host at runtime:
+  # - Lock TTL: host.render.timeout + 3s (min: 30s)
+  # - Concurrent wait: host.render.timeout * 80% (min: 5s, max: 60s)
+  # - Poll interval: 200ms (constant)
+
+  bypass:
+    enabled: true
+    timeout: 30s
+    user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+
+  registry:
+    selection_strategy: "least_loaded"
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Render Service test configuration
+render_service:
+  id: "rs-test-1"
+  port: 9140
+  address: "0.0.0.0:9140"
+
+  chrome:
+    pool_size: 10
+
+    warmup:
+      url: "https://example.com/"
+      timeout: 10s
+
+    restart:
+      after_count: 100
+      after_time: 30m
+
+    render:
+      max_timeout: 50s
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Redis configuration (addr will be dynamically set by miniredis)
+redis:
+  addr: "localhost:0"  # 0 means dynamically assigned by test suite
+  password: ""
+  db: 0
+
+# Test environment settings
+test:
+  valid_api_key: "sk_test_render_12345"
+  invalid_api_key: "invalid-key-99999"
+  host_id: 1
+  startup_timeout: 30s
+  health_check_timeout: 30s
+  http_client_timeout: 60s

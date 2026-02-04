@@ -1,0 +1,28 @@
+hosts:
+  - id: 999
+    domain: "host999.test"
+    render_key: "test-key-999"
+    enabled: true
+    render:
+      timeout: 10s
+      cache:
+        ttl: 10m
+        expired:
+          strategy: "serve_stale"
+          stale_ttl: 10m
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          match_ua:
+            - "*"
+
+    url_rules:
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 30m

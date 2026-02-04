@@ -1,0 +1,95 @@
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# Built binaries
+/cmd/edge-gateway/**
+!/cmd/edge-gateway/edge-gateway/main.go
+/cmd/render-service/render-service
+
+/edge-gateway
+/render-service
+/bin/*
+
+**/loadtest/loadtest
+
+*.csv
+
+# Runtime cache directories
+/cache/
+*.cache
+**/temp
+
+# Configuration files with secrets (keep examples)
+/config.yaml
+/hosts.yaml
+*.local.yaml
+*.prod.yaml
+*.dev.yaml
+!configs/example/*
+!tests/fixtures/*/
+
+# Log files
+*.log
+logs/
+log/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+/tmp/
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Test artifacts and generated files
+tests/temp/
+tests/reports/
+
+# Profiling data
+*.prof
+*.pprof
+
+# Chrome user data directories (for testing)
+chrome-data/
+user-data-dir/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# PID files
+*.pid
+
+# Runtime directories
+/run/
+/var/run/
+
+.gocache
+.gomodcache

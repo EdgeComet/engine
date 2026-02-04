@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Console Messages Test</title>
+</head>
+<body>
+    <h1>Console Messages Test Page</h1>
+    <div id="content"></div>
+
+    <script>
+        // Generate test console messages
+        console.error("Test error message from inline script");
+        console.warn("Test warning message from inline script");
+
+        // Simulate an error with stack trace
+        try {
+            throw new Error("Intentional error for testing");
+        } catch (e) {
+            console.error(e.message);
+        }
+
+        // Test multiple arguments - should be joined with space
+        console.error("Error:", "code", 42, "occurred");
+        console.warn("Warning:", "in module", "auth");
+
+        // Update DOM to confirm JS executed
+        document.getElementById('content').textContent = 'JavaScript executed successfully';
+    </script>
+</body>
+</html>

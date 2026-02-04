@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracking Parameter Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+        #content {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #28a745;
+        }
+        #query-params {
+            margin-top: 20px;
+            padding: 15px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+        #query-params h2 {
+            margin-top: 0;
+            color: #856404;
+        }
+        #query-params ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #query-params li {
+            padding: 5px 0;
+            font-family: monospace;
+        }
+        .param-key {
+            font-weight: bold;
+            color: #d63384;
+        }
+        .param-value {
+            color: #0066cc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tracking Parameter Test Page</h1>
+
+        <div class="info">
+            <p><strong>Purpose:</strong> This page is used to test tracking parameter stripping behavior.</p>
+            <p><strong>Test Focus:</strong> Verifying that UTM parameters and other tracking params are correctly stripped from URLs before cache key generation.</p>
+        </div>
+
+        <div id="content">
+            <h2>Original Content</h2>
+            <p>This is the main content of the test page. It should be served identically regardless of tracking parameters in the URL.</p>
+            <p>Timestamp: <span id="timestamp"></span></p>
+        </div>
+
+        <div id="query-params">
+            <h2>Query Parameters:</h2>
+            <ul id="params-list">
+                <li>Loading...</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Display current timestamp
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+
+        // Display query parameters for debugging
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const paramsList = document.getElementById('params-list');
+
+            if (params.toString() === '') {
+                paramsList.innerHTML = '<li><em>No query parameters</em></li>';
+            } else {
+                paramsList.innerHTML = '';
+                Array.from(params.entries()).forEach(([key, value]) => {
+                    const li = document.createElement('li');
+                    li.innerHTML = '<span class="param-key">' + key + '</span> = <span class="param-value">' + value + '</span>';
+                    paramsList.appendChild(li);
+                });
+            }
+        });
+
+        // Simulate async operation with AJAX to keep network busy
+        // This ensures Chrome waits for JavaScript to complete before capturing
+        fetch('/api/mock-data?delay=500')
+            .then(response => {
+                if (!response.ok) {
+                    // Mock endpoint may not exist, that's OK for this test
+                    return { status: 'test' };
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Mock API call completed', data);
+            })
+            .catch(err => {
+                console.log('Mock API call (expected to fail in test)', err.message);
+            });
+    </script>
+</body>
+</html>

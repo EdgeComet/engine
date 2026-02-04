@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirect Test - Initial Page</title>
+    <meta name="description" content="This page will redirect to test redirect handling">
+</head>
+<body>
+    <div class="container">
+        <h1>JavaScript Redirect Test</h1>
+        <p>This page will redirect to a final destination to test redirect handling in the render engine.</p>
+
+        <div class="redirect-info">
+            <h2>Redirect Information</h2>
+            <p><strong>Method:</strong> JavaScript window.location</p>
+            <p><strong>Destination:</strong> redirect-destination.html</p>
+            <p>Redirecting after loading data...</p>
+        </div>
+    </div>
+
+    <script>
+        // Use AJAX to simulate real-world behavior where redirect happens after data loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Redirect page loaded, fetching data before redirect...');
+
+            // Fetch data, then redirect to destination
+            fetch('/api/mock-data?delay=1500')
+                .then(response => {
+                    console.log('Data loaded, performing redirect');
+                    return response.ok ? response.json() : Promise.reject('API failed');
+                })
+                .then(data => {
+                    // Perform real navigation to destination page
+                    window.location.href = '/edge-cases/redirect-destination.html';
+                })
+                .catch(error => {
+                    console.warn('API failed, redirecting anyway:', error);
+                    // Redirect even if API fails
+                    window.location.href = '/edge-cases/redirect-destination.html';
+                });
+        });
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #ffecb3 0%, #fff8e1 100%);
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #f57c00;
+            text-align: center;
+            border-bottom: 3px solid #ff9800;
+            padding-bottom: 1rem;
+        }
+
+        .redirect-info {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+    </style>
+</body>
+</html>

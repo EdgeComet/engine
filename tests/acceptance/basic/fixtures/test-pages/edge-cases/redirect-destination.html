@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirect Destination - Final Page</title>
+    <meta name="description" content="This is the final destination page after redirect">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #c8e6c9 0%, #81c784 100%);
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2e7d32;
+            text-align: center;
+            border-bottom: 3px solid #4caf50;
+            padding-bottom: 1rem;
+        }
+        .success-message {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+            border-radius: 6px;
+            padding: 2rem;
+            margin: 2rem 0;
+            text-align: center;
+        }
+        .redirect-details {
+            background: #f0f4c3;
+            border: 1px solid #827717;
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+        }
+        .final-content {
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body data-redirected="true" data-redirect-complete="true" data-final-page="true">
+    <div class="container">
+        <h1>🎯 Redirect Destination Page</h1>
+
+        <div class="success-message">
+            <h2>✅ Redirect Successful!</h2>
+            <p>You have successfully been redirected from the initial page to this destination page.</p>
+        </div>
+
+        <div class="redirect-details">
+            <h3>Redirect Details</h3>
+            <ul>
+                <li><strong>Source Page:</strong> redirect.html</li>
+                <li><strong>Destination Page:</strong> redirect-destination.html</li>
+                <li><strong>Redirect Method:</strong> JavaScript window.location</li>
+                <li><strong>Page Type:</strong> Real destination file (not simulated)</li>
+            </ul>
+        </div>
+
+        <div class="final-content">
+            <h3>Final Destination Page</h3>
+            <p>This is the content of the final destination page. Search engines and render engines should see this content, not the initial redirect page.</p>
+
+            <div class="seo-content">
+                <h4>SEO-Optimized Content</h4>
+                <p>This page contains the actual content that should be indexed by search engines after following the redirect.</p>
+                <ul>
+                    <li>Product information and descriptions</li>
+                    <li>Important keywords for SEO</li>
+                    <li>Structured data and metadata</li>
+                    <li>User-facing content and navigation</li>
+                </ul>
+            </div>
+        </div>
+
+        <footer>
+            <p><strong>Test Complete:</strong> The render engine should capture this final page content, not the initial redirect page.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Mark the redirect as complete
+        document.addEventListener('DOMContentLoaded', function() {
+            document.body.setAttribute('data-destination-loaded-at', new Date().toISOString());
+            document.dispatchEvent(new CustomEvent('redirectComplete'));
+            console.log('Redirect destination page loaded successfully');
+        });
+    </script>
+</body>
+</html>

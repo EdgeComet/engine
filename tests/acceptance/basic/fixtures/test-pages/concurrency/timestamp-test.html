@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concurrent Request Timestamp Test</title>
+    <meta name="description" content="Test page for validating concurrent request handling and distributed locking">
+</head>
+<body>
+    <div class="container">
+        <h1>Concurrent Request Test Page</h1>
+        <p>This page generates a unique timestamp via AJAX to verify that concurrent requests are served from cache (only one render occurs).</p>
+
+        <div id="status" class="loading">
+            <p>Loading timestamp from API...</p>
+            <div class="spinner">⟳</div>
+        </div>
+
+        <div id="results" style="display: none;">
+            <h2>Render Information</h2>
+            <p><strong>Timestamp:</strong></p>
+            <div id="render-timestamp"></div>
+
+            <p><strong>UUID:</strong></p>
+            <div id="render-uuid"></div>
+
+            <p class="info">If multiple concurrent requests to this page all return the same timestamp and UUID, it proves that distributed locking is working correctly - only one render occurred and the rest were served from cache.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Use AJAX request to create network activity
+            // This ensures Chrome waits for the request to complete before capturing the page
+            // (per CLAUDE.md: NEVER use setTimeout, ALWAYS use AJAX for timing)
+            fetch('/api/mock-data?delay=500')
+                .then(response => response.json())
+                .then(data => {
+                    // Extract timestamp and UUID from API response
+                    const timestamp = data.data.metadata.loadTime;
+                    const uuid = data.data.metadata.uuid || generateSimpleUUID();
+
+                    // Update DOM with the values
+                    document.getElementById('render-timestamp').textContent = timestamp;
+                    document.getElementById('render-uuid').textContent = uuid;
+
+                    // Show results, hide loading
+                    document.getElementById('status').style.display = 'none';
+                    document.getElementById('results').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Failed to load timestamp:', error);
+                    document.getElementById('status').innerHTML =
+                        '<p class="error">Error loading timestamp: ' + error.message + '</p>';
+                });
+        });
+
+        // Simple UUID v4 generator (fallback if API doesn't provide one)
+        function generateSimpleUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+    </script>
+
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 2rem;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 0.5rem;
+        }
+
+        .loading {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            font-size: 2em;
+            margin: 0.5rem;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        #results {
+            background: #d1ecf1;
+            border: 2px solid #17a2b8;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        #render-timestamp,
+        #render-uuid {
+            background: #fff;
+            padding: 0.75rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            color: #333;
+            border: 1px solid #ccc;
+            margin: 0.5rem 0 1rem 0;
+            word-break: break-all;
+        }
+
+        .info {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-left: 4px solid #007bff;
+            margin-top: 1rem;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
+</body>
+</html>

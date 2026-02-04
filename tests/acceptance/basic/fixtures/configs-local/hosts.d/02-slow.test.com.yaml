@@ -1,0 +1,23 @@
+# Test Host Configuration - Slow test host for timeout testing
+hosts:
+  - id: 2
+    domain: "slow.test.com"
+    render_key: "slow-test-key-67890"
+    enabled: true
+
+    render:
+      timeout: 5s         # Very short timeout for testing failures
+
+      cache:
+        ttl: 1m     # Very short cache for timeout testing
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 100ms

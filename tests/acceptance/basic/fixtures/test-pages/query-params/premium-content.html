@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Content</title>
+    <meta name="description" content="Premium subscriber content">
+</head>
+<body>
+    <h1>Premium Content</h1>
+    <div class="premium-marker">PREMIUM_CONTENT</div>
+    <div id="query-info"></div>
+
+    <section class="content">
+        <h2>Exclusive Premium Articles</h2>
+        <p>This content is available for premium subscribers only.</p>
+        <ul>
+            <li>In-depth Analysis Reports</li>
+            <li>Expert Interviews</li>
+            <li>Advanced Tutorials</li>
+        </ul>
+    </section>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const container = document.getElementById('query-info');
+
+            const premium = params.get('premium');
+            if (premium === 'true') {
+                container.innerHTML = '<p class="premium-badge">Premium Access Enabled</p>';
+            }
+
+            // Keep network busy for proper rendering
+            fetch('/api/mock-data?delay=100')
+                .then(response => response.json())
+                .catch(() => {});
+        });
+    </script>
+</body>
+</html>

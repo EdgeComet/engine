@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partial Content Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .immediate { background-color: #d4edda; }
+        .pending { background-color: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h1>Partial Content Render Test</h1>
+    <p>This page has immediate content and slow-loading content (10s delay).</p>
+
+    <div id="immediate-section" class="section immediate">
+        <h2>Immediate Section</h2>
+        <p>This content is immediately available in the DOM.</p>
+        <p id="timestamp">Page loaded at: <span id="load-time"></span></p>
+    </div>
+
+    <div id="slow-section" class="section pending">
+        <h2>Slow Section</h2>
+        <p>This section will be updated after 10 seconds...</p>
+        <div id="slow-status">Status: Pending</div>
+    </div>
+
+    <script>
+        // Display load time immediately
+        document.getElementById('load-time').textContent = new Date().toLocaleTimeString();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const slowSection = document.getElementById('slow-section');
+            const slowStatus = document.getElementById('slow-status');
+
+            slowStatus.textContent = 'Status: Fetching data (10s delay)...';
+
+            // Use AJAX with 10s delay - will NOT complete within 5s timeout
+            fetch('/api/mock-data?delay=10000')
+                .then(response => response.json())
+                .then(data => {
+                    // This will NOT complete in time (10s >> 5s timeout)
+                    slowSection.className = 'section immediate';
+                    slowStatus.textContent = 'Status: Complete';
+
+                    slowSection.innerHTML += '<div id="slow-content-loaded">Slow Content Loaded Successfully</div>';
+                    slowSection.innerHTML += '<p>This content loaded after 10 seconds.</p>';
+                })
+                .catch(error => {
+                    slowStatus.textContent = 'Status: Error - ' + error.message;
+                    slowSection.style.backgroundColor = '#f8d7da';
+                });
+        });
+    </script>
+</body>
+</html>

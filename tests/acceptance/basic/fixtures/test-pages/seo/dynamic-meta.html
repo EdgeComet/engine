@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Initial Title - Loading...</title>
+    <meta name="description" content="Initial description - loading content...">
+    <meta name="keywords" content="loading, placeholder">
+    <meta name="robots" content="noindex">
+</head>
+<body>
+    <div id="app">
+        <div class="loading-container">
+            <h1>Loading Dynamic Content...</h1>
+            <p>Please wait while we load the page content and update SEO metadata.</p>
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate fetching content and SEO data from API
+            // This creates real network activity for proper networkIdle detection
+            fetch('/api/mock-data?delay=1500')
+                .then(response => {
+                    if (!response.ok) {
+                        console.warn('Mock API not available, continuing anyway');
+                        return { data: {} };
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    updateSEOMetadata();
+                    renderPageContent();
+                })
+                .catch(error => {
+                    console.error('Failed to load data:', error);
+                    // Initialize anyway to prevent test hanging
+                    updateSEOMetadata();
+                    renderPageContent();
+                });
+        });
+
+        function updateSEOMetadata() {
+            // Update document title
+            document.title = 'Ultimate Guide to Web Performance - Expert Tips & Tricks';
+
+            // Update existing meta tags
+            document.querySelector('meta[name="description"]').content =
+                'Learn the ultimate guide to web performance optimization with expert tips, tricks, and best practices. Improve your site speed and SEO rankings.';
+
+            document.querySelector('meta[name="keywords"]').content =
+                'web performance, optimization, SEO, speed, best practices, tips, guide, pagespeed';
+
+            document.querySelector('meta[name="robots"]').content = 'index, follow';
+
+            // Add new meta tags
+            const head = document.head;
+
+            // Open Graph meta tags
+            const ogTags = [
+                { property: 'og:title', content: 'Ultimate Guide to Web Performance - Expert Tips & Tricks' },
+                { property: 'og:description', content: 'Learn the ultimate guide to web performance optimization with expert tips and best practices.' },
+                { property: 'og:type', content: 'article' },
+                { property: 'og:url', content: 'https://example.com/guides/web-performance' },
+                { property: 'og:image', content: 'https://example.com/images/web-performance-guide-hero.jpg' },
+                { property: 'og:image:width', content: '1200' },
+                { property: 'og:image:height', content: '630' },
+                { property: 'og:site_name', content: 'Performance Experts' },
+                { property: 'og:locale', content: 'en_US' }
+            ];
+
+            ogTags.forEach(tag => {
+                const metaTag = document.createElement('meta');
+                metaTag.setAttribute('property', tag.property);
+                metaTag.setAttribute('content', tag.content);
+                head.appendChild(metaTag);
+            });
+
+            // Twitter Card meta tags
+            const twitterTags = [
+                { name: 'twitter:card', content: 'summary_large_image' },
+                { name: 'twitter:site', content: '@performanceexpert' },
+                { name: 'twitter:creator', content: '@webspeedguru' },
+                { name: 'twitter:title', content: 'Ultimate Guide to Web Performance - Expert Tips & Tricks' },
+                { name: 'twitter:description', content: 'Learn the ultimate guide to web performance optimization with expert tips and best practices.' },
+                { name: 'twitter:image', content: 'https://example.com/images/web-performance-guide-twitter.jpg' },
+                { name: 'twitter:image:alt', content: 'Web Performance Guide - Speed optimization tips and tricks' }
+            ];
+
+            twitterTags.forEach(tag => {
+                const metaTag = document.createElement('meta');
+                metaTag.setAttribute('name', tag.name);
+                metaTag.setAttribute('content', tag.content);
+                head.appendChild(metaTag);
+            });
+
+            // Additional SEO meta tags
+            const additionalTags = [
+                { name: 'author', content: 'Jane Doe, Performance Expert' },
+                { name: 'generator', content: 'Performance CMS v2.1' },
+                { name: 'theme-color', content: '#007acc' },
+                { name: 'msapplication-TileColor', content: '#007acc' },
+                { property: 'article:author', content: 'Jane Doe' },
+                { property: 'article:published_time', content: '2024-01-15T10:00:00Z' },
+                { property: 'article:modified_time', content: '2024-01-20T14:30:00Z' },
+                { property: 'article:section', content: 'Web Development' },
+                { property: 'article:tag', content: 'Performance' },
+                { property: 'article:tag', content: 'SEO' },
+                { property: 'article:tag', content: 'Optimization' }
+            ];
+
+            additionalTags.forEach(tag => {
+                const metaTag = document.createElement('meta');
+                if (tag.property) {
+                    metaTag.setAttribute('property', tag.property);
+                } else {
+                    metaTag.setAttribute('name', tag.name);
+                }
+                metaTag.setAttribute('content', tag.content);
+                head.appendChild(metaTag);
+            });
+
+            // Add canonical link
+            const canonicalLink = document.createElement('link');
+            canonicalLink.rel = 'canonical';
+            canonicalLink.href = 'https://example.com/guides/web-performance';
+            head.appendChild(canonicalLink);
+
+            // Add structured data
+            const structuredData = {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": "Ultimate Guide to Web Performance - Expert Tips & Tricks",
+                "description": "Learn the ultimate guide to web performance optimization with expert tips, tricks, and best practices.",
+                "image": [
+                    "https://example.com/images/web-performance-guide-hero.jpg",
+                    "https://example.com/images/web-performance-guide-thumb.jpg"
+                ],
+                "datePublished": "2024-01-15T10:00:00Z",
+                "dateModified": "2024-01-20T14:30:00Z",
+                "author": {
+                    "@type": "Person",
+                    "name": "Jane Doe",
+                    "url": "https://example.com/authors/jane-doe",
+                    "jobTitle": "Performance Expert",
+                    "worksFor": {
+                        "@type": "Organization",
+                        "name": "Performance Experts"
+                    }
+                },
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Performance Experts",
+                    "logo": {
+                        "@type": "ImageObject",
+                        "url": "https://example.com/logo.png",
+                        "width": 200,
+                        "height": 60
+                    }
+                },
+                "mainEntityOfPage": {
+                    "@type": "WebPage",
+                    "@id": "https://example.com/guides/web-performance"
+                },
+                "wordCount": 2500,
+                "keywords": ["web performance", "optimization", "SEO", "speed", "best practices"],
+                "articleSection": "Web Development",
+                "articleBody": "This comprehensive guide covers everything you need to know about web performance optimization..."
+            };
+
+            const ldJsonScript = document.createElement('script');
+            ldJsonScript.type = 'application/ld+json';
+            ldJsonScript.textContent = JSON.stringify(structuredData, null, 2);
+            head.appendChild(ldJsonScript);
+
+            // Add breadcrumb structured data
+            const breadcrumbData = {
+                "@context": "https://schema.org",
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": 1,
+                        "name": "Home",
+                        "item": "https://example.com"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 2,
+                        "name": "Guides",
+                        "item": "https://example.com/guides"
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 3,
+                        "name": "Web Performance",
+                        "item": "https://example.com/guides/web-performance"
+                    }
+                ]
+            };
+
+            const breadcrumbScript = document.createElement('script');
+            breadcrumbScript.type = 'application/ld+json';
+            breadcrumbScript.textContent = JSON.stringify(breadcrumbData, null, 2);
+            head.appendChild(breadcrumbScript);
+
+            console.log('SEO metadata updated successfully');
+        }
+
+        function renderPageContent() {
+            const app = document.getElementById('app');
+
+            app.innerHTML = `
+                <article class="main-article">
+                <header class="article-header">
+                    <nav class="breadcrumb">
+                        <a href="/">Home</a> >
+                        <a href="/guides">Guides</a> >
+                        <span>Web Performance</span>
+                    </nav>
+
+                    <h1 class="main-title">Ultimate Guide to Web Performance</h1>
+                    <p class="subtitle">Expert Tips & Tricks for Lightning-Fast Websites</p>
+
+                    <div class="article-meta">
+                        <div class="author-info">
+                            <img src="https://via.placeholder.com/40x40/007acc/ffffff?text=JD" alt="Jane Doe" class="author-avatar">
+                            <div class="author-details">
+                                <span class="author-name">Jane Doe</span>
+                                <span class="author-title">Performance Expert</span>
+                            </div>
+                        </div>
+                        <div class="publish-info">
+                            <time datetime="2024-01-15T10:00:00Z">Published: January 15, 2024</time>
+                            <time datetime="2024-01-20T14:30:00Z">Updated: January 20, 2024</time>
+                        </div>
+                        <div class="reading-time">
+                            <span>📖 12 min read</span>
+                        </div>
+                    </div>
+                </header>
+
+                <main class="article-content">
+                    <section class="intro-section">
+                        <p class="lead">Web performance is crucial for user experience, SEO rankings, and business success. In this comprehensive guide, you'll learn proven strategies to optimize your website's speed and performance.</p>
+                    </section>
+
+                    <section class="table-of-contents">
+                        <h2>Table of Contents</h2>
+                        <ol>
+                            <li><a href="#understanding-performance">Understanding Web Performance</a></li>
+                            <li><a href="#measuring-performance">Measuring Performance Metrics</a></li>
+                            <li><a href="#optimization-techniques">Optimization Techniques</a></li>
+                            <li><a href="#advanced-strategies">Advanced Strategies</a></li>
+                            <li><a href="#monitoring-tools">Monitoring and Tools</a></li>
+                        </ol>
+                    </section>
+
+                    <section id="understanding-performance">
+                        <h2>Understanding Web Performance</h2>
+                        <p>Web performance encompasses various metrics that affect how quickly your website loads and becomes interactive for users.</p>
+
+                        <div class="highlight-box">
+                            <h3>Key Performance Metrics</h3>
+                            <ul>
+                                <li><strong>First Contentful Paint (FCP):</strong> When the first piece of content appears</li>
+                                <li><strong>Largest Contentful Paint (LCP):</strong> When the main content finishes loading</li>
+                                <li><strong>Cumulative Layout Shift (CLS):</strong> Visual stability of the page</li>
+                                <li><strong>First Input Delay (FID):</strong> Responsiveness to user interactions</li>
+                            </ul>
+                        </div>
+                    </section>
+
+                    <section id="measuring-performance">
+                        <h2>Measuring Performance Metrics</h2>
+                        <p>Before optimizing, you need to establish baseline measurements using the right tools and techniques.</p>
+
+                        <div class="code-block">
+                            <h4>Performance Measurement Code</h4>
+                            <pre><code>// Measure page load time
+window.addEventListener('load', () => {
+    const loadTime = performance.timing.loadEventEnd - performance.timing.navigationStart;
+    console.log('Page load time:', loadTime + 'ms');
+});
+
+// Measure First Contentful Paint
+new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+        if (entry.name === 'first-contentful-paint') {
+            console.log('FCP:', entry.startTime);
+        }
+    }
+}).observe({entryTypes: ['paint']});</code></pre>
+                        </div>
+                    </section>
+
+                    <section id="optimization-techniques">
+                        <h2>Optimization Techniques</h2>
+                        <p>Here are the most effective techniques for improving web performance:</p>
+
+                        <div class="techniques-grid">
+                            <div class="technique-card">
+                                <h3>🖼️ Image Optimization</h3>
+                                <ul>
+                                    <li>Use modern formats (WebP, AVIF)</li>
+                                    <li>Implement lazy loading</li>
+                                    <li>Optimize file sizes</li>
+                                    <li>Use responsive images</li>
+                                </ul>
+                            </div>
+
+                            <div class="technique-card">
+                                <h3>📦 Code Optimization</h3>
+                                <ul>
+                                    <li>Minify CSS and JavaScript</li>
+                                    <li>Remove unused code</li>
+                                    <li>Use code splitting</li>
+                                    <li>Implement tree shaking</li>
+                                </ul>
+                            </div>
+
+                            <div class="technique-card">
+                                <h3>🌐 Network Optimization</h3>
+                                <ul>
+                                    <li>Enable gzip compression</li>
+                                    <li>Use a CDN</li>
+                                    <li>Implement HTTP/2</li>
+                                    <li>Optimize DNS lookups</li>
+                                </ul>
+                            </div>
+
+                            <div class="technique-card">
+                                <h3>⚡ Caching Strategies</h3>
+                                <ul>
+                                    <li>Browser caching</li>
+                                    <li>Service workers</li>
+                                    <li>Server-side caching</li>
+                                    <li>CDN caching</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="cta-section">
+                        <h2>Ready to Optimize Your Website?</h2>
+                        <p>Apply these performance optimization techniques to see immediate improvements in your site speed and user experience.</p>
+                        <button class="cta-button" data-action="start-optimization">Start Optimizing Now</button>
+                    </section>
+                </main>
+
+                <aside class="article-sidebar">
+                    <div class="share-buttons">
+                        <h3>Share this Article</h3>
+                        <div class="social-buttons">
+                            <button class="share-btn twitter" data-platform="twitter">Twitter</button>
+                            <button class="share-btn facebook" data-platform="facebook">Facebook</button>
+                            <button class="share-btn linkedin" data-platform="linkedin">LinkedIn</button>
+                        </div>
+                    </div>
+
+                    <div class="related-articles">
+                        <h3>Related Articles</h3>
+                        <ul>
+                            <li><a href="/guides/seo-optimization">SEO Optimization Guide</a></li>
+                            <li><a href="/guides/javascript-performance">JavaScript Performance</a></li>
+                            <li><a href="/guides/image-optimization">Image Optimization</a></li>
+                        </ul>
+                    </div>
+                </aside>
+                </article>
+            `;
+
+            // Mark as fully loaded
+            document.body.setAttribute('data-meta-updated', 'true');
+            document.body.setAttribute('data-content-loaded', 'true');
+            document.body.classList.add('dynamic-meta-complete');
+
+            // Dispatch completion event
+            document.dispatchEvent(new CustomEvent('dynamicMetaComplete'));
+
+            console.log('Page content rendered successfully');
+        }
+    </script>
+
+    <style>
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 50vh;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007acc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 2rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Article Styles */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .article-header {
+            margin-bottom: 3rem;
+        }
+
+        .breadcrumb {
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            color: #6c757d;
+        }
+
+        .breadcrumb a {
+            color: #007acc;
+            text-decoration: none;
+        }
+
+        .main-title {
+            font-size: 2.5rem;
+            color: #2c3e50;
+            margin: 0 0 0.5rem 0;
+            line-height: 1.2;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: #7f8c8d;
+            margin: 0 0 2rem 0;
+        }
+
+        .article-meta {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            padding: 1rem 0;
+            border-top: 1px solid #dee2e6;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .author-info {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .author-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .author-details {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .author-name {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .author-title {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .publish-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .publish-info time {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .reading-time {
+            color: #6c757d;
+        }
+
+        .article-content {
+            line-height: 1.7;
+            margin-bottom: 3rem;
+        }
+
+        .lead {
+            font-size: 1.1rem;
+            color: #34495e;
+            margin-bottom: 2rem;
+        }
+
+        .table-of-contents {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .table-of-contents ol {
+            margin: 1rem 0 0 1.5rem;
+        }
+
+        .table-of-contents a {
+            color: #007acc;
+            text-decoration: none;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 2rem 0;
+        }
+
+        .code-block pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+
+        .techniques-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .technique-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .technique-card h3 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 3rem 2rem;
+            border-radius: 8px;
+            margin: 3rem 0;
+        }
+
+        .cta-button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        .article-sidebar {
+            background: #f8f9fa;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-top: 2rem;
+        }
+
+        .share-buttons, .related-articles {
+            margin-bottom: 2rem;
+        }
+
+        .social-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .share-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .share-btn.twitter { background: #1da1f2; color: white; }
+        .share-btn.facebook { background: #4267b2; color: white; }
+        .share-btn.linkedin { background: #0077b5; color: white; }
+
+        .related-articles ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .related-articles li {
+            margin: 0.5rem 0;
+        }
+
+        .related-articles a {
+            color: #007acc;
+            text-decoration: none;
+        }
+
+        section {
+            margin: 3rem 0;
+        }
+
+        section h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</body>
+</html>

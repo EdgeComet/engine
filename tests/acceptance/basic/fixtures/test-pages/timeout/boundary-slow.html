@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boundary Slow Test - 5.1s</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+        }
+        .loading { background-color: #fff3cd; }
+        .success { background-color: #d4edda; }
+        .content {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Boundary Slow Test</h1>
+    <p>This page takes 5.1 seconds (just over 5s timeout).</p>
+
+    <div id="status" class="status loading">Loading...</div>
+    <div id="content" class="content">
+        <h2>Immediate Content</h2>
+        <p>This content is immediately available in the DOM.</p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const statusEl = document.getElementById('status');
+            const contentEl = document.getElementById('content');
+
+            statusEl.textContent = 'Fetching data (5.1s delay)...';
+
+            // Use AJAX with 5.1s delay - should just exceed 5s timeout
+            fetch('/api/mock-data?delay=5100')
+                .then(response => response.json())
+                .then(data => {
+                    // This will NOT complete in time (5.1s > 5s timeout)
+                    statusEl.textContent = 'Data loaded successfully (boundary case)!';
+                    statusEl.className = 'status success';
+
+                    contentEl.innerHTML += '<h2>Boundary Loaded Content</h2>';
+                    contentEl.innerHTML += '<p>This content was loaded after 5.1 seconds via AJAX.</p>';
+                    contentEl.innerHTML += '<div id="completion-marker">Boundary Slow Complete</div>';
+                })
+                .catch(error => {
+                    statusEl.textContent = 'Error: ' + error.message;
+                    statusEl.style.backgroundColor = '#f8d7da';
+                });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AJAX Content Test</title>
+    <meta name="description" content="Testing AJAX-loaded content rendering">
+</head>
+<body>
+    <div id="container">
+        <h1>AJAX Content Loading Test</h1>
+        <div id="ajax-content" class="loading">
+            <p>Fetching data...</p>
+            <div class="spinner">⟳</div>
+        </div>
+    </div>
+
+    <script>
+        // Load content via real AJAX request
+        function loadContent() {
+            // Make real HTTP request to API endpoint
+            return fetch('/api/mock-data?delay=1500')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .catch(error => {
+                    console.error('Failed to load data:', error);
+                    throw error;
+                });
+        }
+
+        // Load content when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadContent().then(response => {
+                const contentDiv = document.getElementById('ajax-content');
+                const data = response.data;
+
+                contentDiv.className = 'loaded';
+                contentDiv.innerHTML = `
+                    <div class="api-content" data-loaded-at="${data.metadata.loadTime}">
+                        <h2>${data.title}</h2>
+                        <div class="items-grid">
+                            ${data.items.map(item => `
+                                <div class="item" data-id="${item.id}">
+                                    <h3>${item.name}</h3>
+                                    <p>${item.description}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="metadata">
+                            <p>Total items: <span class="count">${data.metadata.total}</span></p>
+                            <p>Loaded at: <span class="load-time">${data.metadata.loadTime}</span></p>
+                            <p>Source: <span class="source">${data.metadata.source}</span></p>
+                        </div>
+                    </div>
+                `;
+
+                // Mark as complete
+                document.body.setAttribute('data-ajax-loaded', 'true');
+
+                // Dispatch completion event
+                document.dispatchEvent(new CustomEvent('ajaxContentReady'));
+            }).catch(error => {
+                // Handle error gracefully
+                const contentDiv = document.getElementById('ajax-content');
+                contentDiv.className = 'error';
+                contentDiv.innerHTML = `<p>Error loading data: ${error.message}</p>`;
+            });
+        });
+    </script>
+
+    <style>
+        .loading .spinner {
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .items-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+
+        .item {
+            border: 1px solid #ddd;
+            padding: 1rem;
+            border-radius: 4px;
+        }
+
+        .metadata {
+            background: #f5f5f5;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+    </style>
+</body>
+</html>

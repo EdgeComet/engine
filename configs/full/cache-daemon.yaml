@@ -1,0 +1,273 @@
+# Cache Daemon - Complete Configuration Reference
+# This file contains ALL possible configuration options with realistic values.
+# Comments document each option's purpose, defaults, and valid values.
+
+# =============================================================================
+# EDGE GATEWAY CONFIG REFERENCE
+# =============================================================================
+# Cache daemon requires access to EG configuration for host definitions
+# and cache settings. This is how the daemon knows which hosts to manage.
+
+# Path to Edge Gateway configuration file
+# Can be absolute or relative to cache-daemon config location
+# Required
+eg_config: "edge-gateway.yaml"
+
+# =============================================================================
+# DAEMON IDENTIFICATION
+# =============================================================================
+# Unique identifier for this cache daemon instance
+
+# Daemon instance ID
+# Used for logging, metrics, and coordination
+# Must be unique in a multi-daemon setup
+# Required
+daemon_id: "cache-daemon-1"
+
+# =============================================================================
+# REDIS CONFIGURATION
+# =============================================================================
+# Redis is used for:
+# - Reading recache queues (normal, autorecache, priority)
+# - Coordination with Edge Gateway instances
+# - Render service registry access
+# IMPORTANT: Must connect to the SAME Redis as Edge Gateway
+
+redis:
+  # Redis server address
+  # Format: "host:port"
+  # Required
+  addr: "localhost:6379"
+
+  # Redis authentication password
+  # Default: "" (no password)
+  password: ""
+
+  # Redis database number
+  # Default: 0
+  # Range: 0-15
+  db: 0
+
+# =============================================================================
+# SCHEDULER CONFIGURATION
+# =============================================================================
+# Controls how often the daemon checks for work and processes queues
+
+scheduler:
+  # Main scheduler tick interval
+  # How often the scheduler loop runs and checks for work
+  # Minimum: 100ms (allows faster ticks for tests/high-throughput)
+  # Format: Go duration string (ms, s, m)
+  # Required
+  # Recommendation: 1s for production, 100ms for tests
+  tick_interval: 1s
+
+  # Normal queue check interval
+  # How often to check normal and autorecache queues
+  # Must be a multiple of tick_interval
+  # Format: Go duration string (s, m)
+  # Required
+  # Recommendation: 60s for production (balances responsiveness vs. Redis load)
+  normal_check_interval: 60s
+
+# =============================================================================
+# INTERNAL QUEUE CONFIGURATION
+# =============================================================================
+# In-memory queue for URLs being processed
+# URLs move from Redis queues to internal queue for processing
+
+internal_queue:
+  # Maximum number of entries in the internal queue
+  # Prevents memory exhaustion under heavy load
+  # When full, new URLs wait in Redis queues
+  # Required
+  # Range: > 0
+  # Recommendation: 1000-5000 depending on available memory
+  max_size: 1000
+
+  # Maximum retry attempts before discarding a URL
+  # Failed recache attempts are retried with exponential backoff
+  # After max_retries, the URL is dropped from the queue
+  # Required
+  # Range: >= 1
+  # Recommendation: 3 for production
+  max_retries: 3
+
+  # Base delay for exponential backoff on retries
+  # Actual delay: retry_base_delay * 2^(retry_count-1)
+  # Example with 5s base: 5s, 10s, 20s for retries 1, 2, 3
+  # Format: Go duration string (s, m)
+  # Default: 5s (if set to 0 or omitted)
+  # Recommendation: 5s for production, 100ms for tests
+  retry_base_delay: 5s
+
+# =============================================================================
+# RECACHE BEHAVIOR CONFIGURATION
+# =============================================================================
+# Controls how the daemon interacts with render services
+
+recache:
+  # Percentage of RS capacity reserved for online traffic
+  # Daemon only uses (1 - rs_capacity_reserved) of available capacity
+  # Ensures online requests always have render slots available
+  # Range: 0.0 to 1.0 (0% to 100%)
+  # Required
+  # Example: 0.30 means reserve 30% for online, use 70% for recache
+  # Recommendation: 0.20-0.40 depending on traffic patterns
+  rs_capacity_reserved: 0.30
+
+  # Timeout for each URL recache request
+  # Includes network round-trip to EG and actual rendering time
+  # Should be >= render timeout + network overhead
+  # Format: Go duration string (s, m)
+  # Required
+  # Recommendation: 60s-120s depending on page complexity
+  timeout_per_url: 60s
+
+# =============================================================================
+# HTTP API CONFIGURATION
+# =============================================================================
+# REST API for daemon monitoring and control
+# Used by EG instances for internal communication
+
+http_api:
+  # Enable/disable HTTP API server
+  # Required for daemon operation (receives commands from EG)
+  # Default: true
+  enabled: true
+
+  # Listen address for HTTP API server
+  # Format: ":port" or "ip:port" or "host:port"
+  # Required if enabled
+  # IMPORTANT: Port must differ from metrics.listen when both enabled
+  listen: ":10090"
+
+  # Timeout for incoming API requests
+  # Maximum time to wait for request processing
+  # Format: Go duration string (s, m)
+  # Default: 30s
+  request_timeout: 30s
+
+  # Enable scheduler pause/resume API endpoints
+  # Provides /api/scheduler/pause and /api/scheduler/resume
+  # Useful for maintenance and testing
+  # Default: false
+  # Security note: Enable only in trusted environments
+  scheduler_control_api: false
+
+# =============================================================================
+# LOGGING CONFIGURATION
+# =============================================================================
+
+logging:
+  # Global log level (applies to all outputs unless overridden)
+  # Options: debug, info, warn, error
+  # Default: "info"
+  level: "info"
+
+  # -------------------------------------------------------------------------
+  # CONSOLE OUTPUT
+  # -------------------------------------------------------------------------
+  console:
+    # Enable console logging
+    # Default: true (if no outputs enabled, console auto-enables)
+    # Recommendation: false for production daemons, true for development
+    enabled: false
+
+    # Output format
+    # Options: "console" (colored, human-readable), "json"
+    # Default: "console"
+    format: "console"
+
+    # Override global log level for console
+    # Useful for showing only warnings in terminal while logging debug to file
+    # Optional - omit to use global level
+    # level: "warn"
+
+  # -------------------------------------------------------------------------
+  # FILE OUTPUT
+  # -------------------------------------------------------------------------
+  file:
+    # Enable file logging
+    # Default: false
+    # Recommendation: true for production
+    enabled: true
+
+    # Log file path
+    # Required if enabled
+    # Ensure directory exists and has write permissions
+    path: "/var/log/edgecomet/cache-daemon.log"
+
+    # Output format
+    # Options: "text" (plain, no colors), "json"
+    # Default: "text"
+    # Recommendation: "json" for production (easier parsing)
+    format: "json"
+
+    # Override global log level for file
+    # Useful for capturing debug logs to file only
+    # Optional - omit to use global level
+    level: "debug"
+
+    # -------------------------------------------------------------------------
+    # LOG ROTATION
+    # -------------------------------------------------------------------------
+    rotation:
+      # Maximum file size in MB before rotation
+      # 0 = no size limit
+      # Range: >= 0
+      max_size: 100
+
+      # Maximum age in days to retain old log files
+      # 0 = no age limit
+      # Range: >= 0
+      max_age: 30
+
+      # Maximum number of old log files to retain
+      # 0 = no backup limit
+      # Range: >= 0
+      max_backups: 10
+
+      # Compress rotated log files with gzip
+      # Default: false
+      # Recommendation: true to save disk space
+      compress: true
+
+# =============================================================================
+# METRICS CONFIGURATION
+# =============================================================================
+# Prometheus metrics endpoint for monitoring daemon performance
+
+metrics:
+  # Enable metrics endpoint
+  # Default: false
+  enabled: true
+
+  # Listen address for metrics server
+  # Format: ":port" or "ip:port"
+  # MUST differ from http_api.listen port when both enabled
+  # Required if enabled
+  #
+  # IMPORTANT: Metrics ALWAYS run on a separate HTTP server when enabled.
+  # This provides:
+  # - Network isolation (firewall metrics port to monitoring systems only)
+  # - Security (main application traffic unaffected by metrics scraping)
+  # - Configuration validation will fail if metrics.listen == http_api.listen
+  listen: ":10099"
+
+  # Metrics endpoint path
+  # Standard Prometheus convention
+  # Default: "/metrics"
+  # Must start with "/"
+  path: "/metrics"
+
+  # Prometheus metric namespace prefix
+  # All metrics will be prefixed with this namespace
+  # Default: "edgecomet"
+  # Must match pattern: [a-zA-Z_][a-zA-Z0-9_]*
+  #
+  # Example metrics with namespace "edgecomet":
+  # - edgecomet_cd_recache_requests_total
+  # - edgecomet_cd_queue_size
+  # - edgecomet_cd_processing_duration_seconds
+  namespace: "edgecomet"

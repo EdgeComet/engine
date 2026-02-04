@@ -1,0 +1,472 @@
+# Host Configuration - Complete Reference
+# This file demonstrates ALL possible host and URL rule options.
+# Comments document each option's purpose, defaults, and valid values.
+
+hosts:
+  # =============================================================================
+  # HOST CONFIGURATION
+  # =============================================================================
+  - # Unique host identifier
+    # Required, must be unique across all hosts
+    id: 1
+
+    # Domain(s) for this host configuration
+    # Can be a string or array of strings
+    # Array format allows multiple domains to share the same config
+    # Required
+    domain:
+      - "example.com"
+      - "www.example.com"
+      - "cdn.example.com"
+
+    # API key for authentication (X-Render-Key header)
+    # Required
+    render_key: "sk_live_your_secret_render_key_here"
+
+    # Enable/disable this host
+    # Required
+    enabled: true
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL RENDER OVERRIDES
+    # -------------------------------------------------------------------------
+    # These settings override global render configuration
+    # Field-level deep merge for: events, cache
+    # Full replacement for: dimensions, blocked_resource_types, blocked_patterns
+    render:
+      # Render timeout (Chrome rendering)
+      # Required at host level
+      timeout: 45s
+
+      # Override unmatched dimension behavior
+      # Options: "bypass", "block", or dimension name
+      unmatched_dimension: "desktop"
+
+      # Cache settings (field-level merge with global)
+      cache:
+        ttl: 12h
+        status_codes: [200, 301, 302, 404]
+        expired:
+          strategy: "serve_stale"
+          stale_ttl: 72h
+
+      # Event settings (field-level merge with global)
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 1s
+
+      # Dimensions (REPLACES global dimensions entirely)
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - "*Googlebot*"
+            - "*Bingbot*"
+            - "$GooglebotSearchDesktop"
+            - "$BingbotDesktop"
+            - "~(GPTBot|ChatGPT-User)"
+            - "~*perplexity"
+            - "$AnthropicBot"
+            - "$AnthropicUserBot"
+
+        mobile:
+          id: 2
+          width: 390
+          height: 844
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - "*Googlebot-Mobile*"
+            - "$GooglebotSearchMobile"
+            - "$BingbotMobile"
+
+        tablet:
+          id: 3
+          width: 1024
+          height: 768
+          render_ua: "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - "*iPad*Bot*"
+
+      # Blocked resource types (REPLACES global list)
+      blocked_resource_types:
+        - "Image"
+        - "Media"
+
+      # Blocked URL patterns (REPLACES global list)
+      blocked_patterns:
+        - "*.google-analytics.com/*"
+        - "*.googletagmanager.com/*"
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL BYPASS OVERRIDES
+    # -------------------------------------------------------------------------
+    bypass:
+      timeout: 20s
+      user_agent: "Mozilla/5.0 (compatible; ExampleBot/1.0; +https://example.com/bot)"
+      cache:
+        enabled: true
+        ttl: 1h
+        status_codes: [200, 301]
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL TRACKING PARAMS
+    # -------------------------------------------------------------------------
+    tracking_params:
+      strip: true
+      params_add:
+        - "example_tracking_*"
+        - "campaign_*"
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL BOT HIT RECACHE
+    # -------------------------------------------------------------------------
+    bothit_recache:
+      enabled: true
+      interval: "6h"
+      match_ua:
+        - "*Googlebot*"
+        - "*Bingbot*"
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL CACHE SHARDING
+    # -------------------------------------------------------------------------
+    cache_sharding:
+      enabled: true
+      replication_factor: 3
+      push_on_render: true
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL HEADERS
+    # -------------------------------------------------------------------------
+    # Field-level merge with global headers
+    headers:
+      # Add to global request headers
+      safe_request_add:
+        - "X-Tenant-ID"
+        - "X-Custom-Auth"
+
+      # Add to global response headers
+      safe_response_add:
+        - "X-Frame-Options"
+        - "X-Content-Type-Options"
+
+    # -------------------------------------------------------------------------
+    # HOST-LEVEL CLIENT IP
+    # -------------------------------------------------------------------------
+    # Replaces global client_ip headers for this host
+    client_ip:
+      headers:
+        - "CF-Connecting-IP"
+
+    # =========================================================================
+    # URL RULES
+    # =========================================================================
+    # Rules are automatically sorted by specificity at config load:
+    # 1. Pattern Type: Exact > Wildcard > Regexp
+    # 2. Query Matching: Has match_query > No match_query
+    # 3. Slash Count: More slashes (deeper paths) first
+    # 4. Declaration Order: Preserved for equivalent patterns
+    url_rules:
+      # -----------------------------------------------------------------------
+      # RENDER ACTIONS
+      # -----------------------------------------------------------------------
+      # action: "render" - Render page with Chrome and cache result
+
+      # Exact path match with full render configuration
+      - match: "/products"
+        action: "render"
+        render:
+          timeout: 60s
+          dimension: "desktop"  # Force specific dimension regardless of UA
+          events:
+            wait_for: "networkIdle"
+            additional_wait: 2s
+          cache:
+            ttl: 6h
+            status_codes: [200]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 24h
+          blocked_resource_types:
+            - "Image"
+            - "Font"
+          blocked_patterns:
+            - "*.facebook.com/*"
+            - "*.twitter.com/*"
+        headers:
+          safe_request:
+            - "Authorization"
+            - "X-API-Key"
+        tracking_params:
+          strip: true
+          params_add:
+            - "product_*"
+        bothit_recache:
+          enabled: true
+          interval: "4h"
+          match_ua:
+            - "*Googlebot*"
+
+      # Wildcard pattern - matches any depth
+      # /blog/* matches /blog/post, /blog/2024/post, /blog/2024/01/post, etc.
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 24h
+
+      # Multiple patterns in single rule (array format)
+      - match:
+          - "/articles/*"
+          - "/news/*"
+          - "/press/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 12h
+
+      # Regexp pattern (case-sensitive) - prefix with ~
+      - match: "~/api/v[0-9]+/public/.*"
+        action: "render"
+        render:
+          timeout: 30s
+
+      # Regexp pattern (case-insensitive) - prefix with ~*
+      - match: "~*/category/[a-z-]+$"
+        action: "render"
+
+      # -----------------------------------------------------------------------
+      # QUERY PARAMETER MATCHING
+      # -----------------------------------------------------------------------
+      # match_query allows filtering by URL query parameters
+      # All specified params must match (AND logic)
+      # Array values use OR logic within same key
+
+      # Search page with required query parameter
+      - match: "/search"
+        match_query:
+          # Wildcard: parameter must exist with non-empty value
+          q: "*"
+        action: "render"
+        render:
+          cache:
+            ttl: 1h
+
+      # Search with category filter
+      - match: "/search"
+        match_query:
+          q: "*"
+          # Array: must match one of these values (OR logic)
+          category: ["electronics", "clothing", "home"]
+        action: "render"
+        render:
+          cache:
+            ttl: 2h
+
+      # Paginated results with numeric page parameter
+      - match: "/products"
+        match_query:
+          # Regexp: page must be numeric
+          page: "~^[0-9]+$"
+          # Exact match
+          sort: "price"
+        action: "render"
+
+      # Case-insensitive regexp in query matching
+      - match: "/filter"
+        match_query:
+          # Case-insensitive regexp
+          type: "~*^(sale|clearance|new)$"
+        action: "render"
+
+      # -----------------------------------------------------------------------
+      # BYPASS ACTIONS
+      # -----------------------------------------------------------------------
+      # action: "bypass" - Fetch directly from origin without rendering
+
+      - match: "/api/*"
+        action: "bypass"
+        bypass:
+          timeout: 10s
+          user_agent: "EdgeComet-API/1.0"
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+
+      # Bypass for static assets
+      - match:
+          - "*.css"
+          - "*.js"
+          - "*.woff2"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 24h
+
+      # -----------------------------------------------------------------------
+      # BLOCK ACTIONS
+      # -----------------------------------------------------------------------
+      # action: "block" or "status_403" - Return 403 Forbidden
+
+      - match: "/admin/*"
+        action: "block"
+
+      # Equivalent to "block"
+      - match: "/internal/*"
+        action: "status_403"
+
+      # -----------------------------------------------------------------------
+      # STATUS 404 (Not Found)
+      # -----------------------------------------------------------------------
+      # action: "status_404" - Return 404 Not Found (soft delete)
+
+      - match: "/old-page"
+        action: "status_404"
+
+      # -----------------------------------------------------------------------
+      # STATUS 410 (Gone)
+      # -----------------------------------------------------------------------
+      # action: "status_410" - Return 410 Gone (permanent removal)
+      # Signals to search engines the content is permanently removed
+
+      - match: "/discontinued/*"
+        action: "status_410"
+
+      # -----------------------------------------------------------------------
+      # CUSTOM STATUS CODES
+      # -----------------------------------------------------------------------
+      # action: "status" - Return custom HTTP status code
+
+      # Redirect (301 Permanent)
+      - match: "/old-url"
+        action: "status"
+        status:
+          code: 301
+          headers:
+            Location: "https://example.com/new-url"
+
+      # Redirect (302 Temporary)
+      - match: "/temp-redirect"
+        action: "status"
+        status:
+          code: 302
+          headers:
+            Location: "https://example.com/temporary-location"
+
+      # Redirect (307 Temporary, preserves method)
+      - match: "/api/v1/*"
+        action: "status"
+        status:
+          code: 307
+          headers:
+            Location: "https://api.example.com/v2/"
+
+      # Rate limiting response
+      - match: "/rate-limited/*"
+        action: "status"
+        status:
+          code: 429
+          reason: "Too Many Requests"
+          headers:
+            Retry-After: "60"
+
+      # Maintenance mode
+      - match: "/maintenance/*"
+        action: "status"
+        status:
+          code: 503
+          reason: "Service Unavailable"
+          headers:
+            Retry-After: "3600"
+
+      # Custom client error
+      - match: "/forbidden-region/*"
+        action: "status"
+        status:
+          code: 451
+          reason: "Unavailable For Legal Reasons"
+
+      # -----------------------------------------------------------------------
+      # EXTENSION-BASED PATTERNS
+      # -----------------------------------------------------------------------
+      # Extension patterns work with any path depth and query params
+      # *.pdf matches /doc.pdf, /files/doc.pdf, /files/2024/doc.pdf?download=true
+
+      # PDF files - bypass with caching
+      - match: "*.pdf"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 168h  # 1 week
+
+      # Image files - bypass
+      - match:
+          - "*.jpg"
+          - "*.jpeg"
+          - "*.png"
+          - "*.gif"
+          - "*.webp"
+          - "*.svg"
+        action: "bypass"
+
+      # -----------------------------------------------------------------------
+      # DEFAULT CATCH-ALL
+      # -----------------------------------------------------------------------
+      # Place at the end - matches everything not matched above
+
+      - match: "/"
+        action: "render"
+        render:
+          cache:
+            ttl: 6h
+
+  # =============================================================================
+  # SECOND HOST EXAMPLE (Minimal Configuration)
+  # =============================================================================
+  # Demonstrates minimal required fields - inherits everything from global config
+
+  - id: 2
+    domain: "minimal.example.com"
+    render_key: "sk_live_minimal_key"
+    enabled: true
+
+    render:
+      timeout: 30s
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+          match_ua:
+            - "*Bot*"
+
+
+  # =============================================================================
+  # THIRD HOST EXAMPLE (Bypass Only)
+  # =============================================================================
+  # Host configured for bypass-only operation (no rendering)
+
+  - id: 3
+    domain: "static.example.com"
+    render_key: "sk_live_static_key"
+    enabled: true
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "bypass"
+      dimensions: {}  # Empty dimensions - all traffic bypassed
+
+    bypass:
+      timeout: 15s
+      user_agent: "EdgeComet-Static/1.0"
+      cache:
+        enabled: true
+        ttl: 24h
+        status_codes: [200, 301, 302, 304]

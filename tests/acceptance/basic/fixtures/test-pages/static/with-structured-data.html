@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Structured Data Test Page</title>
+    <meta name="description" content="Testing JSON-LD structured data for SEO">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Structured Data Test Article",
+        "author": {
+            "@type": "Person",
+            "name": "Test Author",
+            "url": "https://test.example.com/author/test"
+        },
+        "datePublished": "2024-01-15T10:00:00Z",
+        "dateModified": "2024-01-15T12:00:00Z",
+        "description": "This article tests structured data implementation for SEO purposes",
+        "image": "https://test.example.com/images/article-image.jpg",
+        "publisher": {
+            "@type": "Organization",
+            "name": "EdgeComet Test",
+            "logo": {
+                "@type": "ImageObject",
+                "url": "https://test.example.com/logo.png"
+            }
+        },
+        "mainEntityOfPage": {
+            "@type": "WebPage",
+            "@id": "https://test.example.com/static/with-structured-data.html"
+        }
+    }
+    </script>
+
+    <!-- Additional Product structured data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Test Product",
+        "description": "A test product for structured data validation",
+        "image": "https://test.example.com/images/product.jpg",
+        "sku": "TEST-001",
+        "brand": {
+            "@type": "Brand",
+            "name": "Test Brand"
+        },
+        "offers": {
+            "@type": "Offer",
+            "price": "99.99",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "url": "https://test.example.com/product/test-001"
+        },
+        "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.5",
+            "reviewCount": "123"
+        }
+    }
+    </script>
+</head>
+<body>
+    <article>
+        <header>
+            <h1>Structured Data Test Article</h1>
+            <p>By <span class="author">Test Author</span> |
+               <time datetime="2024-01-15T10:00:00Z">January 15, 2024</time></p>
+        </header>
+
+        <main>
+            <p>This page contains JSON-LD structured data that should be properly rendered and accessible to search engines.</p>
+
+            <section class="product-info">
+                <h2>Featured Product</h2>
+                <div class="product">
+                    <h3>Test Product</h3>
+                    <p>A test product for structured data validation</p>
+                    <p class="price">$99.99</p>
+                    <p class="rating">★★★★☆ (4.5/5 - 123 reviews)</p>
+                </div>
+            </section>
+
+            <section>
+                <h2>Structured Data Benefits</h2>
+                <ul>
+                    <li>Enhanced search results with rich snippets</li>
+                    <li>Better understanding by search engines</li>
+                    <li>Improved click-through rates</li>
+                    <li>Product information in search results</li>
+                </ul>
+            </section>
+        </main>
+    </article>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slow Loading Page - Sharding Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .loading {
+            color: #999;
+            font-style: italic;
+        }
+        .loaded {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        .content {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #ecf0f1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Slow Loading Test Page</h1>
+        <p>This page simulates slow loading for lock contention tests.</p>
+
+        <div id="status" class="loading">Loading data...</div>
+        <div id="content" class="content"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Use AJAX fetch with delay parameter to simulate slow network request
+            // This keeps the network busy, ensuring Chrome's networkIdle event
+            // waits for the request to complete before capturing the page
+            fetch('/api/mock-data?delay=2500')
+                .then(response => response.json())
+                .then(data => {
+                    // Update page content after AJAX completes
+                    document.getElementById('status').textContent = 'Data loaded successfully!';
+                    document.getElementById('status').className = 'loaded';
+
+                    const contentDiv = document.getElementById('content');
+                    contentDiv.innerHTML = `
+                        <h2>${data.title || 'Dynamic Content'}</h2>
+                        <p>${data.message || 'This content was loaded asynchronously after a 2.5 second delay.'}</p>
+                        <p><strong>Timestamp:</strong> ${data.timestamp || new Date().toISOString()}</p>
+                        <p><strong>Request ID:</strong> ${data.request_id || 'N/A'}</p>
+                    `;
+                })
+                .catch(error => {
+                    console.error('Error loading data:', error);
+                    document.getElementById('status').textContent = 'Error loading data';
+                    document.getElementById('status').style.color = '#e74c3c';
+
+                    // Even on error, show some content so tests can verify page rendered
+                    const contentDiv = document.getElementById('content');
+                    contentDiv.innerHTML = `
+                        <p>Failed to load dynamic content, but page still rendered.</p>
+                        <p>Error: ${error.message}</p>
+                    `;
+                });
+        });
+    </script>
+</body>
+</html>

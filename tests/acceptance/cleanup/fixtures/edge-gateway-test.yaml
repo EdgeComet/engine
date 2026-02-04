@@ -1,0 +1,50 @@
+eg_id: "test-cleanup-eg"
+internal:
+  listen: "localhost:20071"
+  auth_key: "test-cleanup"
+
+cache_sharding:
+  enabled: false
+
+server:
+  listen: ":20070"
+  timeout: 30s
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 15
+
+storage:
+  base_path: "/tmp/edgecomet_cleanup_test"
+  cleanup:
+    enabled: true
+    interval: 5s
+    safety_margin: 5m
+
+render:
+  cache:
+    ttl: 5m
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 10m
+
+bypass:
+  timeout: 10s
+  user_agent: "TestCleanup"
+  cache:
+    enabled: false
+
+registry: {}
+
+log:
+  level: "debug"
+  console:
+    enabled: true
+    format: "console"
+
+metrics:
+  enabled: false
+
+hosts:
+  include: "hosts-cleanup-test.yaml"

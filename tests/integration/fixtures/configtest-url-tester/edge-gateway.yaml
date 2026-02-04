@@ -1,0 +1,88 @@
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":10070"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+storage:
+  base_path: "/tmp/cache/test-url-tester"
+
+render:
+  cache:
+    ttl: 1h
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 24h
+
+  events:
+    wait_for: "networkIdle"
+    additional_wait: 1s
+
+  dimensions:
+    desktop:
+      id: 1
+      width: 1920
+      height: 1080
+      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      match_ua:
+        - $GooglebotSearchDesktop
+        - $BingbotDesktop
+        - "*Slurp*"
+
+    mobile:
+      id: 2
+      width: 375
+      height: 812
+      render_ua: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36"
+      match_ua:
+        - $GooglebotSearchMobile
+        - $BingbotMobile
+
+    ai_bots:
+      id: 3
+      width: 1920
+      height: 1080
+      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      match_ua:
+        - $ChatGPTUserBot
+        - $PerplexityBot
+
+  blocked_resource_types:
+    - "Image"
+    - "Media"
+    - "Font"
+
+bypass:
+  timeout: 30s
+  user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+  cache:
+    enabled: true
+    ttl: 30m
+    status_codes: [200]
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "json"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":10079"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"

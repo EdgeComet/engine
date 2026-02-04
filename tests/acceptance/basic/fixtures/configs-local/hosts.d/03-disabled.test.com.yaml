@@ -1,0 +1,23 @@
+# Test Host Configuration - Disabled host for testing
+hosts:
+  - id: 3
+    domain: "disabled.test.com"
+    render_key: "disabled-test-key-11111"
+    enabled: false          # Disabled host for testing
+
+    render:
+      timeout: 10s
+
+      cache:
+        ttl: 5m
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+      events:
+        wait_for: "DOMContentLoaded"
+        additional_wait: 0s

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Analytics Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .blocked { background-color: #d4edda; color: #155724; }
+        .loaded { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Page with Real Google Analytics</h1>
+    <div id="main-content">Main content loaded successfully</div>
+    <div id="ga-status" class="status">Checking GA...</div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Try to load real Google Analytics script
+        // This should be blocked by the global blocklist (google-analytics.com)
+        var script = document.createElement('script');
+        script.src = 'https://www.google-analytics.com/analytics.js';
+
+        script.onload = function() {
+            // This should NOT execute if blocking works
+            var status = document.getElementById('ga-status');
+            status.textContent = 'GA Loaded';
+            status.className = 'status loaded';
+        };
+
+        script.onerror = function() {
+            // This should execute when request is blocked
+            var status = document.getElementById('ga-status');
+            status.textContent = 'GA Blocked';
+            status.className = 'status blocked';
+        };
+
+        document.head.appendChild(script);
+    });
+    </script>
+</body>
+</html>

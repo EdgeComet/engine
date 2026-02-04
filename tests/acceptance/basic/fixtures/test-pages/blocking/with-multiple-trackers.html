@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multiple Trackers Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .blocked { background-color: #d4edda; color: #155724; }
+        .loaded { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Page with Multiple Trackers</h1>
+    <div id="main-content">Main content loaded successfully</div>
+
+    <h2>Tracker Status:</h2>
+    <div id="custom-status" class="status">Custom tracker: checking...</div>
+    <div id="ga-status" class="status">GA: checking...</div>
+    <div id="gtm-status" class="status">GTM: checking...</div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Test 1: Custom tracking (should be blocked by */api/analytics/* pattern)
+        fetch('/api/analytics/collect')
+            .then(response => response.json())
+            .then(data => {
+                var status = document.getElementById('custom-status');
+                status.textContent = 'Custom: Loaded - ' + data.session_id;
+                status.className = 'status loaded';
+            })
+            .catch(error => {
+                var status = document.getElementById('custom-status');
+                status.textContent = 'Custom: Blocked';
+                status.className = 'status blocked';
+            });
+
+        // Test 2: Real Google Analytics (should be blocked by global blocklist)
+        var ga = document.createElement('script');
+        ga.src = 'https://www.google-analytics.com/analytics.js';
+        ga.onerror = function() {
+            var status = document.getElementById('ga-status');
+            status.textContent = 'GA: Blocked';
+            status.className = 'status blocked';
+        };
+        ga.onload = function() {
+            var status = document.getElementById('ga-status');
+            status.textContent = 'GA: Loaded';
+            status.className = 'status loaded';
+        };
+        document.head.appendChild(ga);
+
+        // Test 3: Real Google Tag Manager (should be blocked by global blocklist)
+        var gtm = document.createElement('script');
+        gtm.src = 'https://www.googletagmanager.com/gtm.js';
+        gtm.onerror = function() {
+            var status = document.getElementById('gtm-status');
+            status.textContent = 'GTM: Blocked';
+            status.className = 'status blocked';
+        };
+        gtm.onload = function() {
+            var status = document.getElementById('gtm-status');
+            status.textContent = 'GTM: Loaded';
+            status.className = 'status loaded';
+        };
+        document.head.appendChild(gtm);
+    });
+    </script>
+</body>
+</html>

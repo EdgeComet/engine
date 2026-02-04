@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPA Loading...</title>
+    <meta name="description" content="Loading...">
+    <meta name="robots" content="index, follow">
+</head>
+<body>
+    <div id="app">
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <p>Loading application...</p>
+        </div>
+    </div>
+
+    <!-- Initially empty script tags that will be populated -->
+    <script id="app-data" type="application/json">
+    </script>
+
+    <script>
+        // Simulate SPA initialization like React/Vue/Angular
+        document.addEventListener('DOMContentLoaded', () => {
+            // Simulate real-world SPA that fetches data from API before initializing
+            // This will cause network activity and properly trigger networkIdle event
+            fetch('/api/mock-data?delay=1500')
+                .then(response => {
+                    if (!response.ok) {
+                        // API might not exist in test environment, fallback gracefully
+                        console.warn('Mock API not available, initializing anyway');
+                        return { data: {} };
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Data loaded, now initialize SPA
+                    initializeSPA();
+                })
+                .catch(error => {
+                    console.error('Failed to load SPA data:', error);
+                    // Initialize anyway to prevent test hanging
+                    initializeSPA();
+                });
+        });
+
+        function initializeSPA() {
+            // 1. Update document metadata
+            document.title = 'Amazing Product - Best Deal Online';
+            document.querySelector('meta[name="description"]').content =
+                'Amazing product with great features. Get the best deal online with free shipping and warranty.';
+
+            // Add additional meta tags
+            const head = document.head;
+
+            // Open Graph tags
+            const ogTags = [
+                { property: 'og:title', content: 'Amazing Product - Best Deal Online' },
+                { property: 'og:description', content: 'Amazing product with great features. Get the best deal online.' },
+                { property: 'og:image', content: 'https://example.com/images/product-hero.jpg' },
+                { property: 'og:url', content: 'https://example.com/product/amazing-product' },
+                { property: 'og:type', content: 'product' }
+            ];
+
+            ogTags.forEach(tag => {
+                const metaTag = document.createElement('meta');
+                metaTag.setAttribute('property', tag.property);
+                metaTag.setAttribute('content', tag.content);
+                head.appendChild(metaTag);
+            });
+
+            // Twitter Cards
+            const twitterTags = [
+                { name: 'twitter:card', content: 'summary_large_image' },
+                { name: 'twitter:title', content: 'Amazing Product - Best Deal Online' },
+                { name: 'twitter:description', content: 'Amazing product with great features.' },
+                { name: 'twitter:image', content: 'https://example.com/images/product-twitter.jpg' }
+            ];
+
+            twitterTags.forEach(tag => {
+                const metaTag = document.createElement('meta');
+                metaTag.setAttribute('name', tag.name);
+                metaTag.setAttribute('content', tag.content);
+                head.appendChild(metaTag);
+            });
+
+            // 2. Add structured data
+            const structuredData = {
+                "@context": "https://schema.org",
+                "@type": "Product",
+                "name": "Amazing Product",
+                "description": "The most amazing product you'll ever find with incredible features",
+                "image": [
+                    "https://example.com/images/product-1.jpg",
+                    "https://example.com/images/product-2.jpg",
+                    "https://example.com/images/product-3.jpg"
+                ],
+                "brand": {
+                    "@type": "Brand",
+                    "name": "AmazingBrand"
+                },
+                "sku": "AP-001",
+                "mpn": "AP001-BLUE",
+                "offers": {
+                    "@type": "Offer",
+                    "url": "https://example.com/product/amazing-product",
+                    "priceCurrency": "USD",
+                    "price": "299.99",
+                    "priceValidUntil": "2024-12-31",
+                    "availability": "https://schema.org/InStock",
+                    "seller": {
+                        "@type": "Organization",
+                        "name": "Amazing Store"
+                    }
+                },
+                "aggregateRating": {
+                    "@type": "AggregateRating",
+                    "ratingValue": "4.8",
+                    "reviewCount": "347"
+                }
+            };
+
+            const script = document.createElement('script');
+            script.type = 'application/ld+json';
+            script.textContent = JSON.stringify(structuredData, null, 2);
+            head.appendChild(script);
+
+            // 3. Replace app content with full SPA
+            const app = document.getElementById('app');
+            app.innerHTML = `
+                <header class="product-header">
+                    <nav class="breadcrumb">
+                        <a href="/">Home</a> >
+                        <a href="/category/electronics">Electronics</a> >
+                        <span>Amazing Product</span>
+                    </nav>
+                </header>
+
+                <main class="product-main">
+                    <div class="product-gallery">
+                        <div class="main-image">
+                            <img src="https://example.com/images/product-hero.jpg"
+                                 alt="Amazing Product - Main View"
+                                 class="product-image">
+                        </div>
+                        <div class="thumbnail-gallery">
+                            <img src="https://example.com/images/product-thumb-1.jpg" alt="View 1" class="thumbnail">
+                            <img src="https://example.com/images/product-thumb-2.jpg" alt="View 2" class="thumbnail">
+                            <img src="https://example.com/images/product-thumb-3.jpg" alt="View 3" class="thumbnail">
+                        </div>
+                    </div>
+
+                    <div class="product-details">
+                        <h1 class="product-title">Amazing Product</h1>
+
+                        <div class="rating-section">
+                            <div class="stars" data-rating="4.8">★★★★★</div>
+                            <span class="rating-text">4.8 out of 5 stars</span>
+                            <span class="review-count">(347 reviews)</span>
+                        </div>
+
+                        <div class="price-section">
+                            <span class="current-price">$299.99</span>
+                            <span class="original-price">$399.99</span>
+                            <span class="discount">25% OFF</span>
+                        </div>
+
+                        <div class="product-description">
+                            <h3>Product Description</h3>
+                            <p>The most amazing product you'll ever find with incredible features that will change your life. This product combines cutting-edge technology with elegant design.</p>
+
+                            <ul class="features-list">
+                                <li>Premium materials and construction</li>
+                                <li>Advanced technology integration</li>
+                                <li>Elegant and modern design</li>
+                                <li>Easy to use interface</li>
+                                <li>2-year warranty included</li>
+                            </ul>
+                        </div>
+
+                        <div class="purchase-section">
+                            <div class="stock-status" data-stock="in-stock">
+                                <span class="status-icon">✓</span>
+                                <span class="status-text">In Stock - Ready to Ship</span>
+                            </div>
+
+                            <button class="add-to-cart-btn" data-product-id="AP-001">
+                                Add to Cart - $299.99
+                            </button>
+
+                            <div class="shipping-info">
+                                <p>🚚 Free shipping on orders over $199</p>
+                                <p>📦 Same-day shipping if ordered before 2 PM</p>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+
+                <section class="reviews-section">
+                    <h2>Customer Reviews</h2>
+                    <div class="review-summary">
+                        <div class="rating-breakdown">
+                            <div class="rating-bar">
+                                <span>5★</span>
+                                <div class="bar"><div class="fill" style="width: 75%"></div></div>
+                                <span>260</span>
+                            </div>
+                            <div class="rating-bar">
+                                <span>4★</span>
+                                <div class="bar"><div class="fill" style="width: 20%"></div></div>
+                                <span>70</span>
+                            </div>
+                            <div class="rating-bar">
+                                <span>3★</span>
+                                <div class="bar"><div class="fill" style="width: 3%"></div></div>
+                                <span>12</span>
+                            </div>
+                            <div class="rating-bar">
+                                <span>2★</span>
+                                <div class="bar"><div class="fill" style="width: 1%"></div></div>
+                                <span>3</span>
+                            </div>
+                            <div class="rating-bar">
+                                <span>1★</span>
+                                <div class="bar"><div class="fill" style="width: 1%"></div></div>
+                                <span>2</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="featured-reviews">
+                        <div class="review" data-review-id="1">
+                            <div class="reviewer">
+                                <strong>John D.</strong>
+                                <span class="verified">✓ Verified Purchase</span>
+                            </div>
+                            <div class="review-rating">★★★★★</div>
+                            <p class="review-text">"Absolutely amazing product! Exceeded all my expectations and the quality is outstanding."</p>
+                        </div>
+
+                        <div class="review" data-review-id="2">
+                            <div class="reviewer">
+                                <strong>Sarah M.</strong>
+                                <span class="verified">✓ Verified Purchase</span>
+                            </div>
+                            <div class="review-rating">★★★★★</div>
+                            <p class="review-text">"Great value for money. The features are exactly as described and shipping was super fast."</p>
+                        </div>
+                    </div>
+                </section>
+            `;
+
+            // 4. Update app data script
+            const appDataScript = document.getElementById('app-data');
+            appDataScript.textContent = JSON.stringify({
+                product: {
+                    id: 'AP-001',
+                    name: 'Amazing Product',
+                    price: 299.99,
+                    inStock: true,
+                    rating: 4.8,
+                    reviewCount: 347
+                },
+                loadedAt: new Date().toISOString(),
+                renderComplete: true
+            }, null, 2);
+
+            // 5. Mark as fully loaded
+            document.body.setAttribute('data-spa-loaded', 'true');
+            document.body.classList.add('spa-initialized');
+
+            // 6. Dispatch completion event
+            document.dispatchEvent(new CustomEvent('spaReady'));
+        }
+    </script>
+
+    <style>
+        .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 50vh;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007acc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* SPA Styles */
+        .product-main {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .product-image {
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+        }
+
+        .thumbnail-gallery {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .thumbnail {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 2px solid transparent;
+            cursor: pointer;
+        }
+
+        .product-title {
+            font-size: 2rem;
+            margin: 0 0 1rem 0;
+        }
+
+        .rating-section {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .stars {
+            color: #ffc107;
+        }
+
+        .price-section {
+            margin: 1rem 0;
+        }
+
+        .current-price {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #dc3545;
+        }
+
+        .original-price {
+            text-decoration: line-through;
+            color: #6c757d;
+            margin-left: 0.5rem;
+        }
+
+        .discount {
+            background: #dc3545;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            margin-left: 0.5rem;
+        }
+
+        .features-list {
+            padding-left: 1.5rem;
+        }
+
+        .add-to-cart-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin: 1rem 0;
+        }
+
+        .stock-status {
+            color: #28a745;
+            margin: 0.5rem 0;
+        }
+
+        .shipping-info p {
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .reviews-section {
+            margin-top: 3rem;
+            border-top: 1px solid #dee2e6;
+            padding-top: 2rem;
+        }
+
+        .rating-breakdown {
+            margin: 1rem 0;
+        }
+
+        .rating-bar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0.5rem 0;
+        }
+
+        .bar {
+            flex: 1;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .fill {
+            height: 100%;
+            background: #ffc107;
+        }
+
+        .review {
+            border: 1px solid #dee2e6;
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 6px;
+        }
+
+        .reviewer {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .verified {
+            color: #28a745;
+            font-size: 0.9rem;
+        }
+
+        .review-rating {
+            color: #ffc107;
+            margin-bottom: 0.5rem;
+        }
+
+        .breadcrumb {
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        .breadcrumb a {
+            color: #007acc;
+            text-decoration: none;
+        }
+    </style>
+</body>
+</html>

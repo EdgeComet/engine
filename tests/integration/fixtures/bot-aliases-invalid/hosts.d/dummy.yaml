@@ -1,0 +1,26 @@
+hosts:
+  - id: 1
+    domain: "invalid.example.com"
+    render_key: "test-key-invalid"
+    enabled: true
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "bypass"
+
+      cache:
+        ttl: 1h
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - $UnknownBotAlias
+            - $AnotherUnknownBot
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 500ms

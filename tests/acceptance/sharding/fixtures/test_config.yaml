@@ -1,0 +1,118 @@
+# EdgeComet Sharding Test Environment Configuration
+# 3 Edge Gateway instances + 1 Render Service
+
+# Test HTTP server (serves test pages/fixtures)
+test_server:
+  port: 9220
+  address: "localhost:9220"
+
+# Edge Gateway 1 test configuration
+edge_gateway1:
+  port: 9201
+  address: "localhost:9201"
+  internal:
+    listen: "127.0.0.1:9202"
+  eg_id: "eg1"
+  timeout: 120s
+
+  storage:
+    base_path: "./tests/temp/cache/eg1"
+
+  bypass:
+    enabled: true
+    timeout: 30s
+    user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+
+  registry:
+    selection_strategy: "least_loaded"
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Edge Gateway 2 test configuration
+edge_gateway2:
+  port: 9203
+  address: "localhost:9203"
+  internal:
+    listen: "127.0.0.1:9204"
+  eg_id: "eg2"
+  timeout: 120s
+
+  storage:
+    base_path: "./tests/temp/cache/eg2"
+
+  bypass:
+    enabled: true
+    timeout: 30s
+    user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+
+  registry:
+    selection_strategy: "least_loaded"
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Edge Gateway 3 test configuration
+edge_gateway3:
+  port: 9205
+  address: "localhost:9205"
+  internal:
+    listen: "127.0.0.1:9206"
+  eg_id: "eg3"
+  timeout: 120s
+
+  storage:
+    base_path: "./tests/temp/cache/eg3"
+
+  bypass:
+    enabled: true
+    timeout: 30s
+    user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+
+  registry:
+    selection_strategy: "least_loaded"
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Render Service test configuration
+render_service:
+  id: "rs-sharding-test-1"
+  port: 9210
+  address: "0.0.0.0:9210"
+
+  chrome:
+    pool_size: 10
+
+    warmup:
+      url: "https://example.com/"
+      timeout: 10s
+
+    restart:
+      after_count: 100
+      after_time: 30m
+
+    render:
+      max_timeout: 50s
+
+  log:
+    level: "debug"
+    format: "console"
+
+# Redis configuration (addr will be dynamically set by miniredis)
+redis:
+  addr: "localhost:0"
+  password: ""
+  db: 0
+
+# Test environment settings
+test:
+  valid_api_key: "sk_test_sharding_12345"
+  invalid_api_key: "invalid-key-99999"
+  host_id: 1
+  startup_timeout: 30s
+  health_check_timeout: 30s
+  http_client_timeout: 60s

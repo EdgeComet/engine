@@ -1,0 +1,10 @@
+hosts:
+  - id: 4
+    domain: "some-eshop.com"
+    render_key: "test-render-key-someeshop"
+    enabled: true
+
+    render:
+      timeout: 30s
+      cache:
+        ttl: 1h

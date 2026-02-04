@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stale Cache Test - Slow Render</title>
+    <meta name="description" content="Slow rendering page to trigger timeout">
+</head>
+<body>
+    <h1>Stale Cache Test - Slow Render</h1>
+    <div id="content">Loading (this will take a long time)...</div>
+    <div id="timestamp"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/mock-data?delay=20000')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('content').textContent = 'Slow content loaded: ' + data.message;
+                    document.getElementById('timestamp').textContent = 'Rendered at: ' + new Date().toISOString();
+                })
+                .catch(error => {
+                    document.getElementById('content').textContent = 'Error (timeout expected): ' + error;
+                });
+        });
+    </script>
+</body>
+</html>

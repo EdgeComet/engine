@@ -1,0 +1,65 @@
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-render-key-example"
+    enabled: true
+
+    bypass:
+      timeout: 20s
+      cache:
+        enabled: true
+        ttl: 1h
+        status_codes: [200, 404]
+
+    render:
+      timeout: 30s
+      unmatched_dimension: "desktop"
+
+      cache:
+        ttl: 1h
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua: ["*Googlebot*", "*bingbot*"]
+        mobile:
+          id: 2
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua: ["*Googlebot-Mobile*", "*iPhone*"]
+
+      events:
+        wait_for: "networkIdle"
+        additional_wait: 1s
+
+    url_rules:
+      - match: "/admin/*"
+        action: "status_403"
+        status:
+          reason: "Admin areas not available"
+
+      - match: "/account/*"
+        action: "bypass"
+
+      - match: "/"
+        action: "render"
+        render:
+          cache:
+            ttl: 15m
+
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2h
+
+      - match: "/static/*"
+        action: "bypass"
+        bypass:
+          cache:
+            ttl: 24h
+            status_codes: [200]

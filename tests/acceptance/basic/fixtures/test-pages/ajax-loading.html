@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AJAX Loading Test Page</title>
+    <meta name="description" content="Test page for HAR chronological sorting">
+</head>
+<body>
+    <h1>AJAX Loading Test Page</h1>
+    <div id="content">Loading...</div>
+    <div id="results"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var results = document.getElementById('results');
+            var content = document.getElementById('content');
+
+            // Multiple sequential AJAX requests with different delays
+            // to test HAR entry chronological sorting
+
+            fetch('/api/mock-data?delay=50')
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    var item1 = document.createElement('div');
+                    item1.id = 'item1';
+                    item1.textContent = 'First request completed';
+                    results.appendChild(item1);
+
+                    // Second request after first completes
+                    return fetch('/api/mock-data?delay=100');
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    var item2 = document.createElement('div');
+                    item2.id = 'item2';
+                    item2.textContent = 'Second request completed';
+                    results.appendChild(item2);
+
+                    // Third request after second completes
+                    return fetch('/api/mock-data?delay=50');
+                })
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    var item3 = document.createElement('div');
+                    item3.id = 'item3';
+                    item3.textContent = 'Third request completed';
+                    results.appendChild(item3);
+
+                    content.textContent = 'All requests completed';
+                });
+        });
+    </script>
+</body>
+</html>

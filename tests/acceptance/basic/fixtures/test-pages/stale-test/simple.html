@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stale Cache Test - Simple</title>
+    <meta name="description" content="Simple page for stale cache testing">
+</head>
+<body>
+    <h1>Stale Cache Test - Simple Page</h1>
+    <p>This is a simple static page for testing stale cache behavior.</p>
+    <div id="timestamp"></div>
+
+    <script>
+        document.getElementById('timestamp').textContent = 'Rendered at: ' + new Date().toISOString();
+    </script>
+</body>
+</html>
