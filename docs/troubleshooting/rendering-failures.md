@@ -148,7 +148,7 @@ The HAR file is compatible with standard viewers such as the Chrome DevTools Net
 - **lifecycleEvents**: Browser events with timestamps (DOMContentLoaded, networkIdle, etc.)
 - **renderConfig**: The exact render configuration applied to the request
 
-<img src="../images/har-metadata.png" alt="HAR metadata in viewer" style="width: 50%;" />
+<img src="/images/har-metadata.png" alt="HAR metadata in viewer" style="width: 50%;" />
 
 ## Step 7: Manual debug
 
