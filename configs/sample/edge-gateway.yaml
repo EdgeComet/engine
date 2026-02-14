@@ -10,6 +10,10 @@ redis:
   password: ""
   db: 0
 
+internal:
+  listen: ":10071"
+  auth_key: "change-me-to-a-secure-key-32chars"
+
 storage:
   base_path: "cache/"
   compression: snappy

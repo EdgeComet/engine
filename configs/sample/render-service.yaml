@@ -13,6 +13,10 @@ redis:
 chrome:
   pool_size: 10
 
+  warmup:
+    url: "https://example.com/"
+    timeout: 10s
+
   render:
     max_timeout: 50s
 
