@@ -629,6 +629,39 @@ func (d Duration) MarshalYAML() (interface{}, error) {
 	return time.Duration(d).String(), nil
 }
 
+// UnmarshalJSON implements json.Unmarshaler for Duration.
+// Accepts both numbers (nanoseconds, backward-compatible) and strings ("15s", "24h", "30d", "2w").
+func (d *Duration) UnmarshalJSON(data []byte) error {
+	var ns int64
+	if err := json.Unmarshal(data, &ns); err == nil {
+		*d = Duration(ns)
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("duration must be a string or number, got %s", string(data))
+	}
+
+	dur, err := time.ParseDuration(s)
+	if err == nil {
+		*d = Duration(dur)
+		return nil
+	}
+
+	dur, err = parseExtendedDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	*d = Duration(dur)
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for Duration.
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
 // ToDuration converts types.Duration to time.Duration
 func (d Duration) ToDuration() time.Duration {
 	return time.Duration(d)

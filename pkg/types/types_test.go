@@ -1032,6 +1032,144 @@ func TestHost_MarshalUnmarshalRoundTrip(t *testing.T) {
 	}
 }
 
+// TestDuration_UnmarshalJSON tests JSON unmarshaling for Duration type
+func TestDuration_UnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected time.Duration
+		wantErr  bool
+	}{
+		// String inputs
+		{
+			name:     "seconds string",
+			json:     `{"duration":"15s"}`,
+			expected: 15 * time.Second,
+		},
+		{
+			name:     "hours string",
+			json:     `{"duration":"24h"}`,
+			expected: 24 * time.Hour,
+		},
+		{
+			name:     "days string",
+			json:     `{"duration":"30d"}`,
+			expected: 30 * 24 * time.Hour,
+		},
+		{
+			name:     "weeks string",
+			json:     `{"duration":"2w"}`,
+			expected: 2 * 7 * 24 * time.Hour,
+		},
+		{
+			name:     "zero string",
+			json:     `{"duration":"0s"}`,
+			expected: 0,
+		},
+		{
+			name:     "combined string",
+			json:     `{"duration":"1h30m"}`,
+			expected: 1*time.Hour + 30*time.Minute,
+		},
+		// Number inputs (nanoseconds)
+		{
+			name:     "nanoseconds number",
+			json:     `{"duration":30000000000}`,
+			expected: 30 * time.Second,
+		},
+		{
+			name:     "zero number",
+			json:     `{"duration":0}`,
+			expected: 0,
+		},
+		// Invalid inputs
+		{
+			name:    "boolean",
+			json:    `{"duration":true}`,
+			wantErr: true,
+		},
+		{
+			name:    "array",
+			json:    `{"duration":[]}`,
+			wantErr: true,
+		},
+		{
+			name:    "invalid string",
+			json:    `{"duration":"invalid"}`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config struct {
+				Duration Duration `json:"duration"`
+			}
+
+			err := json.Unmarshal([]byte(tt.json), &config)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, time.Duration(config.Duration))
+			}
+		})
+	}
+}
+
+// TestDuration_MarshalJSON tests JSON marshaling for Duration type
+func TestDuration_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration Duration
+		expected string
+	}{
+		{
+			name:     "seconds",
+			duration: Duration(30 * time.Second),
+			expected: `"30s"`,
+		},
+		{
+			name:     "hours",
+			duration: Duration(24 * time.Hour),
+			expected: `"24h0m0s"`,
+		},
+		{
+			name:     "zero",
+			duration: Duration(0),
+			expected: `"0s"`,
+		},
+		{
+			name:     "milliseconds",
+			duration: Duration(500 * time.Millisecond),
+			expected: `"500ms"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.duration)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, string(data))
+		})
+	}
+}
+
+// TestDuration_JSON_RoundTrip tests JSON marshal then unmarshal consistency
+func TestDuration_JSON_RoundTrip(t *testing.T) {
+	original := Duration(45 * time.Second)
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var restored Duration
+	err = json.Unmarshal(data, &restored)
+	require.NoError(t, err)
+
+	assert.Equal(t, original, restored)
+}
+
 // TestHost_UnmarshalJSON tests JSON unmarshaling for Host struct
 func TestHost_UnmarshalJSON(t *testing.T) {
 	tests := []struct {
