@@ -101,6 +101,11 @@ func (c *CacheDaemonConfig) Validate() error {
 		return fmt.Errorf("recache.rs_capacity_reserved must be between 0.0 and 1.0, got %f", c.Recache.RSCapacityReserved)
 	}
 
+	// Validate timeout_per_url > 0
+	if time.Duration(c.Recache.TimeoutPerURL) <= 0 {
+		return fmt.Errorf("recache.timeout_per_url must be > 0")
+	}
+
 	// Validate HTTP API configuration
 	var httpApiPort int
 	if c.HTTPApi.Enabled {
@@ -115,6 +120,10 @@ func (c *CacheDaemonConfig) Validate() error {
 			return fmt.Errorf("http_api.listen port must be between 1 and 65535, got %d", port)
 		}
 		httpApiPort = port
+
+		if time.Duration(c.HTTPApi.RequestTimeout) <= 0 {
+			return fmt.Errorf("http_api.request_timeout must be > 0 when http_api is enabled")
+		}
 	}
 
 	// Validate metrics configuration

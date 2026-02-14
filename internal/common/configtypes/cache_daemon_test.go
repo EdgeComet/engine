@@ -222,6 +222,60 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 			errMsg:  "rs_capacity_reserved must be between 0.0 and 1.0",
 		},
 		{
+			name: "timeout_per_url = 0 should fail",
+			config: &CacheDaemonConfig{
+				EgConfig: "/path/to/edge-gateway.yaml",
+				DaemonID: "daemon-1",
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+					DB:   0,
+				},
+				Scheduler: CacheDaemonScheduler{
+					TickInterval:        types.Duration(1 * time.Second),
+					NormalCheckInterval: types.Duration(60 * time.Second),
+				},
+				InternalQueue: CacheDaemonInternalQueue{
+					MaxSize:    1000,
+					MaxRetries: 3,
+				},
+				Recache: CacheDaemonRecache{
+					RSCapacityReserved: 0.30,
+					TimeoutPerURL:      0,
+				},
+			},
+			wantErr: true,
+			errMsg:  "recache.timeout_per_url must be > 0",
+		},
+		{
+			name: "request_timeout = 0 when http_api enabled should fail",
+			config: &CacheDaemonConfig{
+				EgConfig: "/path/to/edge-gateway.yaml",
+				DaemonID: "daemon-1",
+				Redis: RedisConfig{
+					Addr: "localhost:6379",
+					DB:   0,
+				},
+				Scheduler: CacheDaemonScheduler{
+					TickInterval:        types.Duration(1 * time.Second),
+					NormalCheckInterval: types.Duration(60 * time.Second),
+				},
+				InternalQueue: CacheDaemonInternalQueue{
+					MaxSize:    1000,
+					MaxRetries: 3,
+				},
+				Recache: CacheDaemonRecache{
+					RSCapacityReserved: 0.30,
+					TimeoutPerURL:      types.Duration(60 * time.Second),
+				},
+				HTTPApi: CacheDaemonHTTPApi{
+					Enabled: true,
+					Listen:  ":10090",
+				},
+			},
+			wantErr: true,
+			errMsg:  "http_api.request_timeout must be > 0 when http_api is enabled",
+		},
+		{
 			name: "invalid port (too low) should fail",
 			config: &CacheDaemonConfig{
 				EgConfig: "/path/to/edge-gateway.yaml",
@@ -240,6 +294,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 				},
 				Recache: CacheDaemonRecache{
 					RSCapacityReserved: 0.30,
+					TimeoutPerURL:      types.Duration(60 * time.Second),
 				},
 				HTTPApi: CacheDaemonHTTPApi{
 					Enabled: true,
@@ -268,6 +323,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 				},
 				Recache: CacheDaemonRecache{
 					RSCapacityReserved: 0.30,
+					TimeoutPerURL:      types.Duration(60 * time.Second),
 				},
 				HTTPApi: CacheDaemonHTTPApi{
 					Enabled: true,
