@@ -2,6 +2,8 @@
 
 .PHONY: help setup unit unit-verbose basic basic-watch basic-single clean install-deps basic-verbose basic-ci sharding sharding-verbose sharding-ci recache recache-verbose recache-ci cleanup cleanup-verbose cleanup-ci test
 
+GINKGO = go run github.com/onsi/ginkgo/v2/ginkgo
+
 # Default target
 help:
 	@echo "EdgeComet Acceptance Tests"
@@ -42,7 +44,6 @@ help:
 # Install test dependencies
 install-deps:
 	@echo "Installing test dependencies..."
-	go install github.com/onsi/ginkgo/v2/ginkgo@latest
 	go mod tidy
 	@echo "Dependencies installed successfully"
 
@@ -83,7 +84,7 @@ unit-verbose:
 # Run basic acceptance tests (local mode with miniredis)
 basic: setup
 	@echo "Running EdgeComet basic acceptance tests (local mode)..."
-	cd acceptance/basic && TEST_MODE=local ginkgo run \
+	cd acceptance/basic && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -101,7 +102,7 @@ test: basic
 # Run basic tests with verbose output
 basic-verbose: setup
 	@echo "Running basic acceptance tests with verbose output (local mode)..."
-	cd acceptance/basic && TEST_MODE=local ginkgo run \
+	cd acceptance/basic && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -118,7 +119,7 @@ basic-verbose: setup
 basic-watch: setup
 	@echo "Running basic tests in watch mode (local mode)..."
 	@echo "Press Ctrl+C to stop watching"
-	cd acceptance/basic && TEST_MODE=local ginkgo watch \
+	cd acceptance/basic && TEST_MODE=local $(GINKGO) watch \
 		--timeout=5m \
 		--race \
 		$(if $(FOCUS),--focus="$(FOCUS)") \
@@ -133,7 +134,7 @@ basic-single: setup
 		exit 1; \
 	fi
 	@echo "Running single test file: $(FILE)"
-	cd acceptance/basic && TEST_MODE=local ginkgo run \
+	cd acceptance/basic && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--json-report=../../reports/results.json \
@@ -148,7 +149,7 @@ basic-ci:
 	@echo "Running basic tests for CI/CD (local mode)..."
 	@mkdir -p reports
 	# Run tests - services start automatically via BeforeSuite
-	cd acceptance/basic && TEST_MODE=local ginkgo run \
+	cd acceptance/basic && TEST_MODE=local $(GINKGO) run \
 		--timeout=10m \
 		--race \
 		--randomize-suites \
@@ -193,7 +194,7 @@ validate:
 # Run sharding acceptance tests (local mode with miniredis)
 sharding: setup
 	@echo "Running EdgeComet sharding acceptance tests (local mode)..."
-	cd acceptance/sharding && TEST_MODE=local ginkgo run \
+	cd acceptance/sharding && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -208,7 +209,7 @@ sharding: setup
 # Run sharding tests with verbose output
 sharding-verbose: setup
 	@echo "Running sharding acceptance tests with verbose output (local mode)..."
-	cd acceptance/sharding && TEST_MODE=local ginkgo run \
+	cd acceptance/sharding && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -225,7 +226,7 @@ sharding-verbose: setup
 sharding-ci:
 	@echo "Running sharding tests for CI/CD (local mode)..."
 	@mkdir -p reports
-	cd acceptance/sharding && TEST_MODE=local ginkgo run \
+	cd acceptance/sharding && TEST_MODE=local $(GINKGO) run \
 		--timeout=10m \
 		--race \
 		--randomize-suites \
@@ -245,7 +246,7 @@ sharding-ci:
 # Run recache acceptance tests (local mode with miniredis)
 recache: setup
 	@echo "Running EdgeComet recache acceptance tests (local mode)..."
-	cd acceptance/recache && TEST_MODE=local ginkgo run \
+	cd acceptance/recache && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -260,7 +261,7 @@ recache: setup
 # Run recache tests with verbose output
 recache-verbose: setup
 	@echo "Running recache acceptance tests with verbose output (local mode)..."
-	cd acceptance/recache && TEST_MODE=local ginkgo run \
+	cd acceptance/recache && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -277,7 +278,7 @@ recache-verbose: setup
 recache-ci:
 	@echo "Running recache tests for CI/CD (local mode)..."
 	@mkdir -p reports
-	cd acceptance/recache && TEST_MODE=local ginkgo run \
+	cd acceptance/recache && TEST_MODE=local $(GINKGO) run \
 		--timeout=10m \
 		--race \
 		--randomize-suites \
@@ -297,7 +298,7 @@ recache-ci:
 # Run filesystem cleanup acceptance tests (local mode with miniredis)
 cleanup: setup
 	@echo "Running EdgeComet filesystem cleanup acceptance tests (local mode)..."
-	cd acceptance/cleanup && TEST_MODE=local ginkgo run \
+	cd acceptance/cleanup && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -312,7 +313,7 @@ cleanup: setup
 # Run cleanup tests with verbose output
 cleanup-verbose: setup
 	@echo "Running cleanup acceptance tests with verbose output (local mode)..."
-	cd acceptance/cleanup && TEST_MODE=local ginkgo run \
+	cd acceptance/cleanup && TEST_MODE=local $(GINKGO) run \
 		--timeout=5m \
 		--race \
 		--randomize-suites \
@@ -329,7 +330,7 @@ cleanup-verbose: setup
 cleanup-ci:
 	@echo "Running cleanup tests for CI/CD (local mode)..."
 	@mkdir -p reports
-	cd acceptance/cleanup && TEST_MODE=local ginkgo run \
+	cd acceptance/cleanup && TEST_MODE=local $(GINKGO) run \
 		--timeout=10m \
 		--race \
 		--randomize-suites \
