@@ -93,16 +93,18 @@ chrome:
   restart:
     # Restart Chrome instance after this many renders
     # Prevents memory accumulation from DOM operations
-    # Required, must be positive
+    # Optional, must be positive if set
+    # Default: 100
     # Recommendation: 50-200 depending on page complexity
     after_count: 100
 
     # Restart Chrome instance after this runtime duration
     # Ensures fresh state even for low-traffic instances
     # Format: Go duration string (s, m, h)
-    # Required, must be positive
+    # Optional, must be positive if set
+    # Default: 60m
     # Recommendation: 15m-1h
-    after_time: 30m
+    after_time: 60m
 
   # -------------------------------------------------------------------------
   # RENDER CONFIGURATION

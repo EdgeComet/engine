@@ -35,16 +35,15 @@ func NewConfigFromYAML(poolSize string, warmupURL string, warmupTimeout time.Dur
 	}
 }
 
-// DefaultConfig returns a configuration with sensible defaults
-// Kept for backwards compatibility with tests
+// DefaultConfig is used in tests to avoid constructing full Config structs
 func DefaultConfig() *Config {
 	return &Config{
 		PoolSize:          "auto",
 		WarmupURL:         "https://example.com/",
 		WarmupTimeout:     10 * time.Second,
 		ShutdownTimeout:   30 * time.Second,
-		RestartAfterCount: 50,
-		RestartAfterTime:  30 * time.Minute,
+		RestartAfterCount: 100,
+		RestartAfterTime:  60 * time.Minute,
 	}
 }
 

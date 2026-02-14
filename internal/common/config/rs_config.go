@@ -51,9 +51,14 @@ type RestartConfig struct {
 	AfterTime  types.Duration `yaml:"after_time"`
 }
 
-// SafetyMargin is the buffer added to max_timeout for server timeout calculation
-// This ensures FastHTTP doesn't kill connections before render completes
-const SafetyMargin = 10 * time.Second
+const (
+	// SafetyMargin is the buffer added to max_timeout for server timeout calculation
+	// This ensures FastHTTP doesn't kill connections before render completes
+	SafetyMargin = 10 * time.Second
+
+	defaultRestartAfterCount = 100
+	defaultRestartAfterTime  = 60 * time.Minute
+)
 
 // RSRenderConfig represents rendering timeout configuration for Render Service
 type RSRenderConfig struct {
@@ -112,14 +117,14 @@ func (cm *RSConfigManager) LoadConfig() error {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
+	cm.config = &cfg
+
+	// Apply defaults before validation
+	cm.applyDefaults()
+
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid config: %w", err)
 	}
-
-	cm.config = &cfg
-
-	// Apply defaults to configuration
-	cm.applyDefaults()
 
 	return nil
 }
@@ -131,19 +136,33 @@ func (cm *RSConfigManager) GetConfig() *RSConfig {
 
 // applyDefaults applies default values to configuration
 func (cm *RSConfigManager) applyDefaults() {
+	cm.config.applyDefaults()
+}
+
+// applyDefaults applies default values to configuration fields
+func (cfg *RSConfig) applyDefaults() {
 	// Apply log configuration defaults
 	// If both outputs are disabled (zero values), enable console by default
-	if !cm.config.Log.Console.Enabled && !cm.config.Log.File.Enabled {
-		cm.config.Log.Console.Enabled = true
+	if !cfg.Log.Console.Enabled && !cfg.Log.File.Enabled {
+		cfg.Log.Console.Enabled = true
 	}
 
 	// Set format defaults if not specified
-	if cm.config.Log.Console.Format == "" {
-		cm.config.Log.Console.Format = configtypes.LogFormatConsole
+	if cfg.Log.Console.Format == "" {
+		cfg.Log.Console.Format = configtypes.LogFormatConsole
 	}
 
-	if cm.config.Log.File.Format == "" {
-		cm.config.Log.File.Format = configtypes.LogFormatText
+	if cfg.Log.File.Format == "" {
+		cfg.Log.File.Format = configtypes.LogFormatText
+	}
+
+	// Chrome restart defaults
+	if cfg.Chrome.Restart.AfterCount == 0 {
+		cfg.Chrome.Restart.AfterCount = defaultRestartAfterCount
+	}
+
+	if cfg.Chrome.Restart.AfterTime == 0 {
+		cfg.Chrome.Restart.AfterTime = types.Duration(defaultRestartAfterTime)
 	}
 }
 
@@ -285,6 +304,8 @@ func LoadRSConfig(configPath string) (*RSConfig, error) {
 	if err := yamlutil.UnmarshalStrict(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
+
+	cfg.applyDefaults()
 
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)

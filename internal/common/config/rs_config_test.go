@@ -354,6 +354,50 @@ metrics:
 	assert.Equal(t, "auto", cfg.Chrome.PoolSize)
 }
 
+func TestRSConfigRestartDefaults(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "render-service.yaml")
+
+	configYAML := `
+server:
+  id: "rs-defaults"
+  listen: ":8080"
+
+redis:
+  addr: "localhost:6379"
+  password: ""
+  db: 0
+
+chrome:
+  pool_size: "auto"
+  warmup:
+    url: "https://example.com/"
+    timeout: 10s
+
+  render:
+    max_timeout: 50s
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "json"
+
+metrics:
+  enabled: true
+  listen: ":9090"
+`
+
+	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0644))
+
+	cfg, err := LoadRSConfig(configPath)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	assert.Equal(t, 100, cfg.Chrome.Restart.AfterCount)
+	assert.Equal(t, types.Duration(60*time.Minute), cfg.Chrome.Restart.AfterTime)
+}
+
 func TestGetConfigPath(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "test_config.yaml")
