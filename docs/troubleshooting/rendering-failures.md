@@ -158,7 +158,7 @@ If the previous steps did not resolve the issue, debug the render process locall
 2. Build and run the render service:
    ```bash
    go build -o bin/render-service ./cmd/render-service
-   ./bin/render-service -c configs/example/render-service.yaml
+   ./bin/render-service -c configs/sample/render-service.yaml
    ```
 3. Send a render request:
    ```bash

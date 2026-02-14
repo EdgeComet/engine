@@ -89,8 +89,8 @@ sudo chmod +x /opt/edgecomet/bin/*
 ## Copy configurations
 
 ```bash
-sudo cp configs/example/*.yaml /opt/edgecomet/configs/
-sudo cp configs/example/hosts.d/*.yaml /opt/edgecomet/configs/hosts.d/
+sudo cp configs/sample/*.yaml /opt/edgecomet/configs/
+sudo cp configs/sample/hosts.d/*.yaml /opt/edgecomet/configs/hosts.d/
 ```
 
 ## Set permissions
