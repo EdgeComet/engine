@@ -32,119 +32,45 @@ This approach allows bots to see your content, metadata, and structured data as 
 - Chrome or Chromium browser (headless mode)
 - Redis 6.0 or higher
 
-### Installation
-
-Clone the repository and build the binaries:
+### Build
 
 ```bash
 git clone https://github.com/EdgeComet/edgecomet
 cd edgecomet
 
-# Build all services
 go build -o bin/edge-gateway ./cmd/edge-gateway
 go build -o bin/render-service ./cmd/render-service
 go build -o bin/cache-daemon ./cmd/cache-daemon
 ```
 
-### Basic configuration
+### Run
 
-Use the example configurations as starting points:
+Copy the sample configurations and edit them for your domain:
 
 ```bash
-# Copy example configs
 cp configs/sample/edge-gateway.yaml configs/my_edge-gateway.yaml
 cp configs/sample/render-service.yaml configs/my_render-service.yaml
 ```
 
-Minimal Edge Gateway configuration:
-
-```yaml
-server:
-  listen: ":10070"
-  timeout: 120s
-
-redis:
-  addr: "localhost:6379"
-
-storage:
-  base_path: "/var/cache/edgecomet"
-
-render:
-  dimensions:
-    mobile:
-      id: 1
-      width: 375
-      height: 812
-      render_ua: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36"
-      match_ua:
-        - $SearchBots
-        - $AIBots
-
-bypass:
-  user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
-
-hosts:
-  include: "hosts.d/"
-```
-
-Create a host configuration in `configs/hosts.d/`:
-
-```yaml
-# configs/hosts.d/example.com.yaml
-hosts:
-  - id: 1
-    domain: "example.com"
-    render_key: "your-secret-render-key-here"
-    enabled: true
-
-    render:
-      timeout: 30s
-      cache:
-        ttl: 24h
-      events:
-        wait_for: "networkIdle"
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (compatible; Googlebot/2.1)"
-          match_ua:
-            - "*Googlebot*"
-            - "*Bingbot*"
-```
-
-### Running the services
-
-Start the Render Service (registers in Redis):
+Start the services:
 
 ```bash
 ./bin/render-service -c configs/my_render-service.yaml
-```
-
-Start the Edge Gateway:
-
-```bash
 ./bin/edge-gateway -c configs/my_edge-gateway.yaml
 ```
 
-### Test your setup
-
-Send a request to the render endpoint:
+### Test
 
 ```bash
-curl -H "X-Render-Key: your-secret-render-key-here" \
+curl -H "X-Render-Key: your-render-key" \
      -H "User-Agent: Mozilla/5.0 (compatible; Googlebot/2.1)" \
      "http://localhost:10070/render?url=https://example.com/your-page"
 ```
 
-Check the response headers to verify rendering:
-
 - `X-Render-Source: rendered` - Freshly rendered by Chrome
 - `X-Render-Source: cache` - Served from cache
-- `X-Request-ID` - Request tracing identifier
 
-For detailed configuration options, see the [configuration documentation](#documentation).
+For a step-by-step walkthrough, see the [Quick Start guide](https://edgecomet.com/docs/quick-start.html).
 
 ## Architecture
 
@@ -194,41 +120,13 @@ The distributed architecture tolerates instance failures gracefully. If an Edge 
 
 ## Configuration
 
-EdgeComet uses a three-level configuration hierarchy that merges at request time:
+EdgeComet uses a three-level configuration hierarchy: global settings in `edge-gateway.yaml`, per-domain settings in `hosts.d/`, and per-route URL rules within each host. Settings merge at request time, with more specific levels overriding broader ones.
 
-1. **Global**: Base settings in `edge-gateway.yaml`
-2. **Host**: Per-domain settings in `hosts.d/`
-3. **URL Pattern**: Per-route rules within host configuration
-
-### URL pattern matching
-
-You can use three types of patterns:
-
-- **Exact**: `/api/users` matches only that exact path
-- **Wildcard**: `/blog/*` matches all paths under `/blog` recursively
-- **Regexp**: `~/api/v[0-9]+/.*` for pattern-based matching
-
-Query parameter matching is supported with the `match_query` field:
-
-```yaml
-- match: "/search"
-  match_query:
-    q: "*"              # Must have non-empty q parameter
-    category: ["tech", "science"]  # Must match one of these values
-  action: "render"
-```
-
-Rules are automatically sorted by specificity at startup, ensuring predictable matching behavior.
-
-### Configuration validation
-
-Test your configuration before deployment:
-
-```bash
-./bin/edge-gateway -c config.yaml -t https://example.com/test-page
-```
+Sample configurations are in `configs/sample/`. For full details, see the [Edge Gateway configuration](https://edgecomet.com/docs/edge-gateway/configuration.html) reference.
 
 ## Testing
+
+The codebase carries 62k lines of tests against 26k lines of source (~2.4x ratio). Unit tests cover individual packages, acceptance tests spin up full service stacks with embedded Redis and real Chrome instances to verify rendering, caching, sharding, and invalidation end-to-end.
 
 All test commands run from the `tests/` directory:
 
@@ -269,10 +167,10 @@ go run main.go \
 
 ## Documentation
 
-- [Edge Gateway overview](https://edgecomet.com/docs/edge-gateway/overview) - Request flow and architecture
-- [Edge Gateway configuration](https://edgecomet.com/docs/edge-gateway/configuration) - Complete configuration reference
-- [Render Service configuration](https://edgecomet.com/docs/render-service/configuration) - Chrome pool and rendering settings
-- [Cache Daemon configuration](https://edgecomet.com/docs/cache-daemon/config-reference) - Automatic recaching configuration
+- [Edge Gateway overview](https://edgecomet.com/docs/edge-gateway/overview.html) - Request flow and architecture
+- [Edge Gateway configuration](https://edgecomet.com/docs/edge-gateway/configuration.html) - Complete configuration reference
+- [Render Service configuration](https://edgecomet.com/docs/render-service/configuration.html) - Chrome pool and rendering settings
+- [Cache Daemon configuration](https://edgecomet.com/docs/cache-daemon/config-reference.html) - Automatic recaching configuration
 
 ## Monitoring
 
