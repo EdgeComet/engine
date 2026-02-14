@@ -11,7 +11,10 @@ export default withMermaid(defineConfig({
         ['link', {rel: 'icon', type: 'image/png', href: '/docs/images/favicon.png'}]
     ],
     themeConfig: {
-        logo: '/images/logo.png',
+        logo: {
+            light: '/images/logo_black_150x30.png',
+            dark: '/images/logo_white_150x30.png',
+        },
         siteTitle: false,
         // https://vitepress.dev/reference/default-theme-config
         nav: [
@@ -24,7 +27,7 @@ export default withMermaid(defineConfig({
             {
                 text: 'Overview',
                 items: [
-                    {text: 'Introduction', link: '/index'},
+                    {text: 'Introduction', link: '/'},
                     {text: 'Use Cases', link: '/use-cases'},
                 ]
             },
