@@ -1,5 +1,6 @@
 import {defineConfig} from 'vitepress'
 import {withMermaid} from 'vitepress-plugin-mermaid'
+import vclGrammar from './vcl.tmLanguage.json'
 
 // https://vitepress.dev/reference/site-config
 // @ts-ignore
@@ -7,6 +8,9 @@ export default withMermaid(defineConfig({
     base: '/docs/',
     title: "EdgeComet",
     description: "A powerful JS rendering & cache system",
+    markdown: {
+        languages: [vclGrammar as any]
+    },
     head: [
         ['link', {rel: 'icon', type: 'image/png', href: '/docs/images/favicon.png'}]
     ],
@@ -45,7 +49,8 @@ export default withMermaid(defineConfig({
                 collapsed: false,
                 items: [
                     {text: 'Nginx', link: '/integrations/nginx'},
-                    {text: 'Cloudflare Worker', link: '/integrations/cloudflare-worker'}
+                    {text: 'Cloudflare Worker', link: '/integrations/cloudflare-worker'},
+                    {text: 'Fastly CDN', link: '/integrations/fastly'}
                 ]
             },
             {
