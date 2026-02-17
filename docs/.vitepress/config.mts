@@ -50,7 +50,8 @@ export default withMermaid(defineConfig({
                 items: [
                     {text: 'Nginx', link: '/integrations/nginx'},
                     {text: 'Cloudflare Worker', link: '/integrations/cloudflare-worker'},
-                    {text: 'Fastly CDN', link: '/integrations/fastly'}
+                    {text: 'Fastly CDN', link: '/integrations/fastly'},
+                    {text: 'AWS CloudFront', link: '/integrations/cloudfront'}
                 ]
             },
             {
