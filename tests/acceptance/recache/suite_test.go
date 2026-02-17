@@ -281,6 +281,9 @@ storage:
 render:
   cache:
     ttl: 1h
+    expired:
+      strategy: serve_stale
+      stale_ttl: 60s
 
 bypass:
   timeout: 20s

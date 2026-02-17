@@ -37,6 +37,10 @@ type CacheDaemon struct {
 	lastTickMu      sync.RWMutex
 	lastTickTime    time.Time
 
+	// Readers
+	cacheReader *CacheReader
+	queueReader *QueueReader
+
 	// Metrics
 	metricsCollector *metrics.MetricsCollector
 	metricsServer    *fasthttp.Server
@@ -142,6 +146,8 @@ func NewCacheDaemon(
 		startTime:        time.Now().UTC(),
 		metricsCollector: metricsCollector,
 		metricsServer:    metricsServer,
+		cacheReader:      NewCacheReader(redisClient, keyGenerator, logger),
+		queueReader:      NewQueueReader(redisClient, keyGenerator, internalQueue, logger),
 	}
 
 	return daemon, nil
@@ -268,4 +274,16 @@ func (d *CacheDaemon) IsSchedulerPaused() bool {
 	d.schedulerPauseMu.RLock()
 	defer d.schedulerPauseMu.RUnlock()
 	return d.schedulerPaused
+}
+
+// getStaleTTL resolves the stale TTL in seconds from host config -> global config -> 0
+func (d *CacheDaemon) getStaleTTL(host *types.Host) int64 {
+	if host.Render.Cache != nil && host.Render.Cache.Expired != nil && host.Render.Cache.Expired.StaleTTL != nil {
+		return int64(host.Render.Cache.Expired.StaleTTL.ToDuration().Seconds())
+	}
+	egConfig := d.configManager.GetConfig()
+	if egConfig.Render.Cache.Expired != nil && egConfig.Render.Cache.Expired.StaleTTL != nil {
+		return int64(egConfig.Render.Cache.Expired.StaleTTL.ToDuration().Seconds())
+	}
+	return 0
 }

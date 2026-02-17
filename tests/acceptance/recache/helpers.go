@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
+	. "github.com/onsi/gomega"
 
 	"github.com/edgecomet/engine/pkg/types"
 )
@@ -102,4 +106,35 @@ func parseRecacheMember(memberStr string) (*types.RecacheMember, error) {
 		return nil, err
 	}
 	return &member, nil
+}
+
+// populateCacheEntry creates a cache metadata hash in miniredis
+func populateCacheEntry(mr *miniredis.Miniredis, hostID, dimID int, urlHash string, fields map[string]string) {
+	key := fmt.Sprintf("meta:cache:%d:%d:%s", hostID, dimID, urlHash)
+	for k, v := range fields {
+		mr.HSet(key, k, v)
+	}
+}
+
+// makeDaemonGETRequest sends an HTTP GET request to the daemon and returns parsed JSON
+func makeDaemonGETRequest(baseURL, path, authKey string) (*http.Response, map[string]interface{}) {
+	req, err := http.NewRequest("GET", baseURL+path, nil)
+	Expect(err).NotTo(HaveOccurred())
+	if authKey != "" {
+		req.Header.Set("X-Internal-Auth", authKey)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	Expect(err).NotTo(HaveOccurred())
+
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	Expect(err).NotTo(HaveOccurred())
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	Expect(err).NotTo(HaveOccurred())
+
+	return resp, result
 }

@@ -243,3 +243,43 @@ func TestInternalQueue_FIFO_Order(t *testing.T) {
 		assert.Equal(t, i, result[i].HostID, "Expected FIFO order")
 	}
 }
+
+func TestInternalQueue_CountByHostID(t *testing.T) {
+	t.Run("returns 0 for empty queue", func(t *testing.T) {
+		queue := NewInternalQueue(10)
+		assert.Equal(t, 0, queue.CountByHostID(1))
+	})
+
+	t.Run("counts entries for specific host", func(t *testing.T) {
+		queue := NewInternalQueue(10)
+		for i := 0; i < 3; i++ {
+			queue.Enqueue(InternalQueueEntry{HostID: 1, URL: "https://example.com"})
+		}
+		for i := 0; i < 2; i++ {
+			queue.Enqueue(InternalQueueEntry{HostID: 2, URL: "https://example.com"})
+		}
+
+		assert.Equal(t, 3, queue.CountByHostID(1))
+		assert.Equal(t, 2, queue.CountByHostID(2))
+		assert.Equal(t, 0, queue.CountByHostID(99))
+	})
+
+	t.Run("concurrent count is safe", func(t *testing.T) {
+		queue := NewInternalQueue(100)
+		for i := 0; i < 10; i++ {
+			queue.Enqueue(InternalQueueEntry{HostID: 1, URL: "https://example.com"})
+		}
+
+		var wg sync.WaitGroup
+		numGoroutines := 50
+		wg.Add(numGoroutines)
+		for i := 0; i < numGoroutines; i++ {
+			go func() {
+				defer wg.Done()
+				count := queue.CountByHostID(1)
+				assert.Equal(t, 10, count)
+			}()
+		}
+		wg.Wait()
+	})
+}

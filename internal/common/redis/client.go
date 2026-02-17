@@ -302,6 +302,20 @@ func (c *Client) ZCard(ctx context.Context, key string) (int64, error) {
 	return result, nil
 }
 
+// ZRangeWithScores returns members with scores from sorted set in range [start, stop]
+func (c *Client) ZRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
+	result, err := c.rdb.ZRangeWithScores(ctx, key, start, stop).Result()
+	if err != nil {
+		c.logger.Error("Redis ZRANGEWITHSCORES failed",
+			zap.String("key", key),
+			zap.Int64("start", start),
+			zap.Int64("stop", stop),
+			zap.Error(err))
+		return nil, fmt.Errorf("redis zrangewithscores failed: %w", err)
+	}
+	return result, nil
+}
+
 // ZCount returns count of members with scores between min and max
 func (c *Client) ZCount(ctx context.Context, key string, min, max string) (int64, error) {
 	result, err := c.rdb.ZCount(ctx, key, min, max).Result()

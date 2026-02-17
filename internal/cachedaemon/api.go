@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/valyala/fasthttp"
@@ -41,6 +43,14 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleSchedulerPauseAPI(ctx)
 	case method == "POST" && path == "/internal/scheduler/resume":
 		d.handleSchedulerResumeAPI(ctx)
+	case method == "GET" && path == "/internal/cache/urls":
+		d.handleCacheURLsAPI(ctx)
+	case method == "GET" && path == "/internal/cache/summary":
+		d.handleCacheSummaryAPI(ctx)
+	case method == "GET" && path == "/internal/cache/queue":
+		d.handleCacheQueueAPI(ctx)
+	case method == "GET" && path == "/internal/cache/queue/summary":
+		d.handleCacheQueueSummaryAPI(ctx)
 	default:
 		httputil.JSONError(ctx, "not found", fasthttp.StatusNotFound)
 	}
@@ -343,4 +353,323 @@ func (d *CacheDaemon) handleSchedulerResumeAPI(ctx *fasthttp.RequestCtx) {
 	d.ResumeScheduler()
 
 	httputil.JSONSuccess(ctx, "Scheduler resumed", fasthttp.StatusOK)
+}
+
+func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
+	host, hostID, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	cursor := queryParamString(ctx, "cursor")
+	if cursor == "" {
+		cursor = "0"
+	}
+
+	limit, err := queryParamInt(ctx, "limit", defaultLimit)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if limit < 1 || limit > maxLimit {
+		httputil.JSONError(ctx, fmt.Sprintf("limit must be between 1 and %d", maxLimit), fasthttp.StatusBadRequest)
+		return
+	}
+
+	statusFilter := queryParamString(ctx, "status")
+	if statusFilter != "" {
+		allowed := map[string]bool{"active": true, "stale": true, "expired": true}
+		parsed, err := parseCSVFilter(statusFilter, allowed, "status")
+		if err != nil {
+			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+			return
+		}
+		statusFilter = strings.Join(parsed, ",")
+	}
+
+	dimensionFilter := queryParamString(ctx, "dimension")
+	if dimensionFilter != "" {
+		dims := strings.Split(dimensionFilter, ",")
+		trimmedDims := make([]string, 0, len(dims))
+		for _, dimName := range dims {
+			dimName = strings.TrimSpace(dimName)
+			if _, exists := host.Render.Dimensions[dimName]; !exists {
+				httputil.JSONError(ctx, fmt.Sprintf("dimension '%s' not configured for host", dimName), fasthttp.StatusBadRequest)
+				return
+			}
+			trimmedDims = append(trimmedDims, dimName)
+		}
+		dimensionFilter = strings.Join(trimmedDims, ",")
+	}
+
+	urlContains := queryParamString(ctx, "urlContains")
+	if len(urlContains) > 200 {
+		httputil.JSONError(ctx, "urlContains must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	sizeMin, err := queryParamInt(ctx, "sizeMin", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if sizeMin < 0 {
+		httputil.JSONError(ctx, "sizeMin must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+
+	sizeMax, err := queryParamInt(ctx, "sizeMax", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if sizeMax < 0 {
+		httputil.JSONError(ctx, "sizeMax must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if sizeMax > 0 && sizeMin > 0 && sizeMax < sizeMin {
+		httputil.JSONError(ctx, "sizeMax must be >= sizeMin", fasthttp.StatusBadRequest)
+		return
+	}
+
+	cacheAgeMin, err := queryParamInt(ctx, "cacheAgeMin", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if cacheAgeMin < 0 {
+		httputil.JSONError(ctx, "cacheAgeMin must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+
+	cacheAgeMax, err := queryParamInt(ctx, "cacheAgeMax", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if cacheAgeMax < 0 {
+		httputil.JSONError(ctx, "cacheAgeMax must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if cacheAgeMax > 0 && cacheAgeMin > 0 && cacheAgeMax < cacheAgeMin {
+		httputil.JSONError(ctx, "cacheAgeMax must be >= cacheAgeMin", fasthttp.StatusBadRequest)
+		return
+	}
+
+	statusCodeFilter := queryParamString(ctx, "statusCode")
+	if statusCodeFilter != "" {
+		codes := strings.Split(statusCodeFilter, ",")
+		trimmedCodes := make([]string, 0, len(codes))
+		for _, sc := range codes {
+			sc = strings.TrimSpace(sc)
+			if _, err := strconv.Atoi(sc); err != nil {
+				httputil.JSONError(ctx, fmt.Sprintf("invalid statusCode filter: %s (must be numeric)", sc), fasthttp.StatusBadRequest)
+				return
+			}
+			trimmedCodes = append(trimmedCodes, sc)
+		}
+		statusCodeFilter = strings.Join(trimmedCodes, ",")
+	}
+
+	sourceFilter := queryParamString(ctx, "source")
+	if sourceFilter != "" && sourceFilter != "render" && sourceFilter != "bypass" {
+		httputil.JSONError(ctx, "source must be 'render' or 'bypass'", fasthttp.StatusBadRequest)
+		return
+	}
+
+	indexStatusFilter := queryParamString(ctx, "indexStatus")
+	if indexStatusFilter != "" {
+		allowed := map[string]bool{"1": true, "2": true, "3": true, "4": true}
+		parsed, err := parseCSVFilter(indexStatusFilter, allowed, "indexStatus")
+		if err != nil {
+			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+			return
+		}
+		indexStatusFilter = strings.Join(parsed, ",")
+	}
+
+	staleTTL := d.getStaleTTL(host)
+
+	params := CacheListParams{
+		HostID:            hostID,
+		Cursor:            cursor,
+		Limit:             limit,
+		StatusFilter:      statusFilter,
+		DimensionFilter:   dimensionFilter,
+		URLContains:       urlContains,
+		SizeMin:           int64(sizeMin),
+		SizeMax:           int64(sizeMax),
+		CacheAgeMin:       int64(cacheAgeMin),
+		CacheAgeMax:       int64(cacheAgeMax),
+		StatusCodeFilter:  statusCodeFilter,
+		SourceFilter:      sourceFilter,
+		IndexStatusFilter: indexStatusFilter,
+		StaleTTL:          staleTTL,
+	}
+
+	result, err := d.cacheReader.ListURLs(params)
+	if handleRedisError(ctx, err, d.logger) {
+		return
+	}
+
+	httputil.JSONData(ctx, result, fasthttp.StatusOK)
+
+	d.logger.Info("Cache URLs request served",
+		zap.Int("host_id", hostID),
+		zap.String("cursor", cursor),
+		zap.Int("limit", limit),
+		zap.Int("items_returned", len(result.Items)),
+		zap.Bool("has_more", result.HasMore))
+}
+
+func (d *CacheDaemon) handleCacheSummaryAPI(ctx *fasthttp.RequestCtx) {
+	host, hostID, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	staleTTL := d.getStaleTTL(host)
+
+	result, err := d.cacheReader.GetSummary(hostID, staleTTL)
+	if handleRedisError(ctx, err, d.logger) {
+		return
+	}
+
+	httputil.JSONData(ctx, result, fasthttp.StatusOK)
+
+	d.logger.Info("Cache summary request served",
+		zap.Int("host_id", hostID),
+		zap.Int("total_urls", result.TotalUrls))
+}
+
+func (d *CacheDaemon) handleCacheQueueAPI(ctx *fasthttp.RequestCtx) {
+	host, _, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	cursor := queryParamString(ctx, "cursor")
+	if cursor == "" {
+		cursor = "0"
+	}
+
+	limit, err := queryParamInt(ctx, "limit", defaultLimit)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if limit < 1 || limit > maxLimit {
+		httputil.JSONError(ctx, fmt.Sprintf("limit must be between 1 and %d", maxLimit), fasthttp.StatusBadRequest)
+		return
+	}
+
+	var priorityFilter []string
+	priorityRaw := queryParamString(ctx, "priority")
+	if priorityRaw != "" {
+		allowed := map[string]bool{"high": true, "normal": true, "autorecache": true}
+		priorityFilter, err = parseCSVFilter(priorityRaw, allowed, "priority")
+		if err != nil {
+			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+			return
+		}
+	}
+
+	params := QueueListParams{
+		HostID:         host.ID,
+		Cursor:         cursor,
+		Limit:          limit,
+		PriorityFilter: priorityFilter,
+	}
+
+	result, err := d.queueReader.ListQueueItems(params, host.Render.Dimensions)
+	if handleRedisError(ctx, err, d.logger) {
+		return
+	}
+
+	httputil.JSONData(ctx, result, fasthttp.StatusOK)
+
+	d.logger.Info("Cache queue request served",
+		zap.Int("host_id", host.ID),
+		zap.Int("items_returned", len(result.Items)),
+		zap.Bool("has_more", result.HasMore))
+}
+
+func (d *CacheDaemon) handleCacheQueueSummaryAPI(ctx *fasthttp.RequestCtx) {
+	host, _, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	result, err := d.queueReader.GetQueueSummary(host.ID)
+	if handleRedisError(ctx, err, d.logger) {
+		return
+	}
+
+	httputil.JSONData(ctx, result, fasthttp.StatusOK)
+
+	d.logger.Info("Cache queue summary request served",
+		zap.Int("host_id", host.ID),
+		zap.Int("pending", result.Pending),
+		zap.Int("processing", result.Processing))
+}
+
+func queryParamInt(ctx *fasthttp.RequestCtx, name string, defaultValue int) (int, error) {
+	raw := string(ctx.QueryArgs().Peek(name))
+	if raw == "" {
+		return defaultValue, nil
+	}
+	val, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid integer", name)
+	}
+	return val, nil
+}
+
+func queryParamString(ctx *fasthttp.RequestCtx, name string) string {
+	return string(ctx.QueryArgs().Peek(name))
+}
+
+func (d *CacheDaemon) resolveHost(ctx *fasthttp.RequestCtx) (*types.Host, int, bool) {
+	hostID, err := queryParamInt(ctx, "host_id", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return nil, 0, false
+	}
+	if hostID <= 0 {
+		httputil.JSONError(ctx, "host_id is required", fasthttp.StatusBadRequest)
+		return nil, 0, false
+	}
+	host := d.GetHost(hostID)
+	if host == nil {
+		httputil.JSONError(ctx, fmt.Sprintf("host_id %d not found", hostID), fasthttp.StatusNotFound)
+		return nil, 0, false
+	}
+	return host, hostID, true
+}
+
+func handleRedisError(ctx *fasthttp.RequestCtx, err error, logger *zap.Logger) bool {
+	if err == nil {
+		return false
+	}
+	if strings.Contains(err.Error(), "BUSY") {
+		httputil.JSONError(ctx, "redis busy, try again later", fasthttp.StatusServiceUnavailable)
+	} else {
+		logger.Error("Redis error in cache reader", zap.Error(err))
+		httputil.JSONError(ctx, "internal error", fasthttp.StatusInternalServerError)
+	}
+	return true
+}
+
+func parseCSVFilter(value string, allowed map[string]bool, fieldName string) ([]string, error) {
+	if value == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ",")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+		if !allowed[parts[i]] {
+			return nil, fmt.Errorf("invalid %s filter: %s", fieldName, parts[i])
+		}
+	}
+	return parts, nil
 }

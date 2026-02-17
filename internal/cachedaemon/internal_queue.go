@@ -72,3 +72,17 @@ func (q *InternalQueue) Size() int {
 
 	return len(q.entries)
 }
+
+// CountByHostID returns the number of entries in the queue for a specific host
+func (q *InternalQueue) CountByHostID(hostID int) int {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	count := 0
+	for _, entry := range q.entries {
+		if entry.HostID == hostID {
+			count++
+		}
+	}
+	return count
+}
