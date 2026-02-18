@@ -138,7 +138,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Equal(t, "mobile", result.Items[0].Dimension)
 	})
 
-	t.Run("urlContains filter", func(t *testing.T) {
+	t.Run("url_contains filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		populateMetadataHash(mr, 1, 1, "prod1", map[string]string{
@@ -246,7 +246,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Contains(t, result.Items[0].URL, "old")
 	})
 
-	t.Run("statusCode filter", func(t *testing.T) {
+	t.Run("status_code filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		populateMetadataHash(mr, 1, 1, "ok1", map[string]string{
@@ -312,7 +312,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Equal(t, "render", result.Items[0].Source)
 	})
 
-	t.Run("indexStatus filter", func(t *testing.T) {
+	t.Run("index_status filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		populateMetadataHash(mr, 1, 1, "idx1", map[string]string{

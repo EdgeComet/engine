@@ -31,13 +31,13 @@ type QueueItem struct {
 	URL         string `json:"url"`
 	Dimension   string `json:"dimension"`
 	Priority    string `json:"priority"`
-	ScheduledAt int64  `json:"scheduledAt"`
+	ScheduledAt int64  `json:"scheduled_at"`
 }
 
 type QueueListResponse struct {
 	Items   []QueueItem `json:"items"`
 	Cursor  string      `json:"cursor"`
-	HasMore bool        `json:"hasMore"`
+	HasMore bool        `json:"has_more"`
 }
 
 type QueueSummaryResponse struct {

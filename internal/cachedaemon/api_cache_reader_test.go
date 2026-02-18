@@ -156,22 +156,22 @@ func TestHandlerValidation(t *testing.T) {
 		assert.Contains(t, body, "example.com/d1")
 	})
 
-	t.Run("urlContains too long returns 400", func(t *testing.T) {
+	t.Run("url_contains too long returns 400", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
 		longStr := strings.Repeat("a", 201)
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&urlContains="+longStr)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_contains="+longStr)
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
-	t.Run("sizeMax < sizeMin returns 400", func(t *testing.T) {
+	t.Run("size_max < size_min returns 400", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&sizeMin=100&sizeMax=50")
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&size_min=100&size_max=50")
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
-	t.Run("cacheAgeMax < cacheAgeMin returns 400", func(t *testing.T) {
+	t.Run("cache_age_max < cache_age_min returns 400", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&cacheAgeMin=100&cacheAgeMax=50")
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&cache_age_min=100&cache_age_max=50")
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
@@ -187,13 +187,13 @@ func TestHandlerValidation(t *testing.T) {
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
-	t.Run("invalid statusCode returns 400", func(t *testing.T) {
+	t.Run("invalid status_code returns 400", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&statusCode=abc")
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&status_code=abc")
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
-	t.Run("statusCode filter with spaces is trimmed", func(t *testing.T) {
+	t.Run("status_code filter with spaces is trimmed", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 		populateMetadataHash(mr, 1, 1, "ok1", map[string]string{
 			"url": "https://example.com/ok", "dimension": "mobile",
@@ -210,7 +210,7 @@ func TestHandlerValidation(t *testing.T) {
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999",
 			"source": "render", "status_code": "500",
 		})
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&statusCode=200,+404&limit=100")
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&status_code=200,+404&limit=100")
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
 		body := string(ctx.Response.Body())
 		assert.Contains(t, body, "example.com/ok")
@@ -218,9 +218,9 @@ func TestHandlerValidation(t *testing.T) {
 		assert.NotContains(t, body, "example.com/err")
 	})
 
-	t.Run("invalid indexStatus returns 400", func(t *testing.T) {
+	t.Run("invalid index_status returns 400", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
-		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&indexStatus=5")
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&index_status=5")
 		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 
@@ -237,7 +237,7 @@ func TestHandlerValidation(t *testing.T) {
 		ctx := makeTestRequest(daemon, "GET", "/internal/cache/summary?host_id=1")
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
 		assert.Contains(t, string(ctx.Response.Body()), `"success":true`)
-		assert.Contains(t, string(ctx.Response.Body()), `"totalUrls"`)
+		assert.Contains(t, string(ctx.Response.Body()), `"total_urls"`)
 	})
 
 	t.Run("queue returns 200", func(t *testing.T) {

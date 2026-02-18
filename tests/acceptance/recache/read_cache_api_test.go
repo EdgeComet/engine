@@ -139,7 +139,7 @@ var _ = Describe("Cache Reader", func() {
 			}
 		})
 
-		It("filters by urlContains", func() {
+		It("filters by url_contains", func() {
 			now := time.Now().Unix()
 			expiresAt := now + 3600
 
@@ -174,7 +174,7 @@ var _ = Describe("Cache Reader", func() {
 			})
 
 			resp, result := makeDaemonGETRequest(baseURL,
-				fmt.Sprintf("/internal/cache/urls?host_id=%d&urlContains=products", testHostID), testEnv.InternalAuthKey)
+				fmt.Sprintf("/internal/cache/urls?host_id=%d&url_contains=products", testHostID), testEnv.InternalAuthKey)
 
 			Expect(resp.StatusCode).To(Equal(200))
 
@@ -215,7 +215,7 @@ var _ = Describe("Cache Reader", func() {
 
 			_, hasCursor := data1["cursor"]
 			Expect(hasCursor).To(BeTrue())
-			_, hasMore := data1["hasMore"]
+			_, hasMore := data1["has_more"]
 			Expect(hasMore).To(BeTrue())
 		})
 
@@ -330,10 +330,10 @@ var _ = Describe("Cache Reader", func() {
 			Expect(result["success"]).To(BeTrue())
 
 			data := result["data"].(map[string]interface{})
-			Expect(data["totalUrls"]).To(BeNumerically("==", 6))
-			Expect(data["activeCount"]).To(BeNumerically("==", 3))
-			Expect(data["staleCount"]).To(BeNumerically("==", 2))
-			Expect(data["expiredCount"]).To(BeNumerically("==", 1))
+			Expect(data["total_urls"]).To(BeNumerically("==", 6))
+			Expect(data["active_count"]).To(BeNumerically("==", 3))
+			Expect(data["stale_count"]).To(BeNumerically("==", 2))
+			Expect(data["expired_count"]).To(BeNumerically("==", 1))
 		})
 
 		It("returns byDimension and bySource breakdowns", func() {
@@ -370,11 +370,11 @@ var _ = Describe("Cache Reader", func() {
 
 			data := result["data"].(map[string]interface{})
 
-			byDimension := data["byDimension"].(map[string]interface{})
+			byDimension := data["by_dimension"].(map[string]interface{})
 			Expect(byDimension["desktop"]).To(BeNumerically("==", 2))
 			Expect(byDimension["mobile"]).To(BeNumerically("==", 1))
 
-			bySource := data["bySource"].(map[string]interface{})
+			bySource := data["by_source"].(map[string]interface{})
 			Expect(bySource["render"]).To(BeNumerically("==", 2))
 			Expect(bySource["bypass"]).To(BeNumerically("==", 1))
 		})
@@ -386,10 +386,10 @@ var _ = Describe("Cache Reader", func() {
 			Expect(resp.StatusCode).To(Equal(200))
 
 			data := result["data"].(map[string]interface{})
-			Expect(data["totalUrls"]).To(BeNumerically("==", 0))
-			Expect(data["activeCount"]).To(BeNumerically("==", 0))
-			Expect(data["staleCount"]).To(BeNumerically("==", 0))
-			Expect(data["expiredCount"]).To(BeNumerically("==", 0))
+			Expect(data["total_urls"]).To(BeNumerically("==", 0))
+			Expect(data["active_count"]).To(BeNumerically("==", 0))
+			Expect(data["stale_count"]).To(BeNumerically("==", 0))
+			Expect(data["expired_count"]).To(BeNumerically("==", 0))
 		})
 	})
 
@@ -416,7 +416,7 @@ var _ = Describe("Cache Reader", func() {
 			Expect(firstItem).To(HaveKey("url"))
 			Expect(firstItem).To(HaveKey("dimension"))
 			Expect(firstItem).To(HaveKey("priority"))
-			Expect(firstItem).To(HaveKey("scheduledAt"))
+			Expect(firstItem).To(HaveKey("scheduled_at"))
 		})
 
 		It("filters by priority=high", func() {
@@ -462,7 +462,7 @@ var _ = Describe("Cache Reader", func() {
 			data1 := result1["data"].(map[string]interface{})
 			items1 := data1["items"].([]interface{})
 			Expect(len(items1)).To(Equal(3))
-			Expect(data1["hasMore"]).To(BeTrue())
+			Expect(data1["has_more"]).To(BeTrue())
 
 			cursor := data1["cursor"].(string)
 			Expect(cursor).NotTo(Equal("0"))
@@ -538,17 +538,17 @@ var _ = Describe("Cache Reader", func() {
 			Expect(result["message"]).To(ContainSubstring("not found"))
 		})
 
-		It("returns 400 for invalid params - sizeMax less than sizeMin", func() {
+		It("returns 400 for invalid params - size_max less than size_min", func() {
 			resp, result := makeDaemonGETRequest(baseURL,
-				fmt.Sprintf("/internal/cache/urls?host_id=%d&sizeMin=1000&sizeMax=500", testHostID), testEnv.InternalAuthKey)
+				fmt.Sprintf("/internal/cache/urls?host_id=%d&size_min=1000&size_max=500", testHostID), testEnv.InternalAuthKey)
 
 			Expect(resp.StatusCode).To(Equal(400))
 			Expect(result["success"]).To(BeFalse())
 		})
 
-		It("returns 400 for invalid params - cacheAgeMax less than cacheAgeMin", func() {
+		It("returns 400 for invalid params - cache_age_max less than cache_age_min", func() {
 			resp, result := makeDaemonGETRequest(baseURL,
-				fmt.Sprintf("/internal/cache/urls?host_id=%d&cacheAgeMin=1000&cacheAgeMax=500", testHostID), testEnv.InternalAuthKey)
+				fmt.Sprintf("/internal/cache/urls?host_id=%d&cache_age_min=1000&cache_age_max=500", testHostID), testEnv.InternalAuthKey)
 
 			Expect(resp.StatusCode).To(Equal(400))
 			Expect(result["success"]).To(BeFalse())

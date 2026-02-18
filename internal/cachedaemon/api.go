@@ -409,68 +409,68 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		dimensionFilter = strings.Join(trimmedDims, ",")
 	}
 
-	urlContains := queryParamString(ctx, "urlContains")
+	urlContains := queryParamString(ctx, "url_contains")
 	if len(urlContains) > 200 {
-		httputil.JSONError(ctx, "urlContains must be at most 200 characters", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "url_contains must be at most 200 characters", fasthttp.StatusBadRequest)
 		return
 	}
 
-	sizeMin, err := queryParamInt(ctx, "sizeMin", 0)
+	sizeMin, err := queryParamInt(ctx, "size_min", 0)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
 	}
 	if sizeMin < 0 {
-		httputil.JSONError(ctx, "sizeMin must be >= 0", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "size_min must be >= 0", fasthttp.StatusBadRequest)
 		return
 	}
 
-	sizeMax, err := queryParamInt(ctx, "sizeMax", 0)
+	sizeMax, err := queryParamInt(ctx, "size_max", 0)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
 	}
 	if sizeMax < 0 {
-		httputil.JSONError(ctx, "sizeMax must be >= 0", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "size_max must be >= 0", fasthttp.StatusBadRequest)
 		return
 	}
 	if sizeMax > 0 && sizeMin > 0 && sizeMax < sizeMin {
-		httputil.JSONError(ctx, "sizeMax must be >= sizeMin", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "size_max must be >= size_min", fasthttp.StatusBadRequest)
 		return
 	}
 
-	cacheAgeMin, err := queryParamInt(ctx, "cacheAgeMin", 0)
+	cacheAgeMin, err := queryParamInt(ctx, "cache_age_min", 0)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
 	}
 	if cacheAgeMin < 0 {
-		httputil.JSONError(ctx, "cacheAgeMin must be >= 0", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "cache_age_min must be >= 0", fasthttp.StatusBadRequest)
 		return
 	}
 
-	cacheAgeMax, err := queryParamInt(ctx, "cacheAgeMax", 0)
+	cacheAgeMax, err := queryParamInt(ctx, "cache_age_max", 0)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
 	}
 	if cacheAgeMax < 0 {
-		httputil.JSONError(ctx, "cacheAgeMax must be >= 0", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "cache_age_max must be >= 0", fasthttp.StatusBadRequest)
 		return
 	}
 	if cacheAgeMax > 0 && cacheAgeMin > 0 && cacheAgeMax < cacheAgeMin {
-		httputil.JSONError(ctx, "cacheAgeMax must be >= cacheAgeMin", fasthttp.StatusBadRequest)
+		httputil.JSONError(ctx, "cache_age_max must be >= cache_age_min", fasthttp.StatusBadRequest)
 		return
 	}
 
-	statusCodeFilter := queryParamString(ctx, "statusCode")
+	statusCodeFilter := queryParamString(ctx, "status_code")
 	if statusCodeFilter != "" {
 		codes := strings.Split(statusCodeFilter, ",")
 		trimmedCodes := make([]string, 0, len(codes))
 		for _, sc := range codes {
 			sc = strings.TrimSpace(sc)
 			if _, err := strconv.Atoi(sc); err != nil {
-				httputil.JSONError(ctx, fmt.Sprintf("invalid statusCode filter: %s (must be numeric)", sc), fasthttp.StatusBadRequest)
+				httputil.JSONError(ctx, fmt.Sprintf("invalid status_code filter: %s (must be numeric)", sc), fasthttp.StatusBadRequest)
 				return
 			}
 			trimmedCodes = append(trimmedCodes, sc)
@@ -484,10 +484,10 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	indexStatusFilter := queryParamString(ctx, "indexStatus")
+	indexStatusFilter := queryParamString(ctx, "index_status")
 	if indexStatusFilter != "" {
 		allowed := map[string]bool{"1": true, "2": true, "3": true, "4": true}
-		parsed, err := parseCSVFilter(indexStatusFilter, allowed, "indexStatus")
+		parsed, err := parseCSVFilter(indexStatusFilter, allowed, "index_status")
 		if err != nil {
 			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 			return

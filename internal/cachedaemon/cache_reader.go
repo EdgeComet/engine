@@ -203,33 +203,33 @@ type CacheURLItem struct {
 	Title       string `json:"title"`
 	Dimension   string `json:"dimension"`
 	Status      string `json:"status"`
-	CacheAge    int64  `json:"cacheAge"`
+	CacheAge    int64  `json:"cache_age"`
 	Size        int64  `json:"size"`
-	DiskSize    int64  `json:"diskSize"`
-	LastAccess  int64  `json:"lastAccess"`
-	CacheKey    string `json:"cacheKey"`
-	CreatedAt   int64  `json:"createdAt"`
-	ExpiresAt   int64  `json:"expiresAt"`
-	StatusCode  int    `json:"statusCode"`
+	DiskSize    int64  `json:"disk_size"`
+	LastAccess  int64  `json:"last_access"`
+	CacheKey    string `json:"cache_key"`
+	CreatedAt   int64  `json:"created_at"`
+	ExpiresAt   int64  `json:"expires_at"`
+	StatusCode  int    `json:"status_code"`
 	Source      string `json:"source"`
-	IndexStatus int    `json:"indexStatus"`
-	LastBotHit  *int64 `json:"lastBotHit,omitempty"`
+	IndexStatus int    `json:"index_status"`
+	LastBotHit  *int64 `json:"last_bot_hit,omitempty"`
 }
 
 type CacheURLsResponse struct {
 	Items   []CacheURLItem `json:"items"`
 	Cursor  string         `json:"cursor"`
-	HasMore bool           `json:"hasMore"`
+	HasMore bool           `json:"has_more"`
 }
 
 type CacheSummaryResponse struct {
-	TotalUrls    int            `json:"totalUrls"`
-	ActiveCount  int            `json:"activeCount"`
-	StaleCount   int            `json:"staleCount"`
-	ExpiredCount int            `json:"expiredCount"`
-	TotalSize    int64          `json:"totalSize"`
-	ByDimension  map[string]int `json:"byDimension"`
-	BySource     map[string]int `json:"bySource"`
+	TotalUrls    int            `json:"total_urls"`
+	ActiveCount  int            `json:"active_count"`
+	StaleCount   int            `json:"stale_count"`
+	ExpiredCount int            `json:"expired_count"`
+	TotalSize    int64          `json:"total_size"`
+	ByDimension  map[string]int `json:"by_dimension"`
+	BySource     map[string]int `json:"by_source"`
 }
 
 type CacheListParams struct {
