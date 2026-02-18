@@ -22,6 +22,7 @@ edge_gateway1:
     enabled: true
     timeout: 30s
     user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+    ssrf_protection: false
 
   registry:
     selection_strategy: "least_loaded"
@@ -46,6 +47,7 @@ edge_gateway2:
     enabled: true
     timeout: 30s
     user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+    ssrf_protection: false
 
   registry:
     selection_strategy: "least_loaded"
@@ -70,6 +72,7 @@ edge_gateway3:
     enabled: true
     timeout: 30s
     user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
+    ssrf_protection: false
 
   registry:
     selection_strategy: "least_loaded"

@@ -270,4 +270,25 @@ func TestHandlerValidation(t *testing.T) {
 		daemon.ServeHTTP(ctx)
 		assert.Equal(t, fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
 	})
+
+	t.Run("empty auth key rejects request without header", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		daemon.internalAuthKey = ""
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.Header.SetMethod("GET")
+		ctx.Request.SetRequestURI("/status")
+		daemon.ServeHTTP(ctx)
+		assert.Equal(t, fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
+	})
+
+	t.Run("empty auth key rejects request with empty header", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		daemon.internalAuthKey = ""
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.Header.SetMethod("GET")
+		ctx.Request.SetRequestURI("/status")
+		ctx.Request.Header.Set("X-Internal-Auth", "")
+		daemon.ServeHTTP(ctx)
+		assert.Equal(t, fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
+	})
 }

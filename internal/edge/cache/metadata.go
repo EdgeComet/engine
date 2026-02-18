@@ -406,9 +406,16 @@ func (ms *MetadataStore) generateFilePath(cacheKey *types.CacheKey, timestamp ti
 }
 
 // GetAbsoluteFilePath converts a relative file path to an absolute path
-// by prepending the base_path (cache directory) configured for this EG
-func (ms *MetadataStore) GetAbsoluteFilePath(relativePath string) string {
-	return filepath.Join(ms.cacheDir, relativePath)
+// by prepending the base_path (cache directory) configured for this EG.
+// Returns error if the resolved path escapes the cache directory (path traversal).
+func (ms *MetadataStore) GetAbsoluteFilePath(relativePath string) (string, error) {
+	absPath := filepath.Join(ms.cacheDir, relativePath)
+	cleanPath := filepath.Clean(absPath)
+	cleanBase := filepath.Clean(ms.cacheDir)
+	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+		return "", fmt.Errorf("path escapes cache directory: %s", relativePath)
+	}
+	return cleanPath, nil
 }
 
 // UpdateLastBotHit updates the last_bot_hit field in cache metadata

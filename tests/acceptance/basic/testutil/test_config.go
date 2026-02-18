@@ -26,9 +26,10 @@ type TestEnvironmentConfig struct {
 		} `yaml:"storage"`
 
 		Bypass struct {
-			Enabled   bool   `yaml:"enabled"`
-			Timeout   string `yaml:"timeout"`
-			UserAgent string `yaml:"user_agent"`
+			Enabled        bool   `yaml:"enabled"`
+			Timeout        string `yaml:"timeout"`
+			UserAgent      string `yaml:"user_agent"`
+			SSRFProtection *bool  `yaml:"ssrf_protection,omitempty"`
 		} `yaml:"bypass"`
 
 		Registry struct {

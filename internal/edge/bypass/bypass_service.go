@@ -1,6 +1,8 @@
 package bypass
 
 import (
+	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -8,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/urlutil"
 )
 
 // BypassResponse holds the fetched content from bypass request
@@ -36,6 +39,11 @@ func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *Bypas
 	client := &fasthttp.Client{
 		ReadTimeout:  timeout,
 		WriteTimeout: timeout,
+	}
+
+	// Enable SSRF protection by default (blocks DNS rebinding to private IPs)
+	if cfg.SSRFProtection == nil || *cfg.SSRFProtection {
+		client.Dial = ssrfSafeDial
 	}
 
 	return &BypassService{
@@ -115,4 +123,31 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 		zap.Int("response_size", len(response.Body)))
 
 	return response, nil
+}
+
+// ssrfSafeDial resolves the hostname, validates all IPs are public, then connects.
+// Prevents DNS rebinding attacks where an attacker's domain resolves to a private IP.
+func ssrfSafeDial(addr string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+	}
+
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil, fmt.Errorf("DNS resolution failed for %q: %w", host, err)
+	}
+
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IP addresses found for %q", host)
+	}
+
+	for _, ip := range ips {
+		if err := urlutil.ValidateResolvedIP(ip); err != nil {
+			return nil, fmt.Errorf("SSRF protection for %q: %w", host, err)
+		}
+	}
+
+	// All IPs validated as public; connect to the first one
+	return fasthttp.DialTimeout(net.JoinHostPort(ips[0].String(), port), 10*time.Second)
 }

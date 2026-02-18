@@ -92,9 +92,10 @@ type GlobalRenderConfig struct {
 }
 
 type GlobalBypassConfig struct {
-	Timeout   *types.Duration         `yaml:"timeout,omitempty"`
-	UserAgent string                  `yaml:"user_agent"`
-	Cache     types.BypassCacheConfig `yaml:"cache"` // Global bypass cache defaults
+	Timeout        *types.Duration         `yaml:"timeout,omitempty"`
+	UserAgent      string                  `yaml:"user_agent"`
+	Cache          types.BypassCacheConfig `yaml:"cache"`            // Global bypass cache defaults
+	SSRFProtection *bool                   `yaml:"ssrf_protection,omitempty"` // Block requests to private IPs (default: true)
 }
 
 type EdgeRegistryConfig struct {

@@ -55,7 +55,14 @@ func (m *Manager) handlePull(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	filePath := m.cacheService.GetAbsoluteFilePath(metadata.FilePath)
+	filePath, err := m.cacheService.GetAbsoluteFilePath(metadata.FilePath)
+	if err != nil {
+		m.logger.Warn("Invalid cache file path",
+			zap.String("cache_key", cacheKey.String()),
+			zap.Error(err))
+		httputil.JSONError(ctx, "invalid file path", fasthttp.StatusBadRequest)
+		return
+	}
 
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -127,7 +134,14 @@ func (m *Manager) handlePush(ctx *fasthttp.RequestCtx) {
 	if filePath == "" {
 		filePath = m.cacheService.GenerateFilePath(cacheKey, metadata.ExpiresAt)
 	}
-	absolutePath := m.cacheService.GetAbsoluteFilePath(filePath)
+	absolutePath, err := m.cacheService.GetAbsoluteFilePath(filePath)
+	if err != nil {
+		m.logger.Warn("Invalid cache file path in push metadata",
+			zap.String("file_path", filePath),
+			zap.Error(err))
+		httputil.JSONError(ctx, "invalid file path", fasthttp.StatusBadRequest)
+		return
+	}
 
 	parentDir := filepath.Dir(absolutePath)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {

@@ -1054,3 +1054,49 @@ func TestCacheMetadata_DiskSize(t *testing.T) {
 		assert.Equal(t, original.DiskSize, restored.DiskSize)
 	})
 }
+
+func TestMetadataStore_GetAbsoluteFilePath(t *testing.T) {
+	ms := &MetadataStore{cacheDir: "/var/cache/edgecomet"}
+
+	t.Run("valid relative path", func(t *testing.T) {
+		path, err := ms.GetAbsoluteFilePath("1/2025/10/18/07/00/abc123_1.html")
+		require.NoError(t, err)
+		assert.Equal(t, "/var/cache/edgecomet/1/2025/10/18/07/00/abc123_1.html", path)
+	})
+
+	t.Run("path traversal escaping cache dir", func(t *testing.T) {
+		_, err := ms.GetAbsoluteFilePath("../../etc/cron.d/backdoor")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path escapes cache directory")
+	})
+
+	t.Run("path traversal with intermediate components", func(t *testing.T) {
+		_, err := ms.GetAbsoluteFilePath("1/2025/../../../../etc/passwd")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path escapes cache directory")
+	})
+
+	t.Run("path with dot-dot that stays inside cache dir", func(t *testing.T) {
+		path, err := ms.GetAbsoluteFilePath("1/2025/../2025/file.html")
+		require.NoError(t, err)
+		assert.Equal(t, "/var/cache/edgecomet/1/2025/file.html", path)
+	})
+
+	t.Run("empty relative path returns cache dir", func(t *testing.T) {
+		path, err := ms.GetAbsoluteFilePath("")
+		require.NoError(t, err)
+		assert.Equal(t, "/var/cache/edgecomet", path)
+	})
+
+	t.Run("single dot-dot escapes", func(t *testing.T) {
+		_, err := ms.GetAbsoluteFilePath("..")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "path escapes cache directory")
+	})
+
+	t.Run("path with compression extension", func(t *testing.T) {
+		path, err := ms.GetAbsoluteFilePath("1/2025/10/18/abc123_1.html.snappy")
+		require.NoError(t, err)
+		assert.Equal(t, "/var/cache/edgecomet/1/2025/10/18/abc123_1.html.snappy", path)
+	})
+}

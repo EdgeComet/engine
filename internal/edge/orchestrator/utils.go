@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 )
 
@@ -31,6 +32,10 @@ func ExtractURL(renderCtx *edgectx.RenderContext) (string, error) {
 
 	if parsedURL.Host == "" {
 		return "", fmt.Errorf("URL must have a valid host")
+	}
+
+	if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
+		return "", fmt.Errorf("SSRF protection: %w", err)
 	}
 
 	return targetURL, nil

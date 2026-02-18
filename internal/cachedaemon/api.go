@@ -23,8 +23,15 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 
 	// Auth middleware - validate X-Internal-Auth header for all endpoints
 	authKey := string(ctx.Request.Header.Peek("X-Internal-Auth"))
+	if authKey == "" {
+		d.logger.Warn("Missing X-Internal-Auth header",
+			zap.String("path", path),
+			zap.String("remote_addr", ctx.RemoteAddr().String()))
+		httputil.JSONError(ctx, "unauthorized", fasthttp.StatusUnauthorized)
+		return
+	}
 	if authKey != d.internalAuthKey {
-		d.logger.Warn("Unauthorized API request",
+		d.logger.Warn("Invalid X-Internal-Auth header",
 			zap.String("path", path),
 			zap.String("remote_addr", ctx.RemoteAddr().String()))
 		httputil.JSONError(ctx, "unauthorized", fasthttp.StatusUnauthorized)

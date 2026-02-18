@@ -15,6 +15,7 @@ import (
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/requestid"
+	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -348,6 +349,14 @@ func (h *HARRenderHandler) parseAndValidateParams(ctx *fasthttp.RequestCtx) (*ha
 		h.logger.Warn("Invalid URL: missing scheme or host",
 			zap.String("url", urlStr))
 		httputil.JSONError(ctx, "invalid_url: URL must have scheme and host", fasthttp.StatusBadRequest)
+		return nil, errValidation
+	}
+
+	if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
+		h.logger.Warn("SSRF protection: private IP in URL",
+			zap.String("url", urlStr),
+			zap.Error(err))
+		httputil.JSONError(ctx, "ssrf_blocked: "+err.Error(), fasthttp.StatusForbidden)
 		return nil, errValidation
 	}
 

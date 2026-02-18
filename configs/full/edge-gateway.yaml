@@ -243,6 +243,12 @@ bypass:
   # Required
   user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0; +https://edgecomet.com/bot)"
 
+  # SSRF protection for bypass requests
+  # Validates DNS-resolved IPs are not in private/reserved ranges
+  # Prevents DNS rebinding attacks (attacker domain resolving to 127.0.0.1)
+  # Default: true
+  ssrf_protection: true
+
   # Bypass response caching (separate from render cache)
   cache:
     # Enable bypass response caching

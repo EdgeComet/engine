@@ -88,7 +88,10 @@ func (cs *CacheService) GetCacheEntry(renderCtx *edgectx.RenderContext) (*CacheM
 // For uncompressed files: returns file path for SendFile-based serving
 func (cs *CacheService) GetCacheFile(cacheEntry *CacheMetadata, logger *zap.Logger) (*CacheResponse, error) {
 	// Convert relative path (from Redis) to absolute path (for filesystem)
-	absolutePath := cs.metadata.GetAbsoluteFilePath(cacheEntry.FilePath)
+	absolutePath, err := cs.metadata.GetAbsoluteFilePath(cacheEntry.FilePath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cache file path: %w", err)
+	}
 
 	logger.Debug("Preparing cache file for serving",
 		zap.String("relative_path", cacheEntry.FilePath),
@@ -166,7 +169,10 @@ func (cs *CacheService) ReadCacheFile(cacheKey *types.CacheKey) (string, error) 
 	}
 
 	// Convert relative path to absolute
-	absolutePath := cs.metadata.GetAbsoluteFilePath(metadata.FilePath)
+	absolutePath, err := cs.metadata.GetAbsoluteFilePath(metadata.FilePath)
+	if err != nil {
+		return "", fmt.Errorf("invalid cache file path: %w", err)
+	}
 
 	// Read file from filesystem
 	content, err := cs.filesystem.ReadHTML(absolutePath)
@@ -207,7 +213,10 @@ func (cs *CacheService) WriteCacheFileWithTimestamp(cacheKey *types.CacheKey, co
 	relativePath := cs.metadata.GenerateFilePath(cacheKey, expiresAt)
 
 	// Convert to absolute path (required for proper filesystem write)
-	absolutePath := cs.metadata.GetAbsoluteFilePath(relativePath)
+	absolutePath, err := cs.metadata.GetAbsoluteFilePath(relativePath)
+	if err != nil {
+		return fmt.Errorf("invalid cache file path: %w", err)
+	}
 
 	// Write content to filesystem
 	if err := cs.filesystem.WriteHTML(absolutePath, []byte(content)); err != nil {
@@ -234,7 +243,10 @@ func (cs *CacheService) GetCacheMetadata(ctx context.Context, cacheKey *types.Ca
 // We write bytes as-is without recompression or decompression.
 func (cs *CacheService) StoreRemoteCacheLocally(ctx context.Context, cacheKey *types.CacheKey, content []byte, metadata *CacheMetadata) error {
 	// Convert relative path to absolute (includes compression extension from metadata)
-	absolutePath := cs.metadata.GetAbsoluteFilePath(metadata.FilePath)
+	absolutePath, err := cs.metadata.GetAbsoluteFilePath(metadata.FilePath)
+	if err != nil {
+		return fmt.Errorf("invalid cache file path: %w", err)
+	}
 
 	// Write content directly - already compressed if applicable
 	if err := cs.filesystem.WriteHTML(absolutePath, content); err != nil {
@@ -251,7 +263,7 @@ func (cs *CacheService) StoreRemoteCacheLocally(ctx context.Context, cacheKey *t
 }
 
 // GetAbsoluteFilePath converts relative path to absolute (delegates to MetadataStore)
-func (cs *CacheService) GetAbsoluteFilePath(relativePath string) string {
+func (cs *CacheService) GetAbsoluteFilePath(relativePath string) (string, error) {
 	return cs.metadata.GetAbsoluteFilePath(relativePath)
 }
 

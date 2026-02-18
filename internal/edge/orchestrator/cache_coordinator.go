@@ -113,7 +113,10 @@ func (cc *CacheCoordinator) SaveCache(
 	now := time.Now().UTC()
 	expiresAt := now.Add(ttl)
 	relativeFilePath := cc.metadata.GenerateFilePath(renderCtx.CacheKey, expiresAt)
-	absoluteFilePath := cc.metadata.GetAbsoluteFilePath(relativeFilePath)
+	absoluteFilePath, err := cc.metadata.GetAbsoluteFilePath(relativeFilePath)
+	if err != nil {
+		return fmt.Errorf("invalid cache file path: %w", err)
+	}
 
 	isRedirect := isRedirectStatusCode(statusCode)
 

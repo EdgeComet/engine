@@ -74,12 +74,10 @@ func NewCacheDaemon(
 
 	// Get internal auth key from EG config (internal.auth_key)
 	egConfig := configManager.GetConfig()
-	var internalAuthKey string
-	if egConfig.Internal.AuthKey != "" {
-		internalAuthKey = egConfig.Internal.AuthKey
-	} else {
-		logger.Warn("No internal.auth_key found in EG config, daemon API will not have authentication")
+	if egConfig.Internal.AuthKey == "" {
+		return nil, fmt.Errorf("internal.auth_key in EG config is required for daemon API authentication")
 	}
+	internalAuthKey := egConfig.Internal.AuthKey
 
 	// Initialize internal queue
 	internalQueue := NewInternalQueue(daemonCfg.InternalQueue.MaxSize)

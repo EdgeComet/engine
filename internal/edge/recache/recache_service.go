@@ -3,7 +3,9 @@ package recache
 import (
 	"context"
 	"fmt"
+	neturl "net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -11,6 +13,7 @@ import (
 	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/events"
@@ -182,6 +185,21 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	}
 	if !dimensionFound {
 		return fmt.Errorf("dimension %d not found for host %d", dimensionID, hostID)
+	}
+
+	// SSRF protection: validate URL hostname
+	parsedURL, err := neturl.Parse(url)
+	if err != nil {
+		return fmt.Errorf("failed to parse recache URL: %w", err)
+	}
+	if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
+		return fmt.Errorf("SSRF protection: %w", err)
+	}
+
+	// Verify URL hostname matches one of the host's configured domains
+	urlHostname := strings.ToLower(parsedURL.Hostname())
+	if !hostHasDomain(host, urlHostname) {
+		return fmt.Errorf("URL hostname %q does not match any configured domain for host %d", urlHostname, hostID)
 	}
 
 	// Generate request ID and build render context early
@@ -499,4 +517,14 @@ func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation
 	rs.logger.Debug("Released tab reservation",
 		zap.String("service_id", reservation.ServiceID),
 		zap.Int("tab_id", reservation.TabID))
+}
+
+// hostHasDomain checks if the given hostname matches any of the host's configured domains
+func hostHasDomain(host *types.Host, hostname string) bool {
+	for _, domain := range host.Domains {
+		if strings.ToLower(domain) == hostname {
+			return true
+		}
+	}
+	return false
 }

@@ -68,8 +68,9 @@ func (b *ConfigBuilder) BuildEGConfig() *config.EgConfig {
 			},
 		},
 		Bypass: config.GlobalBypassConfig{
-			Timeout:   ptrDuration(b.parseDuration(b.testConfig.EdgeGateway.Bypass.Timeout)),
-			UserAgent: b.testConfig.EdgeGateway.Bypass.UserAgent,
+			Timeout:        ptrDuration(b.parseDuration(b.testConfig.EdgeGateway.Bypass.Timeout)),
+			UserAgent:      b.testConfig.EdgeGateway.Bypass.UserAgent,
+			SSRFProtection: b.testConfig.EdgeGateway.Bypass.SSRFProtection,
 			Cache: types.BypassCacheConfig{
 				Enabled:     ptrBool(false),                // Global default: disabled
 				TTL:         ptrDuration(30 * time.Minute), // Default: 30m

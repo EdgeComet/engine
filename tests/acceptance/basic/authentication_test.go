@@ -513,7 +513,8 @@ var _ = Describe("Authentication and Authorization", Serial, func() {
 				"wrong-api-key-12345",
 			)
 			Expect(response2.Error).To(BeNil())
-			Expect(response2.StatusCode).To(Equal(401), "Should return 401 for wrong key on secondary domain")
+			// SSRF protection blocks private IP literals before auth check runs
+			Expect(response2.StatusCode).To(Equal(400), "Should return 400 for private IP (SSRF protection)")
 		})
 
 		It("should authenticate both domains with same API key", func() {
