@@ -253,13 +253,21 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 			metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
 
 			// Delete metadata from Redis
-			if err := d.redis.Del(reqCtx, metadataKey); err != nil {
+			deleted, err := d.redis.DelCount(reqCtx, metadataKey)
+			if err != nil {
 				d.logger.Error("Failed to delete cache metadata",
 					zap.String("metadata_key", metadataKey),
 					zap.Error(err))
 				continue
 			}
-			entriesInvalidated++
+			if deleted == 0 {
+				d.logger.Warn("Cache metadata key not found during invalidation",
+					zap.String("metadata_key", metadataKey),
+					zap.String("url", normalizedResult.NormalizedURL),
+					zap.String("url_hash", urlHash),
+					zap.Int("dimension_id", dimensionID))
+			}
+			entriesInvalidated += int(deleted)
 		}
 	}
 

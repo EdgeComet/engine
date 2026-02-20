@@ -138,6 +138,21 @@ func (c *Client) Del(ctx context.Context, keys ...string) error {
 	return nil
 }
 
+func (c *Client) DelCount(ctx context.Context, keys ...string) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	result := c.rdb.Del(ctx, keys...)
+	if result.Err() != nil {
+		c.logger.Error("Redis DEL failed",
+			zap.Strings("keys", keys),
+			zap.Error(result.Err()))
+		return 0, fmt.Errorf("redis del failed: %w", result.Err())
+	}
+	return result.Val(), nil
+}
+
 // HDel deletes one or more hash fields
 func (c *Client) HDel(ctx context.Context, key string, fields ...string) error {
 	if len(fields) == 0 {
