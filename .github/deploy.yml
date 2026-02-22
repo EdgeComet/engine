@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Install gofumpt
+        run: go install mvdan.cc/gofumpt@latest
+
+      - name: Check formatting (gofumpt)
+        run: |
+          unformatted=$(gofumpt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted with gofumpt:"
+            echo "$unformatted"
+            echo ""
+            echo "Run 'gofumpt -w .' to fix formatting."
+            exit 1
+          fi
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --config .golangci.yml
+
+      - name: Run unit tests
+        run: cd tests && make unit
