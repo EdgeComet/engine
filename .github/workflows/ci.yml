@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
-      - master
+      - add-ci
 
 jobs:
   ci:
@@ -39,8 +38,11 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: v2.1.6
+          # REQUIRED: Changed from v2.1.6 to 'latest' to support Go 1.24
+          version: latest
           args: --config .golangci.yml
 
       - name: Run unit tests
-        run: cd tests && make unit
+        run: |
+          cd tests
+          make unit
