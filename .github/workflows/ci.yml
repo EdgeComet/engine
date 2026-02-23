@@ -4,12 +4,6 @@ on:
   push:
     branches:
       - add-ci
-      - main
-      - master
-  pull_request:
-    branches:
-      - main
-      - master
 
 jobs:
   ci:
@@ -40,12 +34,11 @@ jobs:
             exit 1
           fi
           echo "All Go files are properly formatted."
-
+          
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
-          # Points to the .golangci.yml in your repo root
+          version: v2.1.6
           args: --config .golangci.yml
 
       - name: Run unit tests
