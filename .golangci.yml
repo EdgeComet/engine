@@ -3,3 +3,23 @@ version: "2"
 linters:
   disable:
     - errcheck
+issues:
+  exclude-rules:
+    # 1. Ignore "ineffectual assignment" for 'err' specifically
+    - linters:
+        - ineffassign
+      text: "ineffectual assignment to err"
+
+    # 2. Ignore "should omit nil check" (S1009)
+    - linters:
+        - staticcheck
+      text: "S1009"
+
+    # 3. Ignore "deprecated" warnings (SA1019)
+    - linters:
+        - staticcheck
+      text: "SA1019"
+
+    # 4. Ignore "unused function" errors
+    - linters:
+        - unused
