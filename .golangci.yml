@@ -1,54 +1,42 @@
-version: v2
-
 run:
   timeout: 5m
-  modules-download-mode: readonly
+  go: '1.24'
 
 linters:
-  disable:
-    - errcheck # Disabling per your project requirements
+  disable-all: false
   enable:
     - ineffassign
     - staticcheck
     - unused
     - gofumpt
+  disable:
+    - errcheck
 
 issues:
-  # The 'exclude-rules' must be a list under 'issues'
   exclude-rules:
     # 1. ineffassign: renderer.go
     - path: internal/render/chrome/renderer.go
-      linters:
-        - ineffassign
-      text: "ineffectual assignment to err"
+      linters: [ineffassign]
+      text: "ineffectual assignment"
 
-    # 2. staticcheck: config_test.go (S1009 - redundant nil check)
+    # 2. staticcheck: redundant nil checks
     - path: internal/common/config/config_test.go
-      linters:
-        - staticcheck
+      linters: [staticcheck]
       text: "S1009"
 
-    # 3. staticcheck: request_helpers.go (SA1019 - deprecated VisitAll)
+    # 3. staticcheck: deprecated VisitAll
     - path: internal/edge/server/request_helpers.go
-      linters:
-        - staticcheck
+      linters: [staticcheck]
       text: "SA1019"
 
-    # 4. staticcheck: validator_test.go (S1011 - loop to append)
+    # 4. staticcheck: loop to append
     - path: internal/edge/validate/validator_test.go
-      linters:
-        - staticcheck
+      linters: [staticcheck]
       text: "S1011"
 
-    # 5. unused: specific functions in expansion and formatter
-    - path: internal/common/config/alias_expansion.go
-      linters:
-        - unused
-    - path: internal/edge/events/formatter.go
-      linters:
-        - unused
+    # 5. unused: specific files
+    - path: (internal/common/config/alias_expansion.go|internal/edge/events/formatter.go)
+      linters: [unused]
 
-  # This ensures we don't hide issues that are actually important
+  # Don't hide the "default" exclusions (like documentation comments)
   exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
