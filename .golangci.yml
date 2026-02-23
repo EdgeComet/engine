@@ -9,7 +9,6 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-    - gofumpt
   disable:
     - errcheck
 
