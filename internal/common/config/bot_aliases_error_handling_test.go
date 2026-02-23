@@ -43,11 +43,11 @@ bothit_recache:
   match_ua: ["$UnknownBot1", "$GooglebotSearchDesktop", "$UnknownBot2", "$InvalidAlias"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		// Create a minimal valid host file to pass validation
@@ -59,7 +59,7 @@ hosts:
     render:
       timeout: 30s
 `
-		err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0644)
+		err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -101,11 +101,11 @@ render:
       match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		hostYAML := `
@@ -121,7 +121,7 @@ hosts:
       match_ua: ["$FakeBot", "$NonExistentBot"]
 `
 		hostConfigPath := filepath.Join(hostsDir, "01-shop.yaml")
-		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -162,11 +162,11 @@ render:
       match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		hostYAML := `
@@ -183,7 +183,7 @@ hosts:
           match_ua: ["$WrongBot1", "$WrongBot2", "$WrongBot3"]
 `
 		hostConfigPath := filepath.Join(hostsDir, "01-blog.yaml")
-		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -232,11 +232,11 @@ bothit_recache:
   match_ua: ["$GlobalUnknown"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		// Create a minimal valid host file
@@ -248,7 +248,7 @@ hosts:
     render:
       timeout: 30s
 `
-		err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0644)
+		err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -288,11 +288,11 @@ render:
       match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		hostYAML := `
@@ -308,7 +308,7 @@ hosts:
       match_ua: ["$HostUnknown"]
 `
 		hostConfigPath := filepath.Join(hostsDir, "02-test.yaml")
-		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -348,11 +348,11 @@ render:
       match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 		require.NoError(t, err)
 
 		hostsDir := filepath.Join(tmpDir, "hosts.d")
-		err = os.Mkdir(hostsDir, 0755)
+		err = os.Mkdir(hostsDir, 0o755)
 		require.NoError(t, err)
 
 		hostYAML := `
@@ -369,7 +369,7 @@ hosts:
           match_ua: ["$PatternUnknown"]
 `
 		hostConfigPath := filepath.Join(hostsDir, "api.yaml")
-		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+		err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 		require.NoError(t, err)
 
 		logger := zap.NewNop()
@@ -416,11 +416,11 @@ bothit_recache:
   match_ua: ["$UnknownAlias"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create a minimal valid host file
@@ -432,7 +432,7 @@ hosts:
     render:
       timeout: 30s
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	logger := zap.NewNop()
@@ -490,11 +490,11 @@ bothit_recache:
   match_ua: ["$InvalidAlias"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create a minimal valid host file
@@ -506,7 +506,7 @@ hosts:
     render:
       timeout: 30s
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	logger := zap.NewNop()

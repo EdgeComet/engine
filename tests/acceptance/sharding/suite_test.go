@@ -51,9 +51,7 @@ type TestEnvironment struct {
 	TempConfigDir    string
 }
 
-var (
-	testEnv *TestEnvironment
-)
+var testEnv *TestEnvironment
 
 func TestShardingAcceptance(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -125,7 +123,7 @@ func (te *TestEnvironment) StartServices() error {
 	te.MiniRedis = mr
 
 	redisAddr := mr.Addr()
-	//redisAddr := "127.0.0.1:6379"
+	// redisAddr := "127.0.0.1:6379"
 
 	te.RedisClient = redis.NewClient(&redis.Options{
 		Addr:     redisAddr,
@@ -1640,7 +1638,7 @@ func (te *TestEnvironment) UpdateEGDistributionStrategy(strategy string) error {
 			return fmt.Errorf("failed to marshal EG%d config: %w", i, err)
 		}
 
-		if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write EG%d config: %w", i, err)
 		}
 
@@ -1729,7 +1727,7 @@ func (te *TestEnvironment) UpdateCacheTTL(ttl time.Duration) error {
 			return fmt.Errorf("failed to marshal EG%d config: %w", i, err)
 		}
 
-		if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write EG%d config: %w", i, err)
 		}
 
@@ -1796,7 +1794,7 @@ func (te *TestEnvironment) UpdateCacheTTL(ttl time.Duration) error {
 				if updated {
 					updatedHostsData, err := yaml.Marshal(hostsMap)
 					if err == nil {
-						os.WriteFile(hostsFile, updatedHostsData, 0644)
+						os.WriteFile(hostsFile, updatedHostsData, 0o644)
 						if os.Getenv("DEBUG") != "" {
 							fmt.Printf("Updated hosts file: %s with ttl=%s\n", hostsFile, ttlStr)
 						}
@@ -1845,7 +1843,7 @@ func (te *TestEnvironment) UpdateReplicationFactor(rf int) error {
 			return fmt.Errorf("failed to marshal EG%d config: %w", i, err)
 		}
 
-		if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write EG%d config: %w", i, err)
 		}
 
@@ -1893,7 +1891,7 @@ func (te *TestEnvironment) UpdatePushOnRender(enabled bool) error {
 			return fmt.Errorf("failed to marshal EG%d config: %w", i, err)
 		}
 
-		if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write EG%d config: %w", i, err)
 		}
 
@@ -1941,7 +1939,7 @@ func (te *TestEnvironment) UpdateReplicateOnPull(enabled bool) error {
 			return fmt.Errorf("failed to marshal EG%d config: %w", i, err)
 		}
 
-		if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 			return fmt.Errorf("failed to write EG%d config: %w", i, err)
 		}
 
@@ -1991,7 +1989,7 @@ func (te *TestEnvironment) DisableShardingOnEG(egNum int) error {
 		return fmt.Errorf("failed to marshal EG%d config: %w", egNum, err)
 	}
 
-	if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+	if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG%d config: %w", egNum, err)
 	}
 
@@ -2040,7 +2038,7 @@ func (te *TestEnvironment) EnableShardingOnEG(egNum int) error {
 		return fmt.Errorf("failed to marshal EG%d config: %w", egNum, err)
 	}
 
-	if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+	if err := os.WriteFile(configPath, updatedData, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG%d config: %w", egNum, err)
 	}
 

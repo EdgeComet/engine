@@ -426,7 +426,6 @@ func (ro *RenderOrchestrator) selectServiceAndReserveTab(ctx context.Context, re
 		strategy, // selection strategy from config
 		2,        // reservation TTL (seconds)
 	)
-
 	if err != nil {
 		logger.Error("Lua script execution failed",
 			zap.String("request_id", requestID),

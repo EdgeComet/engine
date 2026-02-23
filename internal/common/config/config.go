@@ -102,7 +102,7 @@ func (cm *EGConfigManager) LoadConfig() error {
 		}
 		cm.config.BothitRecache.MatchUA = expanded
 
-		//cm.logger.Debug("Expanded bot aliases in global bothit_recache",
+		// cm.logger.Debug("Expanded bot aliases in global bothit_recache",
 		//	zap.String("config_path", cm.configPath),
 		//	zap.Int("pattern_count", len(cm.config.BothitRecache.MatchUA)))
 	}
@@ -119,7 +119,7 @@ func (cm *EGConfigManager) LoadConfig() error {
 		return fmt.Errorf("failed to expand bot aliases in global config: %w", err)
 	}
 
-	//cm.logger.Debug("Expanded bot aliases in global configuration",
+	// cm.logger.Debug("Expanded bot aliases in global configuration",
 	//	zap.String("config_path", cm.configPath),
 	//	zap.Int("dimension_count", len(cm.config.Render.Dimensions)))
 

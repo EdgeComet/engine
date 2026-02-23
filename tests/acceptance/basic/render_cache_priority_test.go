@@ -8,11 +8,9 @@ import (
 )
 
 var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func() {
-
 	// GROUP 1: BASIC PRIORITY RULES (3 tests)
 
 	Context("Basic Priority Rules", func() {
-
 		It("should NOT overwrite render cache with bypass cache (same status 200)", func() {
 			url := "/priority-test/dual-mode"
 
@@ -133,7 +131,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// GROUP 2: CACHE EXPIRATION INTERACTIONS (3 tests)
 
 	Context("Cache Expiration Interactions", func() {
-
 		It("should NOT overwrite expired render cache (stale cache behavior)", func() {
 			url := "/priority-test/short-ttl?test=expire"
 
@@ -239,7 +236,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// GROUP 3: BYPASS OVERWRITES BYPASS (2 tests)
 
 	Context("Bypass Overwrites Bypass", func() {
-
 		It("should allow bypass to overwrite existing bypass cache", func() {
 			url := "/priority-test/bypass-mode?test=bypass-overwrite"
 
@@ -323,7 +319,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// GROUP 4: CONCURRENT REQUEST SCENARIOS (2 tests)
 
 	Context("Concurrent Request Scenarios", func() {
-
 		It("should handle concurrent requests without corruption", func() {
 			url := "/priority-test/dual-mode?test=concurrent"
 
@@ -402,7 +397,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// GROUP 5: EDGE CASES (2 tests)
 
 	Context("Edge Cases", func() {
-
 		It("should handle cache metadata correctly across different URLs", func() {
 			url1 := "/priority-test/dual-mode?test=url1"
 
@@ -477,7 +471,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// GROUP 6: RENDER SERVICE FAILURE SCENARIOS (Real bypass fallback testing)
 
 	Context("Render Service Failure - Real Fallback Scenarios", func() {
-
 		It("should serve from render cache even when RS fails (no bypass fallback needed)", func() {
 			url := "/priority-test/dual-mode?test=rs-failure"
 
@@ -605,7 +598,6 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 	// ADDITIONAL VALIDATION TESTS
 
 	Context("Cache Metadata Validation", func() {
-
 		It("should preserve cache metadata fields correctly for render cache", func() {
 			url := "/priority-test/dual-mode?test=metadata"
 

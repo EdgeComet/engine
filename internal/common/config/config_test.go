@@ -158,10 +158,10 @@ hosts:
 
 			// Create hosts.d directory and write host file
 			hostsDir := filepath.Join(tempDir, "hosts.d")
-			require.NoError(t, os.MkdirAll(hostsDir, 0755))
+			require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-			require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-			require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+			require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 			// Create config manager
 			logger := zaptest.NewLogger(t)
@@ -285,10 +285,10 @@ hosts:
 
 			// Create hosts.d directory and write host file
 			hostsDir := filepath.Join(tempDir, "hosts.d")
-			require.NoError(t, os.MkdirAll(hostsDir, 0755))
+			require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-			require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-			require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+			require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 			logger := zaptest.NewLogger(t)
 			cm, err := NewEGConfigManager(filepath.Join(tempDir, "edge-gateway.yaml"), logger)
@@ -458,10 +458,10 @@ hosts:
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	cm, err := NewEGConfigManager(filepath.Join(tempDir, "edge-gateway.yaml"), logger)
@@ -558,10 +558,10 @@ hosts:
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	cm, err := NewEGConfigManager(filepath.Join(tempDir, "edge-gateway.yaml"), logger)
@@ -654,10 +654,10 @@ hosts:
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	cm, err := NewEGConfigManager(filepath.Join(tempDir, "edge-gateway.yaml"), logger)
@@ -743,10 +743,10 @@ hosts:
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "edge-gateway.yaml"), []byte(mainConfigYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsConfigYAML), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	cm, err := NewEGConfigManager(filepath.Join(tempDir, "edge-gateway.yaml"), logger)

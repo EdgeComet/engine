@@ -6,7 +6,6 @@ import (
 )
 
 var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
-
 	// Test safe headers:
 	// - Content-Type
 	// - Cache-Control
@@ -18,7 +17,6 @@ var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
 	// - X-Internal-Debug
 
 	Context("Rendered Response Headers", func() {
-
 		It("should include safe headers with correct values in rendered response", func() {
 			url := "/headers-test/render/basic"
 
@@ -69,7 +67,6 @@ var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
 	})
 
 	Context("Cached Response Headers", func() {
-
 		It("should persist safe headers in cache and serve them", func() {
 			url := "/headers-test/render/cache-persist"
 
@@ -147,7 +144,6 @@ var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
 	})
 
 	Context("Bypass Response Headers", func() {
-
 		It("should include safe headers in bypass response", func() {
 			url := "/headers-test/bypass/basic"
 
@@ -213,7 +209,6 @@ var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
 	})
 
 	Context("Edge Cases", func() {
-
 		It("should handle empty safe headers configuration gracefully", func() {
 			url := "/headers-test/render/edge-case"
 
@@ -244,7 +239,6 @@ var _ = Describe("Safe Headers - Response Header Filtering", Serial, func() {
 	})
 
 	Context("Header Edge Cases", func() {
-
 		It("should handle empty header values", func() {
 			url := "/headers-test/render/empty-value/test"
 

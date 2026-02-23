@@ -9,7 +9,6 @@ import (
 )
 
 var _ = Describe("Indexation Extraction", Serial, func() {
-
 	// Helper function to get indexation metadata from cache
 	getIndexationMetadata := func(url string) (indexStatus int, title string, err error) {
 		fullURL := testEnv.Config.TestPagesURL() + url
@@ -36,7 +35,6 @@ var _ = Describe("Indexation Extraction", Serial, func() {
 	}
 
 	Context("Indexable Pages", func() {
-
 		It("should return IndexStatus 1 and extract title for indexable page", func() {
 			url := "/indexation/indexable.html"
 
@@ -85,7 +83,6 @@ var _ = Describe("Indexation Extraction", Serial, func() {
 	})
 
 	Context("Non-Indexable Pages", func() {
-
 		It("should return IndexStatus 3 for page with noindex meta tag", func() {
 			url := "/indexation/noindex.html"
 
@@ -147,7 +144,6 @@ var _ = Describe("Indexation Extraction", Serial, func() {
 	})
 
 	Context("Title Extraction", func() {
-
 		It("should truncate title to 500 characters", func() {
 			url := "/indexation/long_title.html"
 

@@ -56,7 +56,7 @@ metrics:
   namespace: "edgecomet"
 `
 
-	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0o644))
 
 	// Load config
 	cfg, err := LoadRSConfig(configPath)
@@ -129,7 +129,7 @@ metrics:
   namespace: "edgecomet"
 `
 
-	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0o644))
 
 	cfg, err := LoadRSConfig(configPath)
 	require.NoError(t, err)
@@ -341,7 +341,7 @@ metrics:
   namespace: "edgecomet"
 `
 
-	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	configMgr, err := NewRSConfigManager(configPath, logger)
@@ -388,7 +388,7 @@ metrics:
   listen: ":9090"
 `
 
-	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0o644))
 
 	cfg, err := LoadRSConfig(configPath)
 	require.NoError(t, err)
@@ -403,7 +403,7 @@ func TestGetConfigPath(t *testing.T) {
 	configPath := filepath.Join(tempDir, "test_config.yaml")
 
 	// Create test file
-	require.NoError(t, os.WriteFile(configPath, []byte("test: value"), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte("test: value"), 0o644))
 
 	// Test with valid path
 	absPath, err := GetConfigPath(configPath)

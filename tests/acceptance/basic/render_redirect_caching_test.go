@@ -11,9 +11,7 @@ import (
 )
 
 var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
-
 	Context("when rendering pages that return HTTP redirect responses", func() {
-
 		It("should create cache metadata for 301 permanent redirects with empty eg_ids", func() {
 			url := "/stale-test/multi-status?status=301"
 
@@ -131,7 +129,6 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 	})
 
 	Context("when serving cached redirect responses", func() {
-
 		It("should serve 301 redirect from cache on second request", func() {
 			url := "/stale-test/multi-status?status=301&redirect_target=/final"
 
@@ -207,7 +204,6 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 	})
 
 	Context("when comparing redirect caches to regular content caches", func() {
-
 		It("should have empty eg_ids for redirects but non-empty for regular content", func() {
 			redirectURL := "/stale-test/multi-status?status=301"
 			contentURL := "/static/simple.html"
@@ -280,7 +276,6 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 	})
 
 	Context("when handling redirect cache expiration", func() {
-
 		It("should respect TTL for redirect caches", func() {
 			url := "/stale-test/multi-status?status=301"
 
@@ -304,7 +299,6 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 	})
 
 	Context("when mixing regular requests and redirects", func() {
-
 		It("should handle sequence: content → redirect → content", func() {
 			contentURL1 := "/static/simple.html"
 			redirectURL := "/stale-test/multi-status?status=301"

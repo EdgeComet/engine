@@ -58,7 +58,6 @@ var _ = Describe("Error Handling", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("Test Information"))
 			Expect(response.Body).To(ContainSubstring("This page tests how the render service handles JavaScript runtime errors"))
 		})
-
 	})
 
 	Context("when handling edge case scenarios", func() {
@@ -166,7 +165,6 @@ var _ = Describe("Error Handling", Serial, func() {
 			By("Verifying memory-intensive operations completed")
 			Expect(response.Body).To(ContainSubstring("Dynamic Counter"))
 			Expect(response.Body).To(ContainSubstring("Dynamic Form"))
-
 		})
 
 		It("should respect rendering time limits", func() {

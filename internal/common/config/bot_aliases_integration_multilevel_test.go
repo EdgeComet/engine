@@ -43,11 +43,11 @@ bothit_recache:
     - $BingbotDesktop
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Host config with GooglebotSearchDesktop at host level
@@ -72,7 +72,7 @@ hosts:
             - $ChatGPTUserBot
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-example.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -140,11 +140,11 @@ bothit_recache:
     - "*Slurp*"
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Host: alias + custom pattern, Pattern: alias + custom pattern
@@ -170,7 +170,7 @@ hosts:
             - "*CustomBot*"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-example.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -231,11 +231,11 @@ bothit_recache:
     - $BingbotDesktop
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// E-commerce shop with specific bot requirements
@@ -257,7 +257,7 @@ hosts:
         action: "status_403"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-shop.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -329,11 +329,11 @@ bothit_recache:
     - $GooglebotSearchDesktop
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Host1: no bothit_recache (inherits global)
@@ -349,7 +349,7 @@ hosts:
       - match: "/posts/*"
         action: "render"
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "01-blog.yaml"), []byte(host1YAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-blog.yaml"), []byte(host1YAML), 0o644)
 	require.NoError(t, err)
 
 	// Host2: bothit_recache with BingbotDesktop
@@ -373,7 +373,7 @@ hosts:
           match_ua:
             - $ChatGPTUserBot
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "02-shop.yaml"), []byte(host2YAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "02-shop.yaml"), []byte(host2YAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -446,11 +446,11 @@ bothit_recache:
     - $GooglebotSearchDesktop
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Host1: blog with multiple patterns
@@ -478,7 +478,7 @@ hosts:
           match_ua:
             - $PerplexityBot
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "01-blog.yaml"), []byte(host1YAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-blog.yaml"), []byte(host1YAML), 0o644)
 	require.NoError(t, err)
 
 	// Host2: shop with multiple patterns
@@ -503,7 +503,7 @@ hosts:
       - match: "/checkout/*"
         action: "render"
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "02-shop.yaml"), []byte(host2YAML), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "02-shop.yaml"), []byte(host2YAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -608,11 +608,11 @@ bothit_recache:
     - $BingbotDesktop
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	hostYAML := `
@@ -639,7 +639,7 @@ hosts:
         action: "render"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-example.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -712,11 +712,11 @@ bothit_recache:
     - $AnthropicBot
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Host with search engine bots
@@ -745,7 +745,7 @@ hosts:
             - $OpenAISearchBot
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-docs.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config

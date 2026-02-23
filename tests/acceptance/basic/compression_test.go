@@ -153,9 +153,9 @@ var _ = Describe("Cache Compression", Serial, func() {
 
 			// Write uncompressed content to legacy path
 			legacyContent := []byte(response.Body)
-			err = os.MkdirAll(filepath.Dir(absoluteLegacyPath), 0755)
+			err = os.MkdirAll(filepath.Dir(absoluteLegacyPath), 0o755)
 			Expect(err).To(BeNil())
-			err = os.WriteFile(absoluteLegacyPath, legacyContent, 0644)
+			err = os.WriteFile(absoluteLegacyPath, legacyContent, 0o644)
 			Expect(err).To(BeNil())
 
 			// Update metadata to point to legacy uncompressed file

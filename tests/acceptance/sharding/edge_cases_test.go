@@ -15,9 +15,7 @@ import (
 )
 
 var _ = Describe("Edge Cases", Serial, func() {
-	var (
-		normalizer *hash.URLNormalizer
-	)
+	var normalizer *hash.URLNormalizer
 
 	BeforeEach(func() {
 		normalizer = hash.NewURLNormalizer()

@@ -43,8 +43,8 @@ func TestValidateTLSConfig_RequiredFields(t *testing.T) {
 		tmpDir := t.TempDir()
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -185,8 +185,8 @@ func TestValidateTLSConfig_ListenAddress(t *testing.T) {
 			tmpDir := t.TempDir()
 			certPath := filepath.Join(tmpDir, "cert.crt")
 			keyPath := filepath.Join(tmpDir, "key.key")
-			require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-			require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+			require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+			require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 			collector := NewErrorCollector()
 			cfg := makeTLSConfig(
@@ -223,8 +223,8 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -245,8 +245,8 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -265,13 +265,13 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 	t.Run("path with parent traversal", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		subDir := filepath.Join(tmpDir, "subdir")
-		require.NoError(t, os.Mkdir(subDir, 0755))
+		require.NoError(t, os.Mkdir(subDir, 0o755))
 
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -298,8 +298,8 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 		certLink := filepath.Join(tmpDir, "cert_link.crt")
 		keyLink := filepath.Join(tmpDir, "key_link.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 		require.NoError(t, os.Symlink(certPath, certLink))
 		require.NoError(t, os.Symlink(keyPath, keyLink))
 
@@ -320,7 +320,7 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 	t.Run("missing cert file returns error", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		keyPath := filepath.Join(tmpDir, "key.key")
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -347,7 +347,7 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 	t.Run("missing key file returns error", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		certPath := filepath.Join(tmpDir, "cert.crt")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -380,8 +380,8 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0000))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o000))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -410,8 +410,8 @@ func TestValidateTLSConfig_FileValidation(t *testing.T) {
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
 
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 
 		collector := NewErrorCollector()
 		cfg := makeTLSConfig(
@@ -434,8 +434,8 @@ func TestValidateTLSConfig_PortConflicts(t *testing.T) {
 		tmpDir := t.TempDir()
 		certPath := filepath.Join(tmpDir, "cert.crt")
 		keyPath := filepath.Join(tmpDir, "key.key")
-		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0644))
-		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0644))
+		require.NoError(t, os.WriteFile(certPath, []byte("cert"), 0o644))
+		require.NoError(t, os.WriteFile(keyPath, []byte("key"), 0o644))
 		return tmpDir, certPath, keyPath
 	}
 

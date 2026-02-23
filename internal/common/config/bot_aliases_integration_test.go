@@ -406,10 +406,10 @@ hosts:
 
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0644))
+	require.NoError(t, os.WriteFile(configPath, []byte(configYAML), 0o644))
 
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 	hostsYAML := `hosts:
   - id: 1
     domain: "test.com"
@@ -423,7 +423,7 @@ hosts:
           height: 667
           render_ua: "Mozilla/5.0"
           match_ua: ["*Bot*"]`
-	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostsYAML), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostsYAML), 0o644))
 
 	logger := zaptest.NewLogger(t)
 	cm, err := NewEGConfigManager(configPath, logger)

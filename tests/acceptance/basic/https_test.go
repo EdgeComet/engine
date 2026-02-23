@@ -25,7 +25,6 @@ import (
 )
 
 var _ = Describe("HTTPS TLS Support", Serial, func() {
-
 	Context("when TLS is disabled (default)", func() {
 		It("should serve HTTP on the configured port", func() {
 			By("Making HTTP request to the Edge Gateway")
@@ -382,12 +381,12 @@ hosts:
 
 	// Write EG config
 	egConfigPath := filepath.Join(configDir, "edge-gateway.yaml")
-	err = os.WriteFile(egConfigPath, []byte(egConfig), 0644)
+	err = os.WriteFile(egConfigPath, []byte(egConfig), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create hosts.d directory and host config
 	hostsDir := filepath.Join(configDir, "hosts.d")
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	Expect(err).NotTo(HaveOccurred())
 
 	// testPagesURL is passed via render requests, not stored in host config
@@ -413,7 +412,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-localhost.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Start Edge Gateway
@@ -605,12 +604,12 @@ hosts:
 `, httpPort, httpsListen, certPath, keyPath, findAvailablePort())
 
 	configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	err := os.WriteFile(configPath, []byte(config), 0644)
+	err := os.WriteFile(configPath, []byte(config), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create hosts.d directory with minimal host file
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Add a minimal host config to pass host validation
@@ -634,7 +633,7 @@ hosts:
             - "*"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-test.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	return configPath
@@ -669,12 +668,12 @@ hosts:
 `, httpListen, httpsListen, certPath, keyPath, findAvailablePort())
 
 	configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	err := os.WriteFile(configPath, []byte(config), 0644)
+	err := os.WriteFile(configPath, []byte(config), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create hosts.d directory with minimal host file
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Add a minimal host config to pass host validation
@@ -698,7 +697,7 @@ hosts:
             - "*"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-test.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	return configPath

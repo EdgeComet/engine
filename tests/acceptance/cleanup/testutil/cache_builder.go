@@ -28,13 +28,13 @@ func (cb *CacheBuilder) CreateTestDirectory(hostID int, ageMinutes int) string {
 		timestamp.Format("04"),
 	)
 
-	if err := os.MkdirAll(path, 0755); err != nil {
+	if err := os.MkdirAll(path, 0o755); err != nil {
 		panic(fmt.Sprintf("Failed to create test directory: %v", err))
 	}
 
 	// Create test files
-	os.WriteFile(filepath.Join(path, "test1.html"), []byte("<html>test1</html>"), 0644)
-	os.WriteFile(filepath.Join(path, "test2.html"), []byte("<html>test2</html>"), 0644)
+	os.WriteFile(filepath.Join(path, "test1.html"), []byte("<html>test1</html>"), 0o644)
+	os.WriteFile(filepath.Join(path, "test2.html"), []byte("<html>test2</html>"), 0o644)
 
 	return path
 }
@@ -45,14 +45,14 @@ func (cb *CacheBuilder) CreateNestedDirectory(hostID int, ageMinutes int) string
 
 	// Create nested structure: subdir1/subdir2/
 	nestedPath := filepath.Join(minutePath, "subdir1", "subdir2")
-	if err := os.MkdirAll(nestedPath, 0755); err != nil {
+	if err := os.MkdirAll(nestedPath, 0o755); err != nil {
 		panic(fmt.Sprintf("Failed to create nested directory: %v", err))
 	}
 
 	// Create files at different levels
-	os.WriteFile(filepath.Join(minutePath, "root.html"), []byte("root level file"), 0644)
-	os.WriteFile(filepath.Join(minutePath, "subdir1", "level1.html"), []byte("level 1 file"), 0644)
-	os.WriteFile(filepath.Join(nestedPath, "level2.html"), []byte("level 2 file"), 0644)
+	os.WriteFile(filepath.Join(minutePath, "root.html"), []byte("root level file"), 0o644)
+	os.WriteFile(filepath.Join(minutePath, "subdir1", "level1.html"), []byte("level 1 file"), 0o644)
+	os.WriteFile(filepath.Join(nestedPath, "level2.html"), []byte("level 2 file"), 0o644)
 
 	return minutePath
 }

@@ -79,11 +79,11 @@ func TestValidateConfiguration_WithInvalidYAML(t *testing.T) {
 	err := os.WriteFile(configPath, []byte(`server:
   listen: ":8080"
   invalid: [unclosed
-`), 0644)
+`), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts.d directory with minimal valid host config
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -96,7 +96,7 @@ func TestValidateConfiguration_WithInvalidYAML(t *testing.T) {
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -169,11 +169,11 @@ hosts:
   include: "hosts.d/"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts.d directory
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -186,7 +186,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -268,11 +268,11 @@ hosts:
   include: "hosts.d/"
 `, tt.port)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -285,7 +285,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -358,17 +358,16 @@ hosts:
   include: "hosts.d/"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts.d directory
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts: []`), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts: []`), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
-
 	// Empty hosts file returns error from validator (not validation error)
 	if err != nil {
 		assert.Contains(t, err.Error(), "no hosts loaded", "Expected 'no hosts loaded' error")
@@ -564,13 +563,13 @@ hosts:
   include: "hosts.d/"
 `
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(tt.hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(tt.hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -710,17 +709,16 @@ hosts:
         action: "render"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts.d directory
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
-
 	// Validator might return error if YAML is completely invalid
 	// Or it might return validation errors in result
 	if err != nil {
@@ -816,16 +814,15 @@ hosts:
         action: "render"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
-
 	if err != nil {
 		assert.Contains(t, err.Error(), "no hosts loaded")
 		return
@@ -918,16 +915,15 @@ hosts:
         action: "render"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
-
 	if err != nil {
 		assert.Contains(t, err.Error(), "no hosts loaded")
 		return
@@ -1020,13 +1016,13 @@ hosts:
         action: "render"
 `
 
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts.d directory
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -1168,13 +1164,13 @@ hosts:
           render_ua: "Mobile/5.0"
 `, tt.unmatchedDimValue)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -1293,13 +1289,13 @@ hosts:
       %s
 `, tt.unmatchedDimValue, tt.dimensionsConfig)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -1515,13 +1511,13 @@ hosts:
           render_ua: "Mozilla/5.0"
 `, tt.eventsConfig)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -1653,13 +1649,13 @@ hosts:
         render:%s
 `, tt.eventsConfig)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -1876,13 +1872,13 @@ hosts:
           render_ua: "Mozilla/5.0"
 `, tt.cacheConfig)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2002,11 +1998,11 @@ hosts:
   include: "hosts.d/"
 `, tt.selectionStrategy)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory with minimal valid host config
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -2019,7 +2015,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2170,7 +2166,7 @@ hosts:
   include: "hosts.d/"
 `, tt.serverTimeout, tt.bypassTimeout)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Write hosts config
@@ -2188,9 +2184,9 @@ hosts:
           render_ua: "Mozilla/5.0"`, tt.hostRenderTimeout)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2323,11 +2319,11 @@ metrics:
 hosts:
   include: "hosts.d/"
 `
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 
 			// Write hosts config with stale_ttl
@@ -2349,7 +2345,7 @@ hosts:
           height: 1080
           render_ua: "Mozilla/5.0"`, tt.staleTTL)
 
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2475,11 +2471,11 @@ hosts:
   include: "hosts.d/"
 `, tt.logLevel, tt.logFormat)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts.d directory
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -2492,7 +2488,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2682,10 +2678,10 @@ hosts:
   include: "hosts.d/"
 `, tt.basePath)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -2698,7 +2694,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2801,7 +2797,7 @@ func TestValidateStorageConfig_PathIsFile_NotDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, "notadirectory")
 
-	err := os.WriteFile(tempFile, []byte("test"), 0644)
+	err := os.WriteFile(tempFile, []byte("test"), 0o644)
 	require.NoError(t, err)
 
 	cfg := &configtypes.EgConfig{
@@ -2852,10 +2848,10 @@ func TestValidateStorageConfig_ReadOnlyDirectory(t *testing.T) {
 
 	tempDir := t.TempDir()
 	roDir := filepath.Join(tempDir, "readonly")
-	require.NoError(t, os.MkdirAll(roDir, 0755))
+	require.NoError(t, os.MkdirAll(roDir, 0o755))
 
-	require.NoError(t, os.Chmod(roDir, 0555))
-	defer os.Chmod(roDir, 0755)
+	require.NoError(t, os.Chmod(roDir, 0o555))
+	defer os.Chmod(roDir, 0o755)
 
 	cfg := &configtypes.EgConfig{
 		Storage: configtypes.GlobalStorageConfig{
@@ -2930,7 +2926,7 @@ func TestValidateConfiguration_WithStorageBasePath(t *testing.T) {
 			basePath: func() string {
 				tmpDir := t.TempDir()
 				filePath := filepath.Join(tmpDir, "notadirectory")
-				os.WriteFile(filePath, []byte("test"), 0644)
+				os.WriteFile(filePath, []byte("test"), 0o644)
 				return filePath
 			}(),
 			setupFunc: func(t *testing.T, basePath string) {
@@ -2964,10 +2960,10 @@ hosts:
   include: "hosts.d/"
 `, tt.basePath)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -2980,7 +2976,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -3162,7 +3158,7 @@ hosts:
   include: "hosts.d/"
 `, tt.serverTimeout, tt.renderCacheTTL, tt.staleTTL, tt.bypassTimeout, tt.bypassCacheTTL)
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			hostsContent := fmt.Sprintf(`hosts:
@@ -3178,9 +3174,9 @@ hosts:
           height: 1080
           render_ua: "Mozilla/5.0"`, tt.renderTimeout)
 
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -3326,7 +3322,7 @@ metrics:
 hosts:
   include: "hosts.d/"
 `
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
 			// Write host config with test domain
@@ -3345,9 +3341,9 @@ hosts:
           render_ua: "Mozilla/5.0"
 `, tt.domains)
 
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -3411,7 +3407,7 @@ metrics:
 hosts:
   include: "hosts.d/"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// Write first host
@@ -3445,11 +3441,11 @@ hosts:
           render_ua: "Mozilla/5.0"
 `
 
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-host1.yaml"), []byte(host1Content), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-host1.yaml"), []byte(host1Content), 0o644)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "02-host2.yaml"), []byte(host2Content), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "02-host2.yaml"), []byte(host2Content), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -3507,7 +3503,7 @@ metrics:
 hosts:
   include: "hosts.d/"
 `
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
 	require.NoError(t, err)
 
 	// First host with multiple domains
@@ -3541,11 +3537,11 @@ hosts:
           render_ua: "Mozilla/5.0"
 `
 
-	err = os.MkdirAll(hostsDir, 0755)
+	err = os.MkdirAll(hostsDir, 0o755)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "01-host1.yaml"), []byte(host1Content), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-host1.yaml"), []byte(host1Content), 0o644)
 	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(hostsDir, "02-host2.yaml"), []byte(host2Content), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "02-host2.yaml"), []byte(host2Content), 0o644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -3711,10 +3707,10 @@ hosts:
 
 ` + tt.eventLogging
 
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			require.NoError(t, err)
 
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			require.NoError(t, err)
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(`hosts:
   - id: 1
@@ -3727,7 +3723,7 @@ hosts:
           id: 1
           width: 1920
           height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+          render_ua: "Mozilla/5.0"`), 0o644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)

@@ -452,7 +452,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 
 			// Create hosts.d directory with minimal host file for tests
 			hostsDir := filepath.Join(tempDir, "hosts.d")
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a minimal valid host file so config loads past host validation
@@ -469,7 +469,7 @@ hosts:
         ttl: 1h
 `
 			hostFilePath := filepath.Join(hostsDir, "test-host.yaml")
-			err = os.WriteFile(hostFilePath, []byte(minimalHostConfig), 0644)
+			err = os.WriteFile(hostFilePath, []byte(minimalHostConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a no-op logger for config loading tests
@@ -529,7 +529,7 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config with unknown bot aliases")
@@ -601,12 +601,12 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(mainConfigContent), 0644)
+			err := os.WriteFile(configPath, []byte(mainConfigContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Creating hosts directory with invalid alias")
 			hostsDir := filepath.Join(tempDir, "hosts.d")
-			err = os.MkdirAll(hostsDir, 0755)
+			err = os.MkdirAll(hostsDir, 0o755)
 			Expect(err).NotTo(HaveOccurred())
 
 			hostConfigContent := `
@@ -630,7 +630,7 @@ hosts:
             - $InvalidBotAlias
 `
 			hostConfigPath := filepath.Join(hostsDir, "error-host.yaml")
-			err = os.WriteFile(hostConfigPath, []byte(hostConfigContent), 0644)
+			err = os.WriteFile(hostConfigPath, []byte(hostConfigContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config with unknown alias in host config")
@@ -697,7 +697,7 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config with wrong case")
@@ -762,7 +762,7 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config")
@@ -835,7 +835,7 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config")
@@ -909,7 +909,7 @@ hosts:
   include: "hosts.d/"
 `
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
-			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			err := os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Attempting to load config with all valid aliases")

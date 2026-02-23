@@ -9,9 +9,7 @@ import (
 )
 
 var _ = Describe("Storage Configuration Validation", func() {
-	var (
-		tempDir string
-	)
+	var tempDir string
 
 	BeforeEach(func() {
 		var err error
@@ -28,7 +26,7 @@ var _ = Describe("Storage Configuration Validation", func() {
 	Context("with valid storage configuration", func() {
 		It("should validate config with existing directory", func() {
 			cacheDir := filepath.Join(tempDir, "cache")
-			err := os.MkdirAll(cacheDir, 0755)
+			err := os.MkdirAll(cacheDir, 0o755)
 			Expect(err).NotTo(HaveOccurred())
 
 			configPath := createTestConfig(tempDir, cacheDir)
@@ -60,7 +58,7 @@ var _ = Describe("Storage Configuration Validation", func() {
 			configPath := filepath.Join(tempDir, "edge-gateway.yaml")
 			hostsDir := filepath.Join(tempDir, "hosts.d")
 
-			err := os.MkdirAll(hostsDir, 0755)
+			err := os.MkdirAll(hostsDir, 0o755)
 			Expect(err).NotTo(HaveOccurred())
 
 			configContent := `internal:
@@ -76,7 +74,7 @@ storage:
 hosts:
   include: "hosts.d/"
 `
-			err = os.WriteFile(configPath, []byte(configContent), 0644)
+			err = os.WriteFile(configPath, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			hostConfigContent := `hosts:
@@ -92,7 +90,7 @@ hosts:
           height: 1080
           render_ua: "Mozilla/5.0"
 `
-			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0644)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cmd := createConfigTestCommand("-c", configPath, "-t")
@@ -116,7 +114,7 @@ hosts:
 
 		It("should fail validation with file path instead of directory", func() {
 			filePath := filepath.Join(tempDir, "not-a-directory")
-			err := os.WriteFile(filePath, []byte("test"), 0644)
+			err := os.WriteFile(filePath, []byte("test"), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			configPath := createTestConfig(tempDir, filePath)
@@ -134,7 +132,7 @@ func createTestConfig(baseDir, storagePath string) string {
 	configPath := filepath.Join(baseDir, "edge-gateway.yaml")
 	hostsDir := filepath.Join(baseDir, "hosts.d")
 
-	err := os.MkdirAll(hostsDir, 0755)
+	err := os.MkdirAll(hostsDir, 0o755)
 	Expect(err).NotTo(HaveOccurred())
 
 	configContent := `internal:
@@ -150,7 +148,7 @@ storage:
 hosts:
   include: "hosts.d/"
 `
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	err = os.WriteFile(configPath, []byte(configContent), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	hostConfigContent := `hosts:
@@ -166,7 +164,7 @@ hosts:
           height: 1080
           render_ua: "Mozilla/5.0"
 `
-	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0644)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 
 	return configPath

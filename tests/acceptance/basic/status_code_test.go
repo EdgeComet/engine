@@ -135,7 +135,6 @@ var _ = Describe("HTTP Status Code Handling", Serial, func() {
 				Expect(response.Body).NotTo(BeEmpty())
 			}
 		})
-
 	})
 
 	Context("when testing concurrent requests with different status codes", func() {

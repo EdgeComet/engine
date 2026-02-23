@@ -149,13 +149,13 @@ func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 
 	// Write EG config
 	egPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	if err := os.WriteFile(egPath, egData, 0644); err != nil {
+	if err := os.WriteFile(egPath, egData, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG config: %w", err)
 	}
 
 	// Write RS config
 	rsPath := filepath.Join(tempDir, "render-service.yaml")
-	if err := os.WriteFile(rsPath, rsData, 0644); err != nil {
+	if err := os.WriteFile(rsPath, rsData, 0o644); err != nil {
 		return fmt.Errorf("failed to write RS config: %w", err)
 	}
 
@@ -164,7 +164,7 @@ func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 	hostsDestDir := filepath.Join(tempDir, "hosts.d")
 
 	// Create destination directory
-	if err := os.MkdirAll(hostsDestDir, 0755); err != nil {
+	if err := os.MkdirAll(hostsDestDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create hosts.d directory: %w", err)
 	}
 
@@ -182,7 +182,7 @@ func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 		}
 
 		destFile := filepath.Join(hostsDestDir, filepath.Base(srcFile))
-		if err := os.WriteFile(destFile, data, 0644); err != nil {
+		if err := os.WriteFile(destFile, data, 0o644); err != nil {
 			return fmt.Errorf("failed to write host file %s: %w", destFile, err)
 		}
 	}

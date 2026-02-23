@@ -406,17 +406,17 @@ hosts:
 
 			// Create global config file
 			globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-			err := os.WriteFile(globalConfigPath, []byte(tt.globalYAML), 0644)
+			err := os.WriteFile(globalConfigPath, []byte(tt.globalYAML), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts directory
 			hostsDir := filepath.Join(tmpDir, "hosts.d")
-			err = os.Mkdir(hostsDir, 0755)
+			err = os.Mkdir(hostsDir, 0o755)
 			require.NoError(t, err)
 
 			// Create host config file
 			hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-			err = os.WriteFile(hostConfigPath, []byte(tt.hostYAML), 0644)
+			err = os.WriteFile(hostConfigPath, []byte(tt.hostYAML), 0o644)
 			require.NoError(t, err)
 
 			// Create config manager and load config
@@ -470,12 +470,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with specific filename
@@ -490,7 +490,7 @@ hosts:
       match_ua: ["$UnknownBot"]
 `
 	hostConfigPath := filepath.Join(hostsDir, "02-shop.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -533,12 +533,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create first host file
@@ -553,7 +553,7 @@ hosts:
       match_ua: ["$GooglebotSearchDesktop"]
 `
 	host1Path := filepath.Join(hostsDir, "01-site1.yaml")
-	err = os.WriteFile(host1Path, []byte(host1YAML), 0644)
+	err = os.WriteFile(host1Path, []byte(host1YAML), 0o644)
 	require.NoError(t, err)
 
 	// Create second host file
@@ -568,7 +568,7 @@ hosts:
       match_ua: ["$BingbotMobile"]
 `
 	host2Path := filepath.Join(hostsDir, "02-site2.yaml")
-	err = os.WriteFile(host2Path, []byte(host2YAML), 0644)
+	err = os.WriteFile(host2Path, []byte(host2YAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -627,12 +627,12 @@ bothit_recache:
   interval: 6h
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with different alias
@@ -647,7 +647,7 @@ hosts:
       match_ua: ["$AnthropicBot"]
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -726,12 +726,12 @@ render:
       match_ua: ["*"]
 `
 			globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-			err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+			err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 			require.NoError(t, err)
 
 			// Create hosts directory
 			hostsDir := filepath.Join(tmpDir, "hosts.d")
-			err = os.Mkdir(hostsDir, 0755)
+			err = os.Mkdir(hostsDir, 0o755)
 			require.NoError(t, err)
 
 			// Create host config with test alias
@@ -746,7 +746,7 @@ hosts:
       match_ua: ["%s"]
 `, tt.alias)
 			hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-			err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+			err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 			require.NoError(t, err)
 
 			// Load config

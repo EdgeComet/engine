@@ -12,10 +12,8 @@ import (
 )
 
 var _ = Describe("Bypass Cache", Serial, func() {
-
 	// CATEGORY 1: NORMAL FLOW - Basic Operations
 	Context("Normal Flow - Basic Operations", func() {
-
 		It("should cache on miss and serve from cache on hit", func() {
 			url := "/bypass-test/default"
 
@@ -147,7 +145,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 2: CONFIGURATION HIERARCHY
 	Context("Configuration Hierarchy - Deep Merge", func() {
-
 		PIt("should use pattern-level override for TTL", func() {
 			url := "/bypass-test/partial-override"
 
@@ -180,7 +177,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 3: EDGE CASES
 	Context("Edge Cases", func() {
-
 		It("should handle concurrent requests without errors", func() {
 			url := "/bypass-test/default?concurrent=test"
 
@@ -276,7 +272,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 4: CACHE METADATA VALIDATION
 	Context("Cache Metadata Validation", func() {
-
 		It("should store correct metadata fields", func() {
 			url := "/bypass-test/default"
 
@@ -358,7 +353,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 5: PERFORMANCE VALIDATION
 	Context("Performance Validation", func() {
-
 		It("should serve cache hit faster than cache miss", func() {
 			url := "/bypass-test/default?perf=test"
 
@@ -383,7 +377,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 6: INTEGRATION WITH OTHER FEATURES
 	Context("Integration with Other Features", func() {
-
 		It("should use first matching URL pattern", func() {
 			// The specific pattern /bypass-test/default should match before catch-all
 			url := "/bypass-test/default?pattern=priority"
@@ -423,7 +416,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 7: BYPASS ENTRY POINTS
 	Context("Bypass Entry Points", func() {
-
 		It("should trigger bypass via explicit bypass action", func() {
 			url := "/bypass-test/default"
 
@@ -457,7 +449,6 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 	// CATEGORY 8: SPECIAL SCENARIOS
 	Context("Special Scenarios", func() {
-
 		It("should handle query parameters with special characters", func() {
 			url := "/bypass-test/default?q=hello%20world&search=test%2Bvalue"
 

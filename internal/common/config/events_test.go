@@ -57,11 +57,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that has no events (should inherit)
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -80,7 +80,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()
@@ -149,11 +149,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that has custom events
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -175,7 +175,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()
@@ -237,11 +237,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that has empty events
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -261,7 +261,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()
@@ -320,11 +320,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that has no events
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -343,7 +343,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()
@@ -410,11 +410,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that overrides only wait_for
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -435,7 +435,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()
@@ -500,11 +500,11 @@ hosts:
 `
 
 	mainConfigPath := filepath.Join(tempDir, "edge-gateway.yaml")
-	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0644))
+	require.NoError(t, os.WriteFile(mainConfigPath, []byte(mainConfig), 0o644))
 
 	// Create hosts directory with host that overrides only additional_wait
 	hostsDir := filepath.Join(tempDir, "hosts.d")
-	require.NoError(t, os.MkdirAll(hostsDir, 0755))
+	require.NoError(t, os.MkdirAll(hostsDir, 0o755))
 
 	hostConfig := `
 hosts:
@@ -525,7 +525,7 @@ hosts:
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
-	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0644))
+	require.NoError(t, os.WriteFile(hostConfigPath, []byte(hostConfig), 0o644))
 
 	// Load config
 	logger := zap.NewNop()

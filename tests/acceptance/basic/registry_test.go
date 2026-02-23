@@ -37,7 +37,7 @@ var _ = Describe("Service Registry Tests", Serial, func() {
 			By("Listing all service:render:* keys")
 			keys, err := testEnv.RedisClient.Keys(ctx, "service:render:*").Result()
 			Expect(err).To(BeNil(), "Should list service keys")
-			//fmt.Printf("\nFound service keys: %v\n", keys)
+			// fmt.Printf("\nFound service keys: %v\n", keys)
 			Expect(keys).To(ContainElement(serviceKey), "Our test key should be in the list")
 		})
 
@@ -62,7 +62,7 @@ var _ = Describe("Service Registry Tests", Serial, func() {
 			Expect(err).To(BeNil())
 			fmt.Printf("All service:render:* keys (%d): %v\n", len(keys), keys)
 
-			//By("Listing ALL keys in miniredis")
+			// By("Listing ALL keys in miniredis")
 			_, err = testEnv.RedisClient.Keys(ctx, "*").Result()
 			Expect(err).To(BeNil())
 			/*fmt.Printf("\nAll keys in miniredis (%d):\n", len(allKeys))

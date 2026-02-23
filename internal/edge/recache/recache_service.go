@@ -426,7 +426,6 @@ func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, reques
 		strategy, // selection strategy from config
 		2,
 	)
-
 	if err != nil {
 		rs.logger.Error("Lua script execution failed", zap.Error(err))
 		return nil, fmt.Errorf("failed to execute service selection script: %w", err)

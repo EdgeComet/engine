@@ -190,37 +190,37 @@ func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 
 	// Create EG1 config directory
 	eg1Dir := filepath.Join(tempDir, "eg1")
-	if err := os.MkdirAll(eg1Dir, 0755); err != nil {
+	if err := os.MkdirAll(eg1Dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create EG1 directory: %w", err)
 	}
 	eg1Path := filepath.Join(eg1Dir, "edge-gateway.yaml")
-	if err := os.WriteFile(eg1Path, eg1Data, 0644); err != nil {
+	if err := os.WriteFile(eg1Path, eg1Data, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG1 config: %w", err)
 	}
 
 	// Create EG2 config directory
 	eg2Dir := filepath.Join(tempDir, "eg2")
-	if err := os.MkdirAll(eg2Dir, 0755); err != nil {
+	if err := os.MkdirAll(eg2Dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create EG2 directory: %w", err)
 	}
 	eg2Path := filepath.Join(eg2Dir, "edge-gateway.yaml")
-	if err := os.WriteFile(eg2Path, eg2Data, 0644); err != nil {
+	if err := os.WriteFile(eg2Path, eg2Data, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG2 config: %w", err)
 	}
 
 	// Create EG3 config directory
 	eg3Dir := filepath.Join(tempDir, "eg3")
-	if err := os.MkdirAll(eg3Dir, 0755); err != nil {
+	if err := os.MkdirAll(eg3Dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create EG3 directory: %w", err)
 	}
 	eg3Path := filepath.Join(eg3Dir, "edge-gateway.yaml")
-	if err := os.WriteFile(eg3Path, eg3Data, 0644); err != nil {
+	if err := os.WriteFile(eg3Path, eg3Data, 0o644); err != nil {
 		return fmt.Errorf("failed to write EG3 config: %w", err)
 	}
 
 	// Write RS config in root temp dir
 	rsPath := filepath.Join(tempDir, "render-service.yaml")
-	if err := os.WriteFile(rsPath, rsData, 0644); err != nil {
+	if err := os.WriteFile(rsPath, rsData, 0o644); err != nil {
 		return fmt.Errorf("failed to write RS config: %w", err)
 	}
 
@@ -251,7 +251,7 @@ func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 // copyHostsDir copies hosts.d directory
 func (b *ConfigBuilder) copyHostsDir(srcDir, destDir string) error {
 	// Create destination directory
-	if err := os.MkdirAll(destDir, 0755); err != nil {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create hosts.d directory: %w", err)
 	}
 
@@ -269,7 +269,7 @@ func (b *ConfigBuilder) copyHostsDir(srcDir, destDir string) error {
 		}
 
 		destFile := filepath.Join(destDir, filepath.Base(srcFile))
-		if err := os.WriteFile(destFile, data, 0644); err != nil {
+		if err := os.WriteFile(destFile, data, 0o644); err != nil {
 			return fmt.Errorf("failed to write host file %s: %w", destFile, err)
 		}
 	}

@@ -47,7 +47,8 @@ type ChromePool struct {
 
 // NewChromePool creates a new Chrome pool with the specified configuration
 func NewChromePool(config *Config, registry *registry.ServiceRegistry, serviceInfo *registry.ServiceInfo,
-	metricsCollector *metrics.MetricsCollector, tabManager *registry.TabManager, hostname string, logger *zap.Logger) (*ChromePool, error) {
+	metricsCollector *metrics.MetricsCollector, tabManager *registry.TabManager, hostname string, logger *zap.Logger,
+) (*ChromePool, error) {
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}

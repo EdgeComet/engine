@@ -8,10 +8,8 @@ import (
 )
 
 var _ = Describe("Tracking Parameter Stripping", Serial, func() {
-
 	// SCENARIO 1: Basic Stripping (Global Config)
 	Context("Basic Stripping - Global Defaults", func() {
-
 		It("should strip utm_source and preserve other parameters", func() {
 			url := "/tracking-params/?utm_source=google&product=123"
 
@@ -82,7 +80,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 2: Custom Parameters (Host Config)
 	Context("Custom Parameters - Host Level", func() {
-
 		It("should strip custom_ref parameter from host config", func() {
 			url := "/tracking-params/?custom_ref=twitter&product=123"
 
@@ -118,7 +115,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 3: Pattern Override (URL Pattern Config)
 	Context("Pattern Override - params replaces all", func() {
-
 		It("should strip only special_only parameter when override is configured", func() {
 			url := "/tracking-params/special/page?utm_source=google&special_only=xyz&product=123"
 
@@ -138,7 +134,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 4: Disabled Stripping
 	Context("Disabled Stripping - strip: false", func() {
-
 		It("should not strip any parameters when stripping is disabled", func() {
 			url := "/tracking-params/disabled/page?utm_source=google&custom_ref=twitter&product=123"
 
@@ -158,7 +153,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 5: Wildcard Patterns
 	Context("Wildcard Patterns", func() {
-
 		It("should strip all utm_* parameters with wildcard", func() {
 			url := "/tracking-params/wildcard-test/page?utm_source=x&utm_medium=y&utm_campaign=z&utm_term=a&product=123"
 
@@ -214,7 +208,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 6: Regex Patterns
 	Context("Regex Patterns", func() {
-
 		It("should strip parameters matching regex pattern", func() {
 			url := "/tracking-params/?custom_123=x&custom_456=y&custom_abc=z&product=123"
 
@@ -235,7 +228,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 7: Case Insensitivity
 	Context("Case Insensitivity", func() {
-
 		It("should strip UTM_SOURCE (uppercase) matching utm_source", func() {
 			url := "/tracking-params/?UTM_SOURCE=google&product=123"
 
@@ -289,7 +281,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 8: Cache Consistency
 	Context("Cache Consistency", func() {
-
 		It("should use same cache entry for URLs with different tracking params", func() {
 			baseURL := "/tracking-params/cache-test/page"
 			product := "?product=xyz"
@@ -354,7 +345,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 9: Bypass Path
 	Context("Bypass Path Integration", func() {
-
 		It("should use stripped URL for bypass requests", func() {
 			// Assuming /api/* triggers bypass action
 			url := "/tracking-params/api/data?utm_source=google&key=value"
@@ -396,7 +386,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 10: Three-Level Merge
 	Context("Three-Level Configuration Merge", func() {
-
 		It("should merge global, host, and pattern-level parameters", func() {
 			// This test assumes global defaults + host custom params + pattern params
 			url := "/tracking-params/test?global_param=1&host_param=2&pattern_param=3&keep=4"
@@ -416,7 +405,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 11: Error Handling
 	Context("Error Handling", func() {
-
 		It("should continue with original URL when URL parsing fails", func() {
 			// Testing edge case: malformed URL should not crash system
 			url := "/tracking-params/?product=123"
@@ -465,7 +453,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// SCENARIO 12: All Built-in Defaults
 	Context("All Built-in Default Parameters", func() {
-
 		It("should strip all built-in tracking parameters", func() {
 			url := "/tracking-params/?utm_source=x&utm_content=y&utm_medium=z&utm_campaign=a&utm_term=b&gclid=c&fbclid=d&msclkid=e&_ga=f&_gl=g&mc_cid=h&mc_eid=i&_ke=j&ref=k&referrer=l&product=m"
 
@@ -519,7 +506,6 @@ var _ = Describe("Tracking Parameter Stripping", Serial, func() {
 
 	// ADDITIONAL: Parameter Order Independence
 	Context("Parameter Order Independence", func() {
-
 		It("should normalize parameter order consistently", func() {
 			url1 := "/tracking-params/?a=1&b=2&utm_source=google"
 			url2 := "/tracking-params/?b=2&a=1&utm_source=facebook"

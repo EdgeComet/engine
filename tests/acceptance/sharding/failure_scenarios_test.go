@@ -15,9 +15,7 @@ import (
 )
 
 var _ = Describe("Failure Scenarios", Serial, func() {
-	var (
-		normalizer *hash.URLNormalizer
-	)
+	var normalizer *hash.URLNormalizer
 
 	BeforeEach(func() {
 		normalizer = hash.NewURLNormalizer()

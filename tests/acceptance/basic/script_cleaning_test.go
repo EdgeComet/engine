@@ -8,9 +8,7 @@ import (
 )
 
 var _ = Describe("Script Cleaning", Serial, func() {
-
 	Context("when strip_scripts is enabled (default)", func() {
-
 		It("should remove executable scripts", func() {
 			By("Requesting a page with mixed scripts")
 			resp := testEnv.RequestRender("/script-cleaning/mixed-scripts.html")
@@ -156,7 +154,6 @@ var _ = Describe("Script Cleaning", Serial, func() {
 	})
 
 	Context("with cache interaction", func() {
-
 		It("should serve script-cleaned content from cache", func() {
 			url := "/script-cleaning/mixed-scripts.html"
 
@@ -180,7 +177,6 @@ var _ = Describe("Script Cleaning", Serial, func() {
 	})
 
 	Context("when strip_scripts is disabled", func() {
-
 		It("should keep all scripts including executable ones", func() {
 			By("Requesting a page with scripts disabled for stripping")
 			resp := testEnv.RequestRender("/script-cleaning/keep-scripts/mixed-scripts.html")

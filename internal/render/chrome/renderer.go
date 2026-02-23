@@ -268,7 +268,8 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 
 // buildTasks creates the chromedp task sequence for rendering
 func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.RenderResponse, blocklist *Blocklist,
-	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Tasks {
+	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector,
+) chromedp.Tasks {
 	timeOrigin := time.Now().UnixMilli()
 	targetOrigin := extractOrigin(req.URL)
 
@@ -620,7 +621,6 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 						}
 					})()
 				`, &statusCodeResult).Do(ctx)
-
 				if err != nil {
 					ci.logger.Warn("Failed to retrieve status code via Performance API fallback",
 						zap.String("request_id", req.RequestID),

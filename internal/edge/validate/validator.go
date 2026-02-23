@@ -1086,7 +1086,7 @@ func validateStorageConfig(cfg *configtypes.EgConfig, hostsConfig *configtypes.H
 	fileInfo, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(absPath, 0755); err != nil {
+			if err := os.MkdirAll(absPath, 0o755); err != nil {
 				collector.Add(filename, 0, "storage.base_path: failed to create directory '%s': %v", absPath, err)
 				return
 			}
@@ -1105,7 +1105,7 @@ func validateStorageConfig(cfg *configtypes.EgConfig, hostsConfig *configtypes.H
 	testFilePath := filepath.Join(absPath, testFileName)
 	testData := []byte("edgecomet write test")
 
-	if err := os.WriteFile(testFilePath, testData, 0644); err != nil {
+	if err := os.WriteFile(testFilePath, testData, 0o644); err != nil {
 		collector.Add(filename, 0, "storage.base_path: directory '%s' is not writable: %v", absPath, err)
 		return
 	}

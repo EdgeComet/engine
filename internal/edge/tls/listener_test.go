@@ -262,7 +262,7 @@ func TestCreateTLSListener_InvalidCertFormat(t *testing.T) {
 
 	// Create invalid cert file
 	invalidCertPath := filepath.Join(tmpDir, "invalid.crt")
-	err := os.WriteFile(invalidCertPath, []byte("not a certificate"), 0644)
+	err := os.WriteFile(invalidCertPath, []byte("not a certificate"), 0o644)
 	require.NoError(t, err)
 
 	listener, err := CreateTLSListener("127.0.0.1:0", invalidCertPath, keyPath)
@@ -279,7 +279,7 @@ func TestCreateTLSListener_MismatchedCertAndKey(t *testing.T) {
 
 	// Generate second certificate in subdirectory
 	subDir := filepath.Join(tmpDir, "other")
-	require.NoError(t, os.Mkdir(subDir, 0755))
+	require.NoError(t, os.Mkdir(subDir, 0o755))
 	_, keyPath2 := generateTestCertificate(t, subDir)
 
 	// Try to use cert from first pair with key from second pair

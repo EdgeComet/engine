@@ -11,9 +11,7 @@ import (
 )
 
 var _ = Describe("Distribution Strategies", Serial, func() {
-	var (
-		normalizer *hash.URLNormalizer
-	)
+	var normalizer *hash.URLNormalizer
 
 	BeforeEach(func() {
 		normalizer = hash.NewURLNormalizer()

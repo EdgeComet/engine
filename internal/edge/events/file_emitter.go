@@ -30,7 +30,7 @@ type FileEmitter struct {
 func NewFileEmitter(config configtypes.EventFileConfig, logger *zap.Logger) (*FileEmitter, error) {
 	// Create parent directory if it doesn't exist
 	dir := filepath.Dir(config.Path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory %s: %w", dir, err)
 	}
 

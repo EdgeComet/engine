@@ -158,11 +158,11 @@ func TestDeleteOldDirectories(t *testing.T) {
 		recentTime.Format("15"),
 		recentTime.Format("04"))
 
-	require.NoError(t, os.MkdirAll(oldDir, 0755))
-	require.NoError(t, os.MkdirAll(recentDir, 0755))
+	require.NoError(t, os.MkdirAll(oldDir, 0o755))
+	require.NoError(t, os.MkdirAll(recentDir, 0o755))
 
-	require.NoError(t, os.WriteFile(filepath.Join(oldDir, "file1.html"), []byte("old"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(recentDir, "file2.html"), []byte("recent"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(oldDir, "file1.html"), []byte("old"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(recentDir, "file2.html"), []byte("recent"), 0o644))
 
 	deleted, err := worker.deleteOldDirectories(tempDir, threshold)
 

@@ -39,12 +39,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with URL rule that has bothit_recache with alias
@@ -62,7 +62,7 @@ hosts:
           match_ua: ["$GooglebotSearchDesktop"]
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -120,12 +120,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with multiple URL rules with different aliases
@@ -151,7 +151,7 @@ hosts:
           match_ua: ["*CustomBot*", "$AnthropicBot"]
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -220,12 +220,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with URL rule that has invalid alias
@@ -243,7 +243,7 @@ hosts:
           match_ua: ["$UnknownBot"]
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config - should fail
@@ -287,12 +287,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with URL rules - some with bothit_recache, some without
@@ -315,7 +315,7 @@ hosts:
         bothit_recache: {}
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -378,12 +378,12 @@ bothit_recache:
   match_ua: ["$BingbotDesktop"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with GooglebotSearchDesktop at host level
@@ -408,7 +408,7 @@ hosts:
         action: "render"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -477,12 +477,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create host config with bothit_recache at host level
@@ -505,7 +505,7 @@ hosts:
         action: "render"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-hosts.yaml")
-	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0644)
+	err = os.WriteFile(hostConfigPath, []byte(hostYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config
@@ -561,12 +561,12 @@ render:
       match_ua: ["*"]
 `
 	globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
-	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
+	err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0o644)
 	require.NoError(t, err)
 
 	// Create hosts directory
 	hostsDir := filepath.Join(tmpDir, "hosts.d")
-	err = os.Mkdir(hostsDir, 0755)
+	err = os.Mkdir(hostsDir, 0o755)
 	require.NoError(t, err)
 
 	// Create first host with GooglebotSearchDesktop in pattern
@@ -584,7 +584,7 @@ hosts:
           match_ua: ["$GooglebotSearchDesktop"]
 `
 	host1ConfigPath := filepath.Join(hostsDir, "01-blog.yaml")
-	err = os.WriteFile(host1ConfigPath, []byte(host1YAML), 0644)
+	err = os.WriteFile(host1ConfigPath, []byte(host1YAML), 0o644)
 	require.NoError(t, err)
 
 	// Create second host with BingbotDesktop in pattern
@@ -602,7 +602,7 @@ hosts:
           match_ua: ["$BingbotDesktop"]
 `
 	host2ConfigPath := filepath.Join(hostsDir, "02-shop.yaml")
-	err = os.WriteFile(host2ConfigPath, []byte(host2YAML), 0644)
+	err = os.WriteFile(host2ConfigPath, []byte(host2YAML), 0o644)
 	require.NoError(t, err)
 
 	// Create third host with ChatGPTUserBot and AnthropicBot in pattern
@@ -620,7 +620,7 @@ hosts:
           match_ua: ["$ChatGPTUserBot", "$AnthropicBot"]
 `
 	host3ConfigPath := filepath.Join(hostsDir, "03-docs.yaml")
-	err = os.WriteFile(host3ConfigPath, []byte(host3YAML), 0644)
+	err = os.WriteFile(host3ConfigPath, []byte(host3YAML), 0o644)
 	require.NoError(t, err)
 
 	// Load config

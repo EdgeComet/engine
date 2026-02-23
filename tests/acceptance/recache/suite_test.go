@@ -30,9 +30,7 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-var (
-	testEnv *RecacheTestEnvironment
-)
+var testEnv *RecacheTestEnvironment
 
 // RecacheRequestReceived tracks recache requests received by mock EG
 type RecacheRequestReceived struct {
@@ -161,7 +159,7 @@ func writeDaemonConfig(path string, config *configtypes.CacheDaemonConfig) error
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 // waitForDaemonReady polls daemon HTTP endpoint until ready
@@ -253,7 +251,7 @@ func (env *RecacheTestEnvironment) Start() error {
         wait_for: "networkIdle"
 `, env.TestHostID)
 
-	if err := os.WriteFile(hostsConfigPath, []byte(hostsYAML), 0644); err != nil {
+	if err := os.WriteFile(hostsConfigPath, []byte(hostsYAML), 0o644); err != nil {
 		os.RemoveAll(tempConfigDir)
 		return fmt.Errorf("failed to write hosts config: %w", err)
 	}
@@ -307,7 +305,7 @@ hosts:
   include: "%s"
 `, env.InternalAuthKey, mr.Addr(), hostsConfigPath)
 
-	if err := os.WriteFile(egConfigPath, []byte(egConfigYAML), 0644); err != nil {
+	if err := os.WriteFile(egConfigPath, []byte(egConfigYAML), 0o644); err != nil {
 		os.RemoveAll(tempConfigDir)
 		return fmt.Errorf("failed to write EG config: %w", err)
 	}

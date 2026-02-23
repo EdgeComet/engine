@@ -144,7 +144,7 @@ func (m *Manager) handlePush(ctx *fasthttp.RequestCtx) {
 	}
 
 	parentDir := filepath.Dir(absolutePath)
-	if err := os.MkdirAll(parentDir, 0755); err != nil {
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
 		m.logger.Error("Failed to create cache directory",
 			zap.String("dir", parentDir),
 			zap.Error(err))
@@ -155,7 +155,7 @@ func (m *Manager) handlePush(ctx *fasthttp.RequestCtx) {
 	tempPath := absolutePath + ".tmp"
 	htmlContent := ctx.Request.Body()
 
-	if err := os.WriteFile(tempPath, htmlContent, 0644); err != nil {
+	if err := os.WriteFile(tempPath, htmlContent, 0o644); err != nil {
 		m.logger.Error("Failed to write temp file",
 			zap.String("path", tempPath),
 			zap.Error(err))

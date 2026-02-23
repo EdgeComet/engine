@@ -47,9 +47,7 @@ type TestEnvironment struct {
 	TempConfigDir    string               // Temporary config directory for services
 }
 
-var (
-	testEnv *TestEnvironment
-)
+var testEnv *TestEnvironment
 
 func TestAcceptance(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -195,7 +193,7 @@ func (te *TestEnvironment) StartServices() error {
 	}
 
 	// Create cache directory if it doesn't exist
-	if err := os.MkdirAll(cacheBasePath, 0755); err != nil {
+	if err := os.MkdirAll(cacheBasePath, 0o755); err != nil {
 		os.RemoveAll(tempConfigDir)
 		return fmt.Errorf("failed to create cache directory: %v", err)
 	}

@@ -34,7 +34,7 @@ func (fc *FilesystemCache) WriteHTML(filePath string, htmlContent []byte) error 
 
 	// Write to temporary file first (atomic write pattern)
 	tempPath := filePath + ".tmp"
-	if err := os.WriteFile(tempPath, htmlContent, 0644); err != nil {
+	if err := os.WriteFile(tempPath, htmlContent, 0o644); err != nil {
 		fc.logger.Error("Failed to write temporary file",
 			zap.String("temp_path", tempPath),
 			zap.Error(err))
@@ -123,7 +123,7 @@ func (fc *FilesystemCache) ensureDirectory(filePath string) error {
 	}
 
 	// Create directory structure with parent directories
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory structure: %w", err)
 	}
 

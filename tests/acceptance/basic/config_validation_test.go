@@ -83,8 +83,8 @@ var _ = Describe("Config Validation", func() {
 		It("should show bypass action with cache for static files", func() {
 			cmd := createConfigTestCommand("-c", "tests/integration/fixtures/configtest-url-tester/edge-gateway.yaml", "-t", "https://example.com/static/main.js")
 			output, err := cmd.CombinedOutput()
-			//fmt.Println("========================")
-			//fmt.Println(string(output))
+			// fmt.Println("========================")
+			// fmt.Println(string(output))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(output)).To(ContainSubstring("Action: bypass"))
 			Expect(string(output)).To(ContainSubstring("Bypass Cache: enabled"))

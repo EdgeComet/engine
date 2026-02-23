@@ -12,9 +12,7 @@ import (
 )
 
 var _ = Describe("Configuration Variations", Serial, func() {
-	var (
-		normalizer *hash.URLNormalizer
-	)
+	var normalizer *hash.URLNormalizer
 
 	BeforeEach(func() {
 		normalizer = hash.NewURLNormalizer()

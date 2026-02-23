@@ -201,8 +201,8 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			By("Waiting for eg_ids update to complete")
 			Eventually(func() []string {
 				ids, _ := testEnv.GetEGIDs(pullOnlyCacheKey)
-				//fmt.Println("==================v")
-				//fmt.Println("IDS:", ids)
+				// fmt.Println("==================v")
+				// fmt.Println("IDS:", ids)
 				return ids
 			}, 3*time.Second, 200*time.Millisecond).Should(HaveLen(2),
 				"eg_ids should be updated to contain 2 EGs")

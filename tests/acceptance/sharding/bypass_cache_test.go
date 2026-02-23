@@ -8,9 +8,7 @@ import (
 )
 
 var _ = Describe("Bypass Cache Sharding", Serial, func() {
-	var (
-		normalizer *hash.URLNormalizer
-	)
+	var normalizer *hash.URLNormalizer
 
 	BeforeEach(func() {
 		normalizer = hash.NewURLNormalizer()

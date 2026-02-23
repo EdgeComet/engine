@@ -289,8 +289,8 @@ var _ = Describe("Filesystem Cleanup Worker", func() {
 				timestamp.Format("15"),
 				timestamp.Format("04"),
 			)
-			os.MkdirAll(oldDir, 0755)
-			os.WriteFile(filepath.Join(oldDir, "test.html"), []byte("<html>test</html>"), 0644)
+			os.MkdirAll(oldDir, 0o755)
+			os.WriteFile(filepath.Join(oldDir, "test.html"), []byte("<html>test</html>"), 0o644)
 
 			// Create recent directory in same hour but different minute
 			recentTimestamp := time.Now().UTC().Add(-20 * time.Minute)
@@ -303,8 +303,8 @@ var _ = Describe("Filesystem Cleanup Worker", func() {
 				recentTimestamp.Format("15"),
 				recentTimestamp.Format("04"),
 			)
-			os.MkdirAll(recentDir, 0755)
-			os.WriteFile(filepath.Join(recentDir, "test.html"), []byte("<html>test</html>"), 0644)
+			os.MkdirAll(recentDir, 0o755)
+			os.WriteFile(filepath.Join(recentDir, "test.html"), []byte("<html>test</html>"), 0o644)
 
 			hourDir := filepath.Dir(recentDir)
 
@@ -386,7 +386,7 @@ func prepareTestConfigWithOptions(cachePath string, opts TestConfigOptions) stri
 	hostsData, err := os.ReadFile(fixtureHosts)
 	Expect(err).ToNot(HaveOccurred(), "Failed to read fixture hosts")
 
-	err = os.WriteFile(tempHostsPath, hostsData, 0644)
+	err = os.WriteFile(tempHostsPath, hostsData, 0o644)
 	Expect(err).ToNot(HaveOccurred(), "Failed to write temp hosts config")
 
 	hosts := config["hosts"].(map[string]interface{})
@@ -395,7 +395,7 @@ func prepareTestConfigWithOptions(cachePath string, opts TestConfigOptions) stri
 	updatedConfig, err := yaml.Marshal(config)
 	Expect(err).ToNot(HaveOccurred(), "Failed to marshal updated config")
 
-	err = os.WriteFile(tempConfigPath, updatedConfig, 0644)
+	err = os.WriteFile(tempConfigPath, updatedConfig, 0o644)
 	Expect(err).ToNot(HaveOccurred(), "Failed to write temp config")
 
 	return tempConfigPath

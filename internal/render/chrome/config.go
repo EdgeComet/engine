@@ -24,7 +24,8 @@ type Config struct {
 // NewConfigFromYAML creates a Config from ChromeYAMLConfig
 // This is used to convert the YAML config structure to internal Config
 func NewConfigFromYAML(poolSize string, warmupURL string, warmupTimeout time.Duration,
-	restartAfterCount int, restartAfterTime time.Duration, shutdownTimeout time.Duration) *Config {
+	restartAfterCount int, restartAfterTime time.Duration, shutdownTimeout time.Duration,
+) *Config {
 	return &Config{
 		PoolSize:          poolSize,
 		WarmupURL:         warmupURL,

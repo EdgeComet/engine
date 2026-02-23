@@ -46,7 +46,6 @@ func TestURL(testURL string, result *validate.ValidationResult) (*URLTestResult,
 
 // testURLWithConfig tests URL with loaded configuration
 func testURLWithConfig(testURL string, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
-
 	urlResult := &URLTestResult{
 		URL: testURL,
 	}
