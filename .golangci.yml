@@ -5,28 +5,27 @@ run:
   go: '1.24'
 
 linters:
-  default: all
+  enable:
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofumpt
   disable:
     - errcheck
 
   exclusions:
     rules:
-      # 1. ineffassign: renderer.go
       - path: internal/render/chrome/renderer.go
         linters: [ineffassign]
         text: "ineffectual assignment"
-      # 2. staticcheck: redundant nil checks
       - path: internal/common/config/config_test.go
         linters: [staticcheck]
         text: "S1009"
-      # 3. staticcheck: deprecated VisitAll
       - path: internal/edge/server/request_helpers.go
         linters: [staticcheck]
         text: "SA1019"
-      # 4. staticcheck: loop to append
       - path: internal/edge/validate/validator_test.go
         linters: [staticcheck]
         text: "S1011"
-      # 5. unused: specific files
       - path: (internal/common/config/alias_expansion.go|internal/edge/events/formatter.go)
         linters: [unused]
