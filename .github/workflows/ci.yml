@@ -3,7 +3,10 @@ name: CI
 on:
   pull_request:
     branches:
+<<<<<<< HEAD
       - main
+=======
+>>>>>>> 7645b5a5c7ac160ed732c8b890de5e954c89b972
       - master
 
 jobs:
@@ -14,8 +17,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+<<<<<<< HEAD
         with:
           fetch-depth: 2
+=======
+>>>>>>> 7645b5a5c7ac160ed732c8b890de5e954c89b972
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -26,6 +32,7 @@ jobs:
       - name: Install gofumpt
         run: go install mvdan.cc/gofumpt@latest
 
+<<<<<<< HEAD
       - name: Check formatting (gofumpt - changed files only)
         run: |
           changed=$(git diff --name-only HEAD~1 HEAD -- '*.go')
@@ -36,12 +43,22 @@ jobs:
           unformatted=$(echo "$changed" | xargs gofumpt -l)
           if [ -n "$unformatted" ]; then
             echo "The following changed files are not formatted with gofumpt:"
+=======
+      - name: Check formatting (gofumpt)
+        run: |
+          unformatted=$(gofumpt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted with gofumpt:"
+>>>>>>> 7645b5a5c7ac160ed732c8b890de5e954c89b972
             echo "$unformatted"
             echo ""
             echo "Run 'gofumpt -w .' to fix formatting."
             exit 1
           fi
+<<<<<<< HEAD
           echo "All changed Go files are properly formatted."
+=======
+>>>>>>> 7645b5a5c7ac160ed732c8b890de5e954c89b972
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
