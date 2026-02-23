@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - add-ci
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
   ci:
@@ -38,11 +44,12 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          # REQUIRED: Changed from v2.1.6 to 'latest' to support Go 1.24
           version: latest
+          # Points to the .golangci.yml in your repo root
           args: --config .golangci.yml
 
       - name: Run unit tests
+        # Executing from the tests/ directory using the project Makefile
         run: |
           cd tests
           make unit
