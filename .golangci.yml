@@ -1,5 +1,30 @@
 version: "2"
 
+run:
+  timeout: 5m
+  go: '1.24'
+
 linters:
+  enable:
+    - ineffassign
+    - staticcheck
+    - unused
   disable:
     - errcheck
+
+  exclusions:
+    rules:
+      - path: internal/render/chrome/renderer.go
+        linters: [ineffassign]
+        text: "ineffectual assignment"
+      - path: internal/common/config/config_test.go
+        linters: [staticcheck]
+        text: "S1009"
+      - path: internal/edge/server/request_helpers.go
+        linters: [staticcheck]
+        text: "SA1019"
+      - path: internal/edge/validate/validator_test.go
+        linters: [staticcheck]
+        text: "S1011"
+      - path: (internal/common/config/alias_expansion.go|internal/edge/events/formatter.go)
+        linters: [unused]

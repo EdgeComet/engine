@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  pull_request:
+ pull_request:
     branches:
-      - main
       - master
 
 jobs:
@@ -35,7 +34,7 @@ jobs:
             exit 1
           fi
           echo "All Go files are properly formatted."
-
+          
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
@@ -43,4 +42,7 @@ jobs:
           args: --config .golangci.yml
 
       - name: Run unit tests
-        run: cd tests && make unit
+        # Executing from the tests/ directory using the project Makefile
+        run: |
+          cd tests
+          make unit
