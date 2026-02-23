@@ -3,8 +3,7 @@ name: CI
 on:
   pull_request:
     branches:
-      - main
-      - master
+      - add-ci
 
 jobs:
   ci:
@@ -46,7 +45,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v2.1.6
           args: --config .golangci.yml
 
       - name: Run unit tests
