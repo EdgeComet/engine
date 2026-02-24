@@ -40,6 +40,7 @@ export default withMermaid(defineConfig({
                 items: [
                     {text: 'Topology', link: '/getting-started/topology'},
                     {text: 'Installation', link: '/getting-started/installation'},
+                    {text: 'Docker setup', link: '/getting-started/docker'},
                     {text: 'Quick Config', link: '/getting-started/configuration'},
                     {text: 'Systemd Setup', link: '/getting-started/systemd-setup'},
                 ]

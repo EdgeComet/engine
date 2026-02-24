@@ -1,0 +1,60 @@
+# Sample Host Configuration
+# Essential parameters only. See configs/full/ for complete reference.
+
+hosts:
+  - id: 1
+    domain: "mysite.com"
+    render_key: "your-secret-render-key"
+    enabled: true
+
+    render:
+      timeout: 30s
+
+      cache:
+        ttl: 1h
+
+      events:
+        wait_for: "networkIdle"
+
+      dimensions:
+        mobile:
+          id: 1
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - $SearchBots
+            - $AIBots
+            - $Socials
+            - "*Slurp*"
+            - "*DuckDuckBot*"
+            - "*Baiduspider*"
+            - "*YandexBot*"
+
+    url_rules:
+      # Block admin areas
+      - match:
+          - "/admin/*"
+          - "/wp-admin/*"
+        action: "status_403"
+
+      # Bypass static assets
+      - match:
+          - "/static/*"
+          - "/assets/*"
+          - "*.css"
+          - "*.js"
+          - "*.jpg"
+          - "*.png"
+          - "*.gif"
+          - "*.svg"
+        action: "bypass"
+
+      # Blog with custom TTL
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2h
+
+      # Default: render everything else with host defaults

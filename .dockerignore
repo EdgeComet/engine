@@ -1,0 +1,21 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+node_modules/
+docs/package*.json
+
+# Documentation and Tests
+docs/
+tests/
+*.md
+
+# Local Configs (We mount the specific docker ones)
+configs/sample/
+configs/full/
+configs/local/
+
+# Build artifacts
+*.exe
+*.out
