@@ -1,0 +1,25 @@
+{
+    "name": "Go1.24",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/bash"
+            },
+            "extensions": [
+                "ms-azuretools.vscode-docker",
+                "golang.Go",
+                "ms-vscode.makefile-tools"
+            ]
+        }
+    },
+    "remoteUser": "dev",
+    "mounts": [
+        "source=${localWorkspaceFolder},target=/workspace,type=bind",
+        "type=bind,source=${env:HOME}/.gitconfig,target=/home/dev/.gitconfig,readonly",
+        "type=bind,source=${env:HOME}/.ssh,target=/home/dev/.ssh,readonly"
+    ]
+}
