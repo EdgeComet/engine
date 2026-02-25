@@ -12,7 +12,7 @@ go.work
 
 # Built binaries
 /cmd/edge-gateway/**
-!/cmd/edge-gateway/edge-gateway/main.go
+!/cmd/edge-gateway/main.go
 /cmd/render-service/render-service
 
 /edge-gateway
