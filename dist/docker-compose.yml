@@ -1,0 +1,73 @@
+services:
+  render-service:
+    build:
+      context: render-service
+    image: render-service:v0.1.0
+    container_name: render_service
+    restart: unless-stopped
+    volumes:
+      - ../configs/sample:/opt/edgecomet/configs
+    networks:
+      edgecomet-network:
+        ipv4_address: 192.168.5.2
+    dns:
+      - 1.1.1.1
+    depends_on:
+      redis-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  cache-daemon:
+    build:
+      context: cache-daemon
+    image: cache-daemon:v0.1.0
+    container_name: cache_daemon
+    restart: unless-stopped
+    volumes:
+      - ../configs:/opt/edgecomet/configs
+    environment:
+      - CONFIG_DIR=/opt/edgecomet/configs/sample
+    networks:
+      edgecomet-network:
+        ipv4_address: 192.168.5.3
+    dns:
+      - 1.1.1.1
+    depends_on:
+      redis-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  redis-service:
+    image: redis:6.0
+    container_name: redis_service
+    restart: unless-stopped
+    volumes:
+      - data:/data
+    networks:
+      edgecomet-network:
+        ipv4_address: 192.168.5.4 # :6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  data:
+    external: false
+
+networks:
+  edgecomet-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.5.0/24
+          gateway: 192.168.5.1
