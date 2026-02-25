@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24-bookworm AS builder-base
+FROM golang:1.24 AS builder-base
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -15,30 +15,26 @@ FROM builder-base AS builder-cache-daemon
 RUN go build -o /out/cache-daemon ./cmd/cache-daemon
 
 FROM builder-base AS builder-edge-gateway
-RUN if [ -d ./cmd/edge-gateway ]; then \
-            go build -o /out/edge-gateway ./cmd/edge-gateway; \
-        elif [ -f ./bin/edge-gateway ]; then \
-            cp ./bin/edge-gateway /out/edge-gateway; \
-            chmod +x /out/edge-gateway; \
-        else \
-            echo "edge-gateway binary not found."; \
-            echo "Ask client to provide cmd/edge-gateway source"; \
-            echo "or Linux bin/edge-gateway binary."; \
-            exit 1; \
-        fi
+RUN go build -o /out/edge-gateway ./cmd/edge-gateway
 
 FROM debian:bookworm-slim AS runtime-base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
-        chromium \
         curl \
+        fonts-liberation \
+        gnupg \
         tini \
+        wget \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        google-chrome-stable \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --home-dir /home/edgecomet --shell /usr/sbin/nologin edgecomet
 
 WORKDIR /app
-ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_BIN=/usr/bin/google-chrome
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 FROM runtime-base AS render-service-runtime
