@@ -1,5 +1,7 @@
 # EdgeComet
 
+[![CI](https://github.com/EdgeComet/engine/actions/workflows/ci.yml/badge.svg)](https://github.com/EdgeComet/engine/actions/workflows/ci.yml)
+
 Server-side rendering and caching system for JavaScript websites. Serves pre-rendered HTML to search engine bots (Googlebot, Bingbot) and AI crawlers (GPTBot, ClaudeBot, PerplexityBot).
 
 ## Overview
