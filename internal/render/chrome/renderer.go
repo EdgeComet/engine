@@ -704,7 +704,7 @@ func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin i
 				zap.Duration("timeout", req.Timeout),
 				zap.Bool("timed_out", true))
 
-			} else if err != nil {
+		} else if err != nil {
 			return err
 		}
 
