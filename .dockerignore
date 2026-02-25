@@ -1,0 +1,17 @@
+# System
+.dockerignore
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+.devcontainer
+.golangci.yml
+
+# App
+/dist
+/bin
+/configs
+/docs
+/tests
+.env
