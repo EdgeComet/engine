@@ -343,15 +343,3 @@ func formatBool(b bool) string {
 func formatTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05.000Z")
 }
-
-// formatStringSlice formats a string slice as comma-separated quoted values
-func formatStringSlice(slice []string) string {
-	if len(slice) == 0 {
-		return "-"
-	}
-	escaped := make([]string, len(slice))
-	for i, s := range slice {
-		escaped[i] = escapeString(s)
-	}
-	return "\"" + strings.Join(escaped, ",") + "\""
-}

@@ -54,24 +54,6 @@ func ExpandDimensionAliases(dimensions map[string]types.Dimension, configPath st
 	return nil
 }
 
-// countExpandedPatterns returns the count of final patterns after nested expansion
-func countExpandedPatterns(patterns []string) int {
-	count := 0
-	for _, p := range patterns {
-		if strings.HasPrefix(p, "$") {
-			aliasName := strings.TrimPrefix(p, "$")
-			if nestedPatterns, exists := GetBotAlias(aliasName); exists {
-				count += len(nestedPatterns)
-			} else {
-				count++ // Unknown alias counts as 1
-			}
-		} else {
-			count++
-		}
-	}
-	return count
-}
-
 // ExpandBotAliases expands bot alias references (prefixed with $) in pattern array
 // to their underlying patterns from BotAliases map.
 // Supports composite aliases that reference other aliases (single level nesting).
