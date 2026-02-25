@@ -24,7 +24,7 @@ services:
     volumes:
       - ./configs/docker/render-service.yaml:/etc/edgecomet/render-service.yaml:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:10080/health >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://render-service:10080/health >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -3,7 +3,7 @@
 
 server:
   id: "rs-1"
-  listen: "0.0.0.0:10080"
+  listen: "render-service:10080"
 
 redis:
   addr: "redis:6379"

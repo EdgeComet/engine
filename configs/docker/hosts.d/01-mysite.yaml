@@ -3,8 +3,8 @@
 
 hosts:
   - id: 1
-    domain: "mysite.com"
-    render_key: "your-secret-render-key"
+    domain: "example.com"
+    render_key: "your-render-key"
     enabled: true
 
     render:
@@ -17,28 +17,33 @@ hosts:
         wait_for: "networkIdle"
 
       dimensions:
-        mobile:
+        desktop:
           id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - "*Googlebot*"
+            - "*Bingbot*"
+            - "*GPTBot*"
+            - "*ClaudeBot*"
+            - "*PerplexityBot*"
+
+        mobile:
+          id: 2
           width: 375
           height: 812
           render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
           match_ua:
-            - $SearchBots
-            - $AIBots
-            - $Socials
-            - "*Slurp*"
-            - "*DuckDuckBot*"
-            - "*Baiduspider*"
-            - "*YandexBot*"
+            - "*Googlebot-Mobile*"
+            - "*Bingbot*Mobile*"
 
     url_rules:
-      # Block admin areas
       - match:
           - "/admin/*"
           - "/wp-admin/*"
         action: "status_403"
 
-      # Bypass static assets
       - match:
           - "/static/*"
           - "/assets/*"
@@ -50,11 +55,11 @@ hosts:
           - "*.svg"
         action: "bypass"
 
-      # Blog with custom TTL
       - match: "/blog/*"
         action: "render"
         render:
           cache:
             ttl: 2h
 
-      # Default: render everything else with host defaults
+      - match: "*"
+        action: "render"

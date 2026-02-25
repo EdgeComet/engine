@@ -70,6 +70,9 @@ Docker-specific configs are in `configs/docker/`:
 
 These files are based on sample configs and already use `redis:6379` for container networking.
 
+Important: in `configs/docker/render-service.yaml`, set `server.listen` to `render-service:10080` so Redis service discovery advertises a Docker-reachable address.
+When using this setting, keep the render-service healthcheck target aligned (for example `http://render-service:10080/health`) rather than `localhost`.
+
 ## Enable Cache Daemon (optional)
 
 The `cache-daemon` service is commented out in `docker-compose.yml` by default.
