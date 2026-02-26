@@ -71,6 +71,7 @@ services:
   #   volumes:
   #     - ./configs/docker/cache-daemon.yaml:/etc/edgecomet/cache-daemon.yaml:ro
   #     - ./configs/docker/edge-gateway.yaml:/etc/edgecomet/edge-gateway.yaml:ro
+  #     - ./configs/docker/hosts.d:/etc/edgecomet/hosts.d:ro
   #   healthcheck:
   #     test: ["CMD-SHELL", "curl -fsS -H 'X-Internal-Auth: change-me-to-a-secure-key-32chars' http://localhost:10090/status >/dev/null"]
   #     interval: 10s

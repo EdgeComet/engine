@@ -27,9 +27,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && useradd --system --create-home --home-dir /home/edgecomet --shell /usr/sbin/nologin edgecomet
 
 WORKDIR /app
+RUN chown edgecomet:edgecomet /app
+USER edgecomet
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
 FROM runtime-base AS render-service-runtime
+USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
         fonts-liberation \
         gnupg \
@@ -41,6 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 ENV CHROME_BIN=/usr/bin/google-chrome
 COPY --from=builder-render-service /out/render-service /usr/local/bin/render-service
+USER edgecomet
 EXPOSE 10080 10089
 
 FROM runtime-base AS edge-gateway-runtime
