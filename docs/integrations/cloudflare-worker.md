@@ -57,7 +57,7 @@ Copy this script into your Cloudflare Worker and edit the configuration constant
 
 const CONFIG = {
   // Your Edge Gateway URL (e.g., "https://render.example.com")
-  EDGE_GATEWAY_URL: "https://render.example.com",
+  EDGE_COMET_URL: "https://render.example.com",
 
   // Your render key from host configuration
   RENDER_KEY: "your_render_key_here",
@@ -128,7 +128,7 @@ export default {
     }
 
     // Build Edge Gateway request
-    const renderUrl = `${CONFIG.EDGE_GATEWAY_URL}/render?url=${encodeURIComponent(request.url)}`;
+    const renderUrl = `${CONFIG.EDGE_COMET_URL}/render?url=${encodeURIComponent(request.url)}`;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT);
@@ -169,7 +169,7 @@ export default {
 
 | Constant | Required | Description |
 |----------|----------|-------------|
-| `EDGE_GATEWAY_URL` | Yes | Full URL to your Edge Gateway instance. |
+| `EDGE_COMET_URL` | Yes | Full URL to your Edge Gateway instance. |
 | `RENDER_KEY` | Yes | Authentication token from host configuration. |
 | `TIMEOUT` | No | Request timeout in milliseconds (default: 60000). |
 
@@ -220,7 +220,7 @@ Under Attack Mode presents a JavaScript challenge to all visitors, including cra
 
 ![Ship something new dialog with Start with Hello World option](/images/cloudflare/2-new-app.png)
 
-6. Enter a name for your Worker (e.g., `edge-gateway-router`) and click **Deploy**
+6. Enter a name for your Worker (e.g., `edge-comet-router`) and click **Deploy**
 
 ![Deploy Hello World screen with worker name field](/images/cloudflare/3-deploy-dummy.png)
 
@@ -229,7 +229,7 @@ Under Attack Mode presents a JavaScript challenge to all visitors, including cra
 ![Worker overview page with Edit code button](/images/cloudflare/4-app-view.png)
 
 8. Replace all code with the [Worker script](#worker-script) and update the configuration:
-   - Set `EDGE_GATEWAY_URL` to your Edge Gateway URL
+   - Set `EDGE_COMET_URL` to your Edge Gateway URL
    - Set `RENDER_KEY` to your host's render key
 
 ![Code editor showing CONFIG values to customize](/images/cloudflare/5-edit-code.png)
@@ -270,13 +270,13 @@ wrangler login
 4. Create a project directory:
 
 ```bash
-mkdir edge-gateway-worker && cd edge-gateway-worker
+mkdir edge-comet-worker && cd edge-comet-worker
 ```
 
 5. Create `wrangler.toml`:
 
 ```toml
-name = "edge-gateway-router"
+name = "edge-comet-router"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 

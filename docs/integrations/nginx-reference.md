@@ -22,9 +22,9 @@ Catches crawlers using generic keywords plus explicit patterns for crawlers with
 
 ::: code-group
 
-```nginx [nginx/conf.d/edge-gateway-map.conf]
+```nginx [nginx/conf.d/edge-comet-map.conf]
 # 1. Detect crawlers by User-Agent
-map $http_user_agent $eg_crawler {
+map $http_user_agent $ec_crawler {
     default 0;
 
     # Generic crawler keywords
@@ -43,15 +43,15 @@ map $http_user_agent $eg_crawler {
     "~*ChatGPT-User"              1;
 }
 
-# 2. Skip static assets (inherits $eg_crawler, disables for static files)
-map $uri $eg_skip_render {
-    default $eg_crawler;
+# 2. Skip static assets (inherits $ec_crawler, disables for static files)
+map $uri $ec_skip_render {
+    default $ec_crawler;
     "~*\.(avif|css|eot|gif|gz|ico|jpeg|jpg|js|json|map|mp3|mp4|ogg|otf|pdf|png|svg|ttf|txt|wasm|wav|webm|webp|woff|woff2|xml|zip)$" 0;
 }
 
-# 3. Loop prevention (inherits $eg_skip_render, disables for renderer callbacks)
-map $http_x_edge_render $eg_should_render {
-    default $eg_skip_render;
+# 3. Loop prevention (inherits $ec_skip_render, disables for renderer callbacks)
+map $http_x_edge_render $ec_should_render {
+    default $ec_skip_render;
     "~."    0;
 }
 ```
@@ -66,9 +66,9 @@ To use this approach, replace the map configuration file with the one below.
 
 ::: code-group
 
-```nginx [nginx/conf.d/edge-gateway-map.conf]
+```nginx [nginx/conf.d/edge-comet-map.conf]
 # 1. Detect crawlers by User-Agent
-map $http_user_agent $eg_crawler {
+map $http_user_agent $ec_crawler {
     default 0;
 
     # Search engines ($SearchBots alias)
@@ -107,15 +107,15 @@ map $http_user_agent $eg_crawler {
     "~*Slackbot"                  1;
 }
 
-# 2. Skip static assets (inherits $eg_crawler, disables for static files)
-map $uri $eg_skip_render {
-    default $eg_crawler;
+# 2. Skip static assets (inherits $ec_crawler, disables for static files)
+map $uri $ec_skip_render {
+    default $ec_crawler;
     "~*\.(avif|css|eot|gif|gz|ico|jpeg|jpg|js|json|map|mp3|mp4|ogg|otf|pdf|png|svg|ttf|txt|wasm|wav|webm|webp|woff|woff2|xml|zip)$" 0;
 }
 
-# 3. Loop prevention (inherits $eg_skip_render, disables for renderer callbacks)
-map $http_x_edge_render $eg_should_render {
-    default $eg_skip_render;
+# 3. Loop prevention (inherits $ec_skip_render, disables for renderer callbacks)
+map $http_x_edge_render $ec_should_render {
+    default $ec_skip_render;
     "~."    0;
 }
 ```
@@ -126,7 +126,7 @@ map $http_x_edge_render $eg_should_render {
 
 When Edge Gateway renders a page, the Render Service fetches the target URL from your origin server. Without loop prevention, nginx would detect the Render Service request as a crawler and route it back to Edge Gateway, creating an infinite loop.
 
-The Render Service adds an `X-Edge-Render` header to outgoing requests. The map chain detects this header and sets `$eg_should_render` to 0, preventing re-routing.
+The Render Service adds an `X-Edge-Render` header to outgoing requests. The map chain detects this header and sets `$ec_should_render` to 0, preventing re-routing.
 
 ```mermaid
 flowchart TD
@@ -156,9 +156,9 @@ flowchart TD
 The loop prevention logic in the final map:
 
 ```nginx
-# 3. Loop prevention (inherits $eg_skip_render, disables for renderer callbacks)
-map $http_x_edge_render $eg_should_render {
-    default $eg_skip_render;
+# 3. Loop prevention (inherits $ec_skip_render, disables for renderer callbacks)
+map $http_x_edge_render $ec_should_render {
+    default $ec_skip_render;
     "~."    0;  # Any non-empty X-Edge-Render header disables rendering
 }
 ```

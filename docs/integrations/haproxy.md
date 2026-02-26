@@ -86,10 +86,10 @@ frontend http-in
     acl from_renderer hdr(x-edge-render) -m found
 
     # Routing logic
-    use_backend edge_gateway if is_crawler !is_static !from_renderer
+    use_backend edge_comet if is_crawler !is_static !from_renderer
     default_backend origin
 
-backend edge_gateway
+backend edge_comet
     mode http
     timeout server 60s
     server rendergw 127.0.0.1:10070
@@ -136,7 +136,7 @@ frontend http-in
     acl from_renderer hdr(x-edge-render) -m found
 
     # Routing logic
-    use_backend edge_gateway if is_crawler !is_static !from_renderer
+    use_backend edge_comet if is_crawler !is_static !from_renderer
     default_backend origin
 ```
 :::

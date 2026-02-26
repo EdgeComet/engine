@@ -53,9 +53,9 @@ Maintain detection logic in a separate file and include it in your server block.
 
 ::: code-group
 
-```nginx [nginx/conf.d/edge-gateway-map.conf]
+```nginx [nginx/conf.d/edge-comet-map.conf]
 # 1. Detect crawlers by User-Agent
-map $http_user_agent $eg_crawler {
+map $http_user_agent $ec_crawler {
     default 0;
 
     # Generic crawler keywords
@@ -74,15 +74,15 @@ map $http_user_agent $eg_crawler {
     "~*ChatGPT-User"              1;
 }
 
-# 2. Skip static assets (inherits $eg_crawler, disables for static files)
-map $uri $eg_skip_render {
-    default $eg_crawler;
+# 2. Skip static assets (inherits $ec_crawler, disables for static files)
+map $uri $ec_skip_render {
+    default $ec_crawler;
     "~*\.(avif|css|eot|gif|gz|ico|jpeg|jpg|js|json|map|mp3|mp4|ogg|otf|pdf|png|svg|ttf|txt|wasm|wav|webm|webp|woff|woff2|xml|zip)$" 0;
 }
 
-# 3. Loop prevention (inherits $eg_skip_render, disables for renderer callbacks)
-map $http_x_edge_render $eg_should_render {
-    default $eg_skip_render;
+# 3. Loop prevention (inherits $ec_skip_render, disables for renderer callbacks)
+map $http_x_edge_render $ec_should_render {
+    default $ec_skip_render;
     "~."    0;
 }
 ```
@@ -93,7 +93,7 @@ For alternative crawler detection approaches and detailed configuration explanat
 
 ## Server configuration
 
-Use the `$eg_should_render` variable from the map configuration to route crawler traffic.
+Use the `$ec_should_render` variable from the map configuration to route crawler traffic.
 
 ```nginx [nginx/sites-enabled/example.com.conf]
 # Define upstreams for flexibility
@@ -110,12 +110,12 @@ server {
     server_name example.com;
 
     # Include the detection logic
-    include conf.d/edge-gateway-map.conf;
+    include conf.d/edge-comet-map.conf;
 
     location / {
         # Route crawlers to Edge Gateway (logic computed in maps above)
         error_page 418 = @edge_render;
-        if ($eg_should_render = 1) {
+        if ($ec_should_render = 1) {
             return 418;
         }
 
@@ -187,7 +187,7 @@ Request should go directly to origin with no `X-Render-*` headers in response.
 Add a temporary header to see the final rendering decision:
 
 ```nginx
-add_header X-EG-Should-Render $eg_should_render;
+add_header X-EC-Should-Render $ec_should_render;
 ```
 
 ## Troubleshooting
@@ -206,8 +206,8 @@ add_header X-EG-Should-Render $eg_should_render;
 
 ### Crawlers not being detected
 
-- Check the value of `$eg_should_render` using the debug header above.
-- Add missing patterns to the `$eg_crawler` map block.
+- Check the value of `$ec_should_render` using the debug header above.
+- Add missing patterns to the `$ec_crawler` map block.
 - Verify User-Agent header is being passed correctly.
 
 ### Infinite loops

@@ -280,7 +280,7 @@ exports.handler = async (event) => {
 };
 ```
 
-View logs in the CloudWatch console. Select the region closest to where you tested, and look for the log group `/aws/lambda/us-east-1.edge-gateway-router`.
+View logs in the CloudWatch console. Select the region closest to where you tested, and look for the log group `/aws/lambda/us-east-1.edge-comet-router`.
 
 ### Structured logging for production
 

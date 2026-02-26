@@ -65,7 +65,7 @@ Lambda@Edge does not support environment variables, so all configuration is embe
 
 const CONFIG = {
   // Your Edge Gateway hostname (e.g., "render.example.com")
-  EDGE_GATEWAY_HOST: "render.example.com",
+  EDGE_COMET_HOST: "render.example.com",
 
   // Your render key from host configuration
   RENDER_KEY: "your_render_key_here",
@@ -130,7 +130,7 @@ exports.handler = async (event) => {
   // Rewrite origin to Edge Gateway
   request.origin = {
     custom: {
-      domainName: CONFIG.EDGE_GATEWAY_HOST,
+      domainName: CONFIG.EDGE_COMET_HOST,
       port: 443,
       protocol: "https",
       sslProtocols: ["TLSv1.2"],
@@ -145,7 +145,7 @@ exports.handler = async (event) => {
   request.querystring = `url=${encodeURIComponent(originalUrl)}`;
 
   // Set required headers
-  headers["host"] = [{ key: "Host", value: CONFIG.EDGE_GATEWAY_HOST }];
+  headers["host"] = [{ key: "Host", value: CONFIG.EDGE_COMET_HOST }];
   headers["x-render-key"] = [
     { key: "X-Render-Key", value: CONFIG.RENDER_KEY },
   ];
@@ -168,7 +168,7 @@ exports.handler = async (event) => {
 
 | Constant | Required | Description |
 |----------|----------|-------------|
-| `EDGE_GATEWAY_HOST` | Yes | Hostname of your Edge Gateway instance (without protocol). |
+| `EDGE_COMET_HOST` | Yes | Hostname of your Edge Gateway instance (without protocol). |
 | `RENDER_KEY` | Yes | Authentication token from host configuration. |
 
 Set `readTimeout` in the origin configuration higher than your Edge Gateway's `render.timeout` to allow renders to complete.
@@ -225,7 +225,7 @@ The default CloudFront origin read timeout is 30 seconds, which may not be suffi
 1. Go to the [Lambda console](https://console.aws.amazon.com/lambda/) and switch to the **us-east-1** (N. Virginia) region
 
 2. Click **Create function** and select **Author from scratch**:
-   - **Function name**: `edge-gateway-router`
+   - **Function name**: `edge-comet-router`
    - **Runtime**: Node.js 20.x
    - **Execution role**: Create a new role with basic Lambda permissions
 
@@ -250,25 +250,25 @@ The default CloudFront origin read timeout is 30 seconds, which may not be suffi
 ```
 
 5. Return to the Lambda function, replace the default code with the [Lambda@Edge function](#lambdaedge-function), and update the configuration constants:
-   - Set `EDGE_GATEWAY_HOST` to your Edge Gateway hostname
+   - Set `EDGE_COMET_HOST` to your Edge Gateway hostname
    - Set `RENDER_KEY` to your host's render key
 
 6. Click **Deploy**, then **Actions** > **Publish new version** (Lambda@Edge requires a published version)
 
-7. Copy the function ARN including the version number (e.g., `arn:aws:lambda:us-east-1:123456789:function:edge-gateway-router:1`)
+7. Copy the function ARN including the version number (e.g., `arn:aws:lambda:us-east-1:123456789:function:edge-comet-router:1`)
 
 8. Go to the [CloudFront console](https://console.aws.amazon.com/cloudfront/) and select your distribution
 
 9. Create a custom **Origin request policy**:
    - Go to **Policies** > **Origin request** > **Create origin request policy**
-   - **Name**: `EdgeGateway-ForwardHeaders`
+   - **Name**: `EdgeComet-ForwardHeaders`
    - **Headers**: Include the following headers: `Host`, `User-Agent`, `X-Edge-Render`, `CloudFront-Forwarded-Proto`
    - **Query strings**: All
    - **Cookies**: None
 
 10. Go to your distribution's **Behaviors** tab and edit the default behavior:
     - **Cache policy**: Select `UseOriginCacheControlHeaders-QueryStrings`
-    - **Origin request policy**: Select `EdgeGateway-ForwardHeaders`
+    - **Origin request policy**: Select `EdgeComet-ForwardHeaders`
     - **Function associations** > **Origin request**: Select the published Lambda version ARN from step 7
 
 11. Save changes and wait for the distribution to deploy (5-15 minutes)
@@ -282,7 +282,7 @@ For developers who prefer infrastructure-as-code deployment. This template creat
 2. Create a project directory:
 
 ```bash
-mkdir edge-gateway-cloudfront && cd edge-gateway-cloudfront
+mkdir edge-comet-cloudfront && cd edge-comet-cloudfront
 ```
 
 3. Create `template.yaml`:
@@ -293,10 +293,10 @@ Transform: AWS::Serverless-2016-10-31
 Description: Lambda@Edge function for routing crawler traffic to Edge Gateway
 
 Resources:
-  EdgeGatewayRouter:
+  EdgeCometRouter:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: edge-gateway-router
+      FunctionName: edge-comet-router
       Runtime: nodejs20.x
       Handler: index.handler
       CodeUri: src/
@@ -317,7 +317,7 @@ Resources:
     Type: AWS::CloudFront::OriginRequestPolicy
     Properties:
       OriginRequestPolicyConfig:
-        Name: EdgeGateway-ForwardHeaders
+        Name: EdgeComet-ForwardHeaders
         HeadersConfig:
           HeaderBehavior: whitelist
           Headers:
@@ -333,7 +333,7 @@ Resources:
 Outputs:
   FunctionArn:
     Description: Lambda function ARN for CloudFront association
-    Value: !Ref EdgeGatewayRouter.Version
+    Value: !Ref EdgeCometRouter.Version
   OriginRequestPolicyId:
     Description: Origin request policy ID
     Value: !Ref OriginRequestPolicy
@@ -352,7 +352,7 @@ sam deploy --guided --region us-east-1
 
 7. In the CloudFront console, edit your distribution's default behavior:
    - **Cache policy**: Select `UseOriginCacheControlHeaders-QueryStrings`
-   - **Origin request policy**: Select `EdgeGateway-ForwardHeaders`
+   - **Origin request policy**: Select `EdgeComet-ForwardHeaders`
    - **Function associations** > **Origin request**: Paste the Lambda version ARN
 
 8. Save and wait for the distribution to deploy
@@ -363,7 +363,7 @@ sam deploy --guided --region us-east-1
 
 ```bash
 aws iam create-role \
-  --role-name edge-gateway-lambda-role \
+  --role-name edge-comet-lambda-role \
   --assume-role-policy-document '{
     "Version": "2012-10-17",
     "Statement": [{
@@ -380,7 +380,7 @@ aws iam create-role \
 
 ```bash
 aws iam attach-role-policy \
-  --role-name edge-gateway-lambda-role \
+  --role-name edge-comet-lambda-role \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 ```
 
@@ -395,10 +395,10 @@ zip function.zip index.js
 ```bash
 aws lambda create-function \
   --region us-east-1 \
-  --function-name edge-gateway-router \
+  --function-name edge-comet-router \
   --runtime nodejs20.x \
   --handler index.handler \
-  --role arn:aws:iam::ACCOUNT_ID:role/edge-gateway-lambda-role \
+  --role arn:aws:iam::ACCOUNT_ID:role/edge-comet-lambda-role \
   --zip-file fileb://function.zip \
   --memory-size 128 \
   --timeout 30
@@ -409,7 +409,7 @@ aws lambda create-function \
 ```bash
 aws lambda publish-version \
   --region us-east-1 \
-  --function-name edge-gateway-router
+  --function-name edge-comet-router
 ```
 
 6. Create the origin request policy:
@@ -417,7 +417,7 @@ aws lambda publish-version \
 ```bash
 aws cloudfront create-origin-request-policy \
   --origin-request-policy-config '{
-    "Name": "EdgeGateway-ForwardHeaders",
+    "Name": "EdgeComet-ForwardHeaders",
     "HeadersConfig": {
       "HeaderBehavior": "whitelist",
       "Headers": {
@@ -453,7 +453,7 @@ aws cloudfront list-cache-policies --type managed \
   "LambdaFunctionAssociations": {
     "Quantity": 1,
     "Items": [{
-      "LambdaFunctionARN": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:edge-gateway-router:1",
+      "LambdaFunctionARN": "arn:aws:lambda:us-east-1:ACCOUNT_ID:function:edge-comet-router:1",
       "EventType": "origin-request",
       "IncludeBody": false
     }]
@@ -533,7 +533,7 @@ The request should have no `X-Render-*` headers in response.
 - Verify `RENDER_KEY` matches your host configuration
 - Check the domain in the URL matches your configured `domain`
 - Confirm the host is `enabled: true`
-- Verify the `Host` header is rewritten to `EDGE_GATEWAY_HOST` in the Lambda function
+- Verify the `Host` header is rewritten to `EDGE_COMET_HOST` in the Lambda function
 
 ### Timeout errors (502 or 504 from CloudFront)
 
@@ -583,7 +583,7 @@ The request should have no `X-Render-*` headers in response.
 
 - Lambda@Edge logs appear in CloudWatch in the AWS region closest to the viewer, not in us-east-1
 - Check CloudWatch Logs in the region where the request was served
-- Log group name follows the pattern `/aws/lambda/us-east-1.edge-gateway-router`
+- Log group name follows the pattern `/aws/lambda/us-east-1.edge-comet-router`
 - Enable CloudFront Standard Logging to an S3 bucket for a complete view of all requests during initial setup
 
 ## Related documentation
