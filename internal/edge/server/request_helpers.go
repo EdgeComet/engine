@@ -211,7 +211,7 @@ func ExtractClientHeaders(ctx *fasthttp.RequestCtx, safeRequestHeaders []string)
 	headers := make(map[string][]string)
 
 	// Iterate through all request headers
-	ctx.Request.Header.VisitAll(func(key, value []byte) {
+	for key, value := range ctx.Request.Header.All() {
 		headerName := string(key)
 		headerLower := strings.ToLower(headerName)
 
@@ -219,7 +219,7 @@ func ExtractClientHeaders(ctx *fasthttp.RequestCtx, safeRequestHeaders []string)
 			// Preserve original header name case, collect all values
 			headers[headerName] = append(headers[headerName], string(value))
 		}
-	})
+	}
 
 	if len(headers) == 0 {
 		return nil

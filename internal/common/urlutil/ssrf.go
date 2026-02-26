@@ -22,7 +22,7 @@ func init() {
 		"224.0.0.0/4",    // multicast
 
 		// IPv6
-		"::1/128",  // loopback
+		"::1/128",   // loopback
 		"fe80::/10", // link-local
 		"fc00::/7",  // unique local
 		"ff00::/8",  // multicast

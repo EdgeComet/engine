@@ -1066,7 +1066,7 @@ func TestHostsCacheConcurrentAccess(t *testing.T) {
 			for j := 0; j < iterations; j++ {
 				hosts := cm.GetHosts()
 				// Verify we get consistent data
-				if hosts != nil && len(hosts) > 0 {
+				if len(hosts) > 0 {
 					_ = hosts[0].ID
 				}
 			}
@@ -1125,7 +1125,7 @@ func TestHostsCacheConcurrentReadWrite(t *testing.T) {
 				default:
 					// Read operations - must be safe during writes
 					hosts := cm.GetHosts()
-					if hosts != nil && len(hosts) > 0 {
+					if len(hosts) > 0 {
 						_ = hosts[0].ID
 					}
 					host := cm.GetHostByDomain("initial.com")

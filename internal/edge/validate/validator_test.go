@@ -3745,10 +3745,7 @@ hosts:
 				assert.True(t, found, "Expected error containing %q, got: %v", tt.errorSubstring, result.Errors)
 			} else {
 				// Filter out storage-related warnings that might appear
-				validationErrors := make([]ValidationError, 0)
-				for _, e := range result.Errors {
-					validationErrors = append(validationErrors, e)
-				}
+				validationErrors := append(make([]ValidationError, 0), result.Errors...)
 				assert.True(t, result.Valid, "Expected validation to pass, got errors: %v", validationErrors)
 			}
 		})
