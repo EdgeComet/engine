@@ -31,6 +31,9 @@ go.work
 # Configuration files with secrets (keep examples)
 /config.yaml
 /hosts.yaml
+/configs/my_*.yaml
+/configs/docker/my_*.yaml
+/configs/docker/hosts.d/my_*.yaml
 *.local.yaml
 *.prod.yaml
 *.dev.yaml

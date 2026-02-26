@@ -1,0 +1,39 @@
+# EdgeComet Cache Daemon - Minimal Configuration
+# Essential parameters only. See configs/full/ for complete reference.
+
+eg_config: "edge-gateway.yaml"
+
+daemon_id: "cache-daemon-1"
+
+redis:
+  addr: "redis:6379"
+  password: ""
+  db: 0
+
+scheduler:
+  tick_interval: 1s
+  normal_check_interval: 60s
+
+internal_queue:
+  max_size: 1000
+  max_retries: 3
+  retry_base_delay: 5s
+
+recache:
+  rs_capacity_reserved: 0.30
+  timeout_per_url: 60s
+
+http_api:
+  enabled: true
+  listen: ":10090"
+  request_timeout: 30s
+
+logging:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+
+metrics:
+  enabled: true
+  listen: ":10099"

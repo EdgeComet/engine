@@ -1,0 +1,31 @@
+# EdgeComet Render Service - Minimal Configuration
+# Essential parameters only. See configs/full/ for complete reference.
+
+server:
+  id: "rs-1"
+  listen: "render-service:10080"
+
+redis:
+  addr: "redis:6379"
+  password: ""
+  db: 0
+
+chrome:
+  pool_size: 10
+
+  warmup:
+    url: "https://example.com/"
+    timeout: 10s
+
+  render:
+    max_timeout: 50s
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+
+metrics:
+  enabled: true
+  listen: ":10089"

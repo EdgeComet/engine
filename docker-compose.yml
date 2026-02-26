@@ -1,0 +1,87 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: edgecomet-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  render-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: render-service-runtime
+    container_name: edgecomet-render-service
+    command: ["render-service", "-c", "/etc/edgecomet/render-service.yaml"]
+    shm_size: "2gb"
+    ports:
+      - "10080:10080"
+    volumes:
+      - ./configs/docker/render-service.yaml:/etc/edgecomet/render-service.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://render-service:10080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  edge-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: edge-gateway-runtime
+    container_name: edgecomet-edge-gateway
+    command: ["edge-gateway", "-c", "/etc/edgecomet/edge-gateway.yaml"]
+    ports:
+      - "10070:10070"
+    volumes:
+      - ./configs/docker/edge-gateway.yaml:/etc/edgecomet/edge-gateway.yaml:ro
+      - ./configs/docker/hosts.d:/etc/edgecomet/hosts.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:10070/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      redis:
+        condition: service_healthy
+      render-service:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # cache-daemon:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: cache-daemon-runtime
+  #   container_name: edgecomet-cache-daemon
+  #   command: ["cache-daemon", "-c", "/etc/edgecomet/cache-daemon.yaml"]
+  #   ports:
+  #     - "10090:10090"
+  #   volumes:
+  #     - ./configs/docker/cache-daemon.yaml:/etc/edgecomet/cache-daemon.yaml:ro
+  #     - ./configs/docker/edge-gateway.yaml:/etc/edgecomet/edge-gateway.yaml:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -fsS -H 'X-Internal-Auth: change-me-to-a-secure-key-32chars' http://localhost:10090/status >/dev/null"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 20s
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     render-service:
+  #       condition: service_healthy
+  #     edge-gateway:
+  #       condition: service_healthy
+  #   restart: unless-stopped

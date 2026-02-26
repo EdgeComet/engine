@@ -1,0 +1,65 @@
+# Sample Host Configuration
+# Essential parameters only. See configs/full/ for complete reference.
+
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "your-render-key"
+    enabled: true
+
+    render:
+      timeout: 30s
+
+      cache:
+        ttl: 1h
+
+      events:
+        wait_for: "networkIdle"
+
+      dimensions:
+        desktop:
+          id: 1
+          width: 1920
+          height: 1080
+          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          match_ua:
+            - "*Googlebot*"
+            - "*Bingbot*"
+            - "*GPTBot*"
+            - "*ClaudeBot*"
+            - "*PerplexityBot*"
+
+        mobile:
+          id: 2
+          width: 375
+          height: 812
+          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+          match_ua:
+            - "*Googlebot-Mobile*"
+            - "*Bingbot*Mobile*"
+
+    url_rules:
+      - match:
+          - "/admin/*"
+          - "/wp-admin/*"
+        action: "status_403"
+
+      - match:
+          - "/static/*"
+          - "/assets/*"
+          - "*.css"
+          - "*.js"
+          - "*.jpg"
+          - "*.png"
+          - "*.gif"
+          - "*.svg"
+        action: "bypass"
+
+      - match: "/blog/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2h
+
+      - match: "*"
+        action: "render"
