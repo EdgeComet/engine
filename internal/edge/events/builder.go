@@ -224,6 +224,11 @@ func convertPageSEO(seo *types.PageSEO) *PageSEOEvent {
 		ImagesTotal:         seo.ImagesTotal,
 		ImagesInternal:      seo.ImagesInternal,
 		ImagesExternal:      seo.ImagesExternal,
+		ImagesWithAlt:       seo.ImagesWithAlt,
+		ImagesWithoutAlt:    seo.ImagesWithoutAlt,
+		WordCount:           seo.WordCount,
+		PageMinHash:         seo.PageMinHash,
+		HreflangSelf:        seo.HreflangSelf,
 		StructuredDataTypes: seo.StructuredDataTypes,
 	}
 

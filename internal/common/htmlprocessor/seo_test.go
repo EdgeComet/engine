@@ -337,47 +337,57 @@ func TestExtractMetaRobots(t *testing.T) {
 	tests := []struct {
 		name     string
 		html     string
-		expected string
+		expected []string
 	}{
 		{
 			name:     "robots tag",
 			html:     `<html><head><meta name="robots" content="noindex, nofollow"></head></html>`,
-			expected: "noindex, nofollow",
+			expected: []string{"noindex", "nofollow"},
 		},
 		{
 			name:     "googlebot tag",
 			html:     `<html><head><meta name="googlebot" content="noindex"></head></html>`,
-			expected: "noindex",
+			expected: []string{"noindex"},
 		},
 		{
 			name:     "googlebot takes precedence",
 			html:     `<html><head><meta name="robots" content="index"><meta name="googlebot" content="noindex"></head></html>`,
-			expected: "noindex",
+			expected: []string{"noindex"},
 		},
 		{
 			name:     "robots used when googlebot empty",
 			html:     `<html><head><meta name="googlebot" content=""><meta name="robots" content="nofollow"></head></html>`,
-			expected: "nofollow",
+			expected: []string{"nofollow"},
 		},
 		{
 			name:     "no robots or googlebot",
 			html:     `<html><head><meta name="description" content="test"></head></html>`,
-			expected: "",
+			expected: nil,
 		},
 		{
 			name:     "case insensitive",
 			html:     `<html><head><meta name="ROBOTS" content="noindex"></head></html>`,
-			expected: "noindex",
+			expected: []string{"noindex"},
 		},
 		{
 			name:     "whitespace trimmed",
 			html:     `<html><head><meta name="robots" content="  noindex  "></head></html>`,
-			expected: "noindex",
+			expected: []string{"noindex"},
 		},
 		{
 			name:     "robots in body ignored",
 			html:     `<html><head></head><body><meta name="robots" content="noindex"></body></html>`,
-			expected: "",
+			expected: nil,
+		},
+		{
+			name:     "parametric directives",
+			html:     `<html><head><meta name="robots" content="index, follow, max-snippet:-1"></head></html>`,
+			expected: []string{"index", "follow", "max-snippet:-1"},
+		},
+		{
+			name:     "only commas and spaces",
+			html:     `<html><head><meta name="robots" content="  ,  , "></head></html>`,
+			expected: nil,
 		},
 	}
 
@@ -747,6 +757,147 @@ func TestExtractImageMetrics(t *testing.T) {
 	}
 }
 
+func TestExtractImageMetrics_AltText(t *testing.T) {
+	tests := []struct {
+		name             string
+		html             string
+		expectTotal      int
+		expectWithAlt    int
+		expectWithoutAlt int
+	}{
+		{
+			name:             "all images have alt",
+			html:             `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg" alt="Third"></body></html>`,
+			expectTotal:      3,
+			expectWithAlt:    3,
+			expectWithoutAlt: 0,
+		},
+		{
+			name:             "all images missing alt",
+			html:             `<html><body><img src="/a.jpg"><img src="/b.jpg"><img src="/c.jpg"></body></html>`,
+			expectTotal:      3,
+			expectWithAlt:    0,
+			expectWithoutAlt: 3,
+		},
+		{
+			name:             "image with empty alt",
+			html:             `<html><body><img src="/a.jpg" alt=""></body></html>`,
+			expectTotal:      1,
+			expectWithAlt:    0,
+			expectWithoutAlt: 1,
+		},
+		{
+			name:             "mixed alt presence",
+			html:             `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg"><img src="/d.jpg" alt=""></body></html>`,
+			expectTotal:      4,
+			expectWithAlt:    2,
+			expectWithoutAlt: 2,
+		},
+		{
+			name:             "skipped images not counted",
+			html:             `<html><body><img src="data:image/png;base64,abc" alt="icon"><img src="" alt="missing"><img src="/real.jpg" alt="real"></body></html>`,
+			expectTotal:      1,
+			expectWithAlt:    1,
+			expectWithoutAlt: 0,
+		},
+		{
+			name:             "no images",
+			html:             `<html><body></body></html>`,
+			expectTotal:      0,
+			expectWithAlt:    0,
+			expectWithoutAlt: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := parseAndFindBody(t, tt.html)
+			seo := &types.PageSEO{}
+			extractImageMetrics(body, "", "https://example.com/", seo)
+
+			assert.Equal(t, tt.expectTotal, seo.ImagesTotal, "ImagesTotal mismatch")
+			assert.Equal(t, tt.expectWithAlt, seo.ImagesWithAlt, "ImagesWithAlt mismatch")
+			assert.Equal(t, tt.expectWithoutAlt, seo.ImagesWithoutAlt, "ImagesWithoutAlt mismatch")
+		})
+	}
+
+	// Explicit invariant test for mixed case
+	t.Run("invariant holds", func(t *testing.T) {
+		body := parseAndFindBody(t, `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg"><img src="/d.jpg" alt=""></body></html>`)
+		seo := &types.PageSEO{}
+		extractImageMetrics(body, "", "https://example.com/", seo)
+
+		assert.Equal(t, seo.ImagesTotal, seo.ImagesWithAlt+seo.ImagesWithoutAlt, "invariant: ImagesWithAlt + ImagesWithoutAlt == ImagesTotal")
+	})
+}
+
+func TestExtractBodyWords(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		expected []string
+	}{
+		{
+			name:     "simple text",
+			html:     `<body><p>hello world</p></body>`,
+			expected: []string{"hello", "world"},
+		},
+		{
+			name:     "strips nav",
+			html:     `<body><nav>skip this</nav><p>keep this</p></body>`,
+			expected: []string{"keep", "this"},
+		},
+		{
+			name:     "strips all boilerplate elements",
+			html:     `<body><nav>a</nav><header>b</header><footer>c</footer><aside>d</aside><form>e</form><script>f</script><style>g</style><noscript>h</noscript><p>visible</p></body>`,
+			expected: []string{"visible"},
+		},
+		{
+			name:     "nested content preserved",
+			html:     `<body><div><p><span>deep text</span></p></div></body>`,
+			expected: []string{"deep", "text"},
+		},
+		{
+			name:     "nested stripped element",
+			html:     `<body><nav><div><p>hidden</p></div></nav><p>visible</p></body>`,
+			expected: []string{"visible"},
+		},
+		{
+			name:     "lowercases words",
+			html:     `<body>Hello World</body>`,
+			expected: []string{"hello", "world"},
+		},
+		{
+			name:     "normalizes whitespace",
+			html:     "<body>  word1   word2\n\tword3  </body>",
+			expected: []string{"word1", "word2", "word3"},
+		},
+		{
+			name:     "empty body",
+			html:     `<body></body>`,
+			expected: nil,
+		},
+		{
+			name:     "body with only stripped elements",
+			html:     `<body><nav>text</nav><script>code</script></body>`,
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := parseAndFindBody(t, tt.html)
+			result := extractBodyWords(body)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+
+	t.Run("nil body", func(t *testing.T) {
+		result := extractBodyWords(nil)
+		assert.Nil(t, result)
+	})
+}
+
 func TestLinkMetricsWithBaseTag(t *testing.T) {
 	html := `<html><body><a href="page.html">Relative Link</a></body></html>`
 	body := parseAndFindBody(t, html)
@@ -851,6 +1002,73 @@ func TestExtractHreflang(t *testing.T) {
 	}
 }
 
+func TestExtractHreflangSelf(t *testing.T) {
+	tests := []struct {
+		name     string
+		entries  []types.HreflangEntry
+		pageURL  string
+		expected string
+	}{
+		{
+			name: "self-referencing entry found",
+			entries: []types.HreflangEntry{
+				{Lang: "en", URL: "https://example.com/page"},
+				{Lang: "de", URL: "https://example.de/seite"},
+			},
+			pageURL:  "https://example.com/page",
+			expected: "en",
+		},
+		{
+			name: "case-insensitive match",
+			entries: []types.HreflangEntry{
+				{Lang: "en", URL: "https://Example.COM/Page"},
+			},
+			pageURL:  "https://example.com/page",
+			expected: "en",
+		},
+		{
+			name: "no match",
+			entries: []types.HreflangEntry{
+				{Lang: "en", URL: "https://example.com/other"},
+				{Lang: "de", URL: "https://example.de/page"},
+			},
+			pageURL:  "https://example.com/page",
+			expected: "",
+		},
+		{
+			name:     "empty entries",
+			entries:  nil,
+			pageURL:  "https://example.com/page",
+			expected: "",
+		},
+		{
+			name: "self is not first entry",
+			entries: []types.HreflangEntry{
+				{Lang: "de", URL: "https://example.de/seite"},
+				{Lang: "en", URL: "https://example.com/page"},
+				{Lang: "fr", URL: "https://example.fr/page"},
+			},
+			pageURL:  "https://example.com/page",
+			expected: "en",
+		},
+		{
+			name: "x-default self-referencing",
+			entries: []types.HreflangEntry{
+				{Lang: "x-default", URL: "https://example.com/page"},
+			},
+			pageURL:  "https://example.com/page",
+			expected: "x-default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractHreflangSelf(tt.entries, tt.pageURL)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestExtractStructuredDataTypes(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -948,7 +1166,7 @@ func TestExtractPageSEO_Integration(t *testing.T) {
     <meta name="description" content="Find the best deals on test products.">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://example.com/products/test">
-    <link rel="alternate" hreflang="en" href="https://example.com/en/products/test">
+    <link rel="alternate" hreflang="en" href="https://example.com/products/test">
     <link rel="alternate" hreflang="de" href="https://example.de/produkte/test">
     <script type="application/ld+json">
     {
@@ -959,10 +1177,13 @@ func TestExtractPageSEO_Integration(t *testing.T) {
     </script>
 </head>
 <body>
+    <nav><a href="/">Home</a><a href="/products">Products</a></nav>
     <h1>Test Product</h1>
     <h2>Features</h2>
     <h2>Reviews</h2>
     <h3>Dimensions</h3>
+
+    <p>This is a detailed product description with enough words to generate a meaningful content fingerprint for near-duplicate detection and content quality analysis.</p>
 
     <a href="/other-product">Related Product</a>
     <a href="https://example.com/category">Category</a>
@@ -972,6 +1193,9 @@ func TestExtractPageSEO_Integration(t *testing.T) {
     <img src="/images/product.jpg" alt="Product">
     <img src="https://cdn.example.com/images/large.jpg" alt="Large">
     <img src="https://external-cdn.com/image.png" alt="External">
+    <img src="/images/icon.png">
+
+    <footer><p>Copyright 2024 Example Corp</p></footer>
 </body>
 </html>`
 
@@ -984,7 +1208,7 @@ func TestExtractPageSEO_Integration(t *testing.T) {
 	assert.Equal(t, "Test Product - Best Deals", seo.Title)
 	assert.Equal(t, types.IndexStatusIndexable, seo.IndexStatus)
 	assert.Equal(t, "Find the best deals on test products.", seo.MetaDescription)
-	assert.Equal(t, "index, follow", seo.MetaRobots)
+	assert.Equal(t, []string{"index", "follow"}, seo.MetaRobots)
 	assert.Equal(t, "https://example.com/products/test", seo.CanonicalURL)
 
 	// Headings
@@ -992,22 +1216,31 @@ func TestExtractPageSEO_Integration(t *testing.T) {
 	assert.Equal(t, []string{"Features", "Reviews"}, seo.H2s)
 	assert.Equal(t, []string{"Dimensions"}, seo.H3s)
 
-	// Links
-	assert.Equal(t, 4, seo.LinksTotal)
-	assert.Equal(t, 2, seo.LinksInternal)
+	// Links (nav links are counted by extractLinkMetrics)
+	assert.Equal(t, 6, seo.LinksTotal)
+	assert.Equal(t, 4, seo.LinksInternal)
 	assert.Equal(t, 2, seo.LinksExternal)
 	assert.Contains(t, seo.ExternalDomains, "external.com")
 	assert.Contains(t, seo.ExternalDomains, "partner.com")
 
-	// Images
-	assert.Equal(t, 3, seo.ImagesTotal)
-	assert.Equal(t, 2, seo.ImagesInternal)
+	// Images (3 with alt + 1 without alt)
+	assert.Equal(t, 4, seo.ImagesTotal)
+	assert.Equal(t, 3, seo.ImagesInternal)
 	assert.Equal(t, 1, seo.ImagesExternal)
+	assert.Equal(t, 3, seo.ImagesWithAlt)
+	assert.Equal(t, 1, seo.ImagesWithoutAlt)
+	assert.Equal(t, seo.ImagesTotal, seo.ImagesWithAlt+seo.ImagesWithoutAlt)
+
+	// Word count (body text minus nav/footer boilerplate)
+	assert.Equal(t, 33, seo.WordCount)
 
 	// Hreflang
 	assert.Len(t, seo.Hreflang, 2)
 	assert.Equal(t, "en", seo.Hreflang[0].Lang)
 	assert.Equal(t, "de", seo.Hreflang[1].Lang)
+
+	// HreflangSelf (en entry URL matches pageURL)
+	assert.Equal(t, "en", seo.HreflangSelf)
 
 	// Structured data
 	assert.Contains(t, seo.StructuredDataTypes, "Product")

@@ -12,6 +12,11 @@ import (
 	"golang.org/x/net/html"
 )
 
+var contentStripElements = map[string]bool{
+	"nav": true, "header": true, "footer": true, "aside": true,
+	"form": true, "script": true, "style": true, "noscript": true,
+}
+
 // truncateRunes truncates a string to maxLen runes (not bytes).
 // Returns the original string if it's already within the limit.
 func truncateRunes(s string, maxLen int) string {
@@ -93,11 +98,11 @@ func extractMetaDescription(head *html.Node) string {
 	return ""
 }
 
-// extractMetaRobots extracts the robots directive string.
+// extractMetaRobots extracts parsed robots directives as lowercased, trimmed strings.
 // Priority: If any googlebot tag has non-empty content, use googlebot; otherwise use robots.
-func extractMetaRobots(head *html.Node) string {
+func extractMetaRobots(head *html.Node) []string {
 	if head == nil {
-		return ""
+		return nil
 	}
 	metas := findAllElementsInParent(head, "meta")
 
@@ -120,11 +125,26 @@ func extractMetaRobots(head *html.Node) string {
 		}
 	}
 
-	// Googlebot takes precedence if it has content
-	if googlebotContent != "" {
-		return googlebotContent
+	raw := googlebotContent
+	if raw == "" {
+		raw = robotsContent
 	}
-	return robotsContent
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	var directives []string
+	for _, p := range parts {
+		d := strings.ToLower(strings.TrimSpace(p))
+		if d != "" {
+			directives = append(directives, d)
+		}
+	}
+	if len(directives) == 0 {
+		return nil
+	}
+	return directives
 }
 
 // extractBaseHref extracts the base href URL for relative URL resolution.
@@ -311,6 +331,13 @@ func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.P
 
 		seo.ImagesTotal++
 
+		alt := getAttr(img, "alt")
+		if alt != "" {
+			seo.ImagesWithAlt++
+		} else {
+			seo.ImagesWithoutAlt++
+		}
+
 		resolved := resolveURL(src, effectiveBase)
 		parsed, err := url.Parse(resolved)
 		if err != nil {
@@ -330,6 +357,38 @@ func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.P
 			seo.ImagesExternal++
 		}
 	}
+}
+
+func extractBodyWords(body *html.Node) []string {
+	if body == nil {
+		return nil
+	}
+
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && contentStripElements[n.Data] {
+			return
+		}
+		if n.Type == html.TextNode {
+			sb.WriteString(n.Data)
+			sb.WriteByte(' ')
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(body)
+
+	raw := sb.String()
+	fields := strings.Fields(raw)
+	if len(fields) == 0 {
+		return nil
+	}
+	for i, w := range fields {
+		fields[i] = strings.ToLower(w)
+	}
+	return fields
 }
 
 // extractHreflang extracts hreflang alternate links from head.
@@ -374,6 +433,19 @@ func extractHreflang(head *html.Node, pageURL string) []types.HreflangEntry {
 		return nil
 	}
 	return entries
+}
+
+func extractHreflangSelf(entries []types.HreflangEntry, pageURL string) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	pageURLLower := strings.ToLower(pageURL)
+	for _, entry := range entries {
+		if strings.ToLower(entry.URL) == pageURLLower {
+			return entry.Lang
+		}
+	}
+	return ""
 }
 
 // extractStructuredDataTypes extracts @type values from JSON-LD scripts.
@@ -504,8 +576,14 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 	extractLinkMetrics(body, baseHref, pageURL, seo)
 	extractImageMetrics(body, baseHref, pageURL, seo)
 
+	words := extractBodyWords(body)
+	if len(words) > 0 {
+		seo.WordCount = len(words)
+	}
+
 	// International SEO
 	seo.Hreflang = extractHreflang(head, pageURL)
+	seo.HreflangSelf = extractHreflangSelf(seo.Hreflang, pageURL)
 
 	// Structured data
 	seo.StructuredDataTypes = extractStructuredDataTypes(d.root)

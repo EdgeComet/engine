@@ -567,6 +567,43 @@ func TestCountConsoleType(t *testing.T) {
 	assert.Equal(t, 0, countConsoleType(nil, types.ConsoleTypeError))
 }
 
+func TestConvertPageSEO_NewFields(t *testing.T) {
+	seo := &types.PageSEO{
+		Title:            "Test Page",
+		MetaRobots:       []string{"noindex", "nofollow"},
+		ImagesTotal:      5,
+		ImagesWithAlt:    3,
+		ImagesWithoutAlt: 2,
+		WordCount:        500,
+		HreflangSelf:     "en",
+	}
+
+	event := convertPageSEO(seo)
+
+	require.NotNil(t, event)
+	assert.Equal(t, []string{"noindex", "nofollow"}, event.MetaRobots)
+	assert.Equal(t, 3, event.ImagesWithAlt)
+	assert.Equal(t, 2, event.ImagesWithoutAlt)
+	assert.Equal(t, 500, event.WordCount)
+	assert.Equal(t, "en", event.HreflangSelf)
+}
+
+func TestConvertPageSEO_NewFieldsZeroValues(t *testing.T) {
+	seo := &types.PageSEO{
+		Title: "Minimal Page",
+	}
+
+	event := convertPageSEO(seo)
+
+	require.NotNil(t, event)
+	assert.Nil(t, event.MetaRobots)
+	assert.Equal(t, 0, event.ImagesWithAlt)
+	assert.Equal(t, 0, event.ImagesWithoutAlt)
+	assert.Equal(t, 0, event.WordCount)
+	assert.Nil(t, event.PageMinHash)
+	assert.Equal(t, "", event.HreflangSelf)
+}
+
 // createTestRenderContext creates a minimal RenderContext for testing
 func createTestRenderContext() *edgectx.RenderContext {
 	// Create a mock fasthttp context

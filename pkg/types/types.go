@@ -573,7 +573,7 @@ type PageSEO struct {
 	// Meta tags
 	MetaDescription string `json:"meta_description,omitempty"`
 	CanonicalURL    string `json:"canonical_url,omitempty"`
-	MetaRobots      string `json:"meta_robots,omitempty"`
+	MetaRobots      []string `json:"meta_robots,omitempty"`
 
 	// Headings (first 5 of each level, max 500 chars each)
 	H1s []string `json:"h1s,omitempty"`
@@ -589,10 +589,17 @@ type PageSEO struct {
 	// Images analysis
 	ImagesTotal    int `json:"images_total,omitempty"`
 	ImagesInternal int `json:"images_internal,omitempty"`
-	ImagesExternal int `json:"images_external,omitempty"`
+	ImagesExternal   int `json:"images_external,omitempty"`
+	ImagesWithAlt    int `json:"images_with_alt,omitempty"`
+	ImagesWithoutAlt int `json:"images_without_alt,omitempty"`
+
+	// Content analysis
+	WordCount   int      `json:"word_count,omitempty"`
+	PageMinHash []uint64 `json:"page_minhash,omitempty"`
 
 	// International SEO
-	Hreflang []HreflangEntry `json:"hreflang,omitempty"`
+	Hreflang     []HreflangEntry `json:"hreflang,omitempty"`
+	HreflangSelf string          `json:"hreflang_self,omitempty"`
 
 	// Structured data
 	StructuredDataTypes []string `json:"structured_data_types,omitempty"`

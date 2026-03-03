@@ -100,7 +100,7 @@ type PageSEOEvent struct {
 	IndexStatus         int                  `json:"index_status,omitempty"`
 	MetaDescription     string               `json:"meta_description,omitempty"`
 	CanonicalURL        string               `json:"canonical_url,omitempty"`
-	MetaRobots          string               `json:"meta_robots,omitempty"`
+	MetaRobots          []string             `json:"meta_robots,omitempty"`
 	H1s                 []string             `json:"h1s,omitempty"`
 	H2s                 []string             `json:"h2s,omitempty"`
 	H3s                 []string             `json:"h3s,omitempty"`
@@ -111,6 +111,11 @@ type PageSEOEvent struct {
 	ImagesTotal         int                  `json:"images_total,omitempty"`
 	ImagesInternal      int                  `json:"images_internal,omitempty"`
 	ImagesExternal      int                  `json:"images_external,omitempty"`
+	ImagesWithAlt       int                  `json:"images_with_alt,omitempty"`
+	ImagesWithoutAlt    int                  `json:"images_without_alt,omitempty"`
+	WordCount           int                  `json:"word_count,omitempty"`
+	PageMinHash         []uint64             `json:"page_minhash,omitempty"`
 	Hreflang            []HreflangEntryEvent `json:"hreflang,omitempty"`
+	HreflangSelf        string               `json:"hreflang_self,omitempty"`
 	StructuredDataTypes []string             `json:"structured_data_types,omitempty"`
 }
