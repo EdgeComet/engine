@@ -571,8 +571,8 @@ type PageSEO struct {
 	IndexStatus IndexStatus `json:"index_status,omitempty"`
 
 	// Meta tags
-	MetaDescription string `json:"meta_description,omitempty"`
-	CanonicalURL    string `json:"canonical_url,omitempty"`
+	MetaDescription string   `json:"meta_description,omitempty"`
+	CanonicalURL    string   `json:"canonical_url,omitempty"`
 	MetaRobots      []string `json:"meta_robots,omitempty"`
 
 	// Headings (first 5 of each level, max 500 chars each)
@@ -587,8 +587,8 @@ type PageSEO struct {
 	ExternalDomains map[string]int `json:"external_domains,omitempty"`
 
 	// Images analysis
-	ImagesTotal    int `json:"images_total,omitempty"`
-	ImagesInternal int `json:"images_internal,omitempty"`
+	ImagesTotal      int `json:"images_total,omitempty"`
+	ImagesInternal   int `json:"images_internal,omitempty"`
 	ImagesExternal   int `json:"images_external,omitempty"`
 	ImagesWithAlt    int `json:"images_with_alt,omitempty"`
 	ImagesWithoutAlt int `json:"images_without_alt,omitempty"`
