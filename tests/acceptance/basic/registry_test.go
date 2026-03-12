@@ -24,7 +24,7 @@ var _ = Describe("Service Registry Tests", Serial, func() {
 		It("should write and read service keys directly", func() {
 			By("Writing a service key directly to Redis")
 			serviceKey := "service:render:" + testServiceID
-			serviceData := `{"id":"` + testServiceID + `","address":"127.0.0.1","port":9999,"status":"healthy"}`
+			serviceData := `{"id":"` + testServiceID + `","address":"127.0.0.1","port":9999}`
 
 			err := testEnv.RedisClient.Set(ctx, serviceKey, serviceData, 0).Err()
 			Expect(err).To(BeNil(), "Should write service key")

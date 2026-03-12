@@ -1019,7 +1019,6 @@ func (env *RecacheTestEnvironment) AddMockRSToRegistry(serviceID string, capacit
 		"port":      8080,
 		"capacity":  capacity,
 		"load":      load,
-		"status":    "healthy",
 		"last_seen": time.Now().Format(time.RFC3339Nano),
 	}
 
