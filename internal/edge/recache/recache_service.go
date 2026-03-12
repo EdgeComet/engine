@@ -28,7 +28,7 @@ const (
 	redisCacheOperationTimeout = 5 * time.Second
 )
 
-// selectAndReserveScript atomically selects a healthy render service and reserves an available tab
+// selectAndReserveScript atomically selects a render service with available capacity and reserves a tab
 const selectAndReserveScript = `
 -- Atomically selects a healthy render service and reserves an available tab
 -- ARGV[1] = request_id
@@ -52,7 +52,9 @@ for _, service_key in ipairs(service_keys) do
     if service_data then
         local service = cjson.decode(service_data)
 
-        if service.status == 'healthy' and service.capacity and service.capacity > 0 then
+        -- Only consider services with available capacity (registry already handles staleness via TTL)
+        -- Check: capacity exists, is positive, and has available slots (load < capacity)
+        if service.capacity and service.capacity > 0 and (service.load or 0) < service.capacity then
             local service_id = service.id
             local tabs_key = 'tabs:' .. service_id
 
@@ -74,16 +76,17 @@ for _, service_key in ipairs(service_keys) do
                 end
 
                 if available_count > 0 then
+                    -- Calculate load percentage with nil check
                     local load = service.load or 0
                     local load_pct = load / service.capacity
 
                     table.insert(candidates, {
                         service_id = service_id,
-                        address = service.address,
-                        port = service.port,
+                        service = service,
+                        tabs_key = tabs_key,
                         available_count = available_count,
-                        load_pct = load_pct,
-                        first_available_tab = first_available
+                        first_available = first_available,
+                        load_pct = load_pct
                     })
                 end
             end
@@ -97,6 +100,7 @@ end
 
 -- 3. Select best service based on strategy
 local selected = candidates[1]
+
 if strategy == 'least_loaded' then
     for _, candidate in ipairs(candidates) do
         if candidate.load_pct < selected.load_pct then
@@ -111,12 +115,18 @@ elseif strategy == 'most_available' then
     end
 end
 
--- 4. Reserve the tab
-local tabs_key = 'tabs:' .. selected.service_id
-redis.call('HSET', tabs_key, tostring(selected.first_available_tab), request_id)
-redis.call('EXPIRE', tabs_key, reservation_ttl)
+-- 4. Reserve the first available tab
+local tab_id = selected.first_available
+redis.call('HSET', selected.tabs_key, tostring(tab_id), request_id)
+redis.call('EXPIRE', selected.tabs_key, reservation_ttl)
 
-return {selected.service_id, tostring(selected.first_available_tab), selected.address, tostring(selected.port)}
+-- 5. Return result: {service_id, tab_id, address, port}
+return {
+    selected.service_id,
+    tostring(tab_id),
+    selected.service.address,
+    tostring(selected.service.port)
+}
 `
 
 // TabReservation contains service and tab info

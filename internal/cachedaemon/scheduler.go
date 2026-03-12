@@ -69,7 +69,7 @@ func (d *CacheDaemon) Run(ctx context.Context) {
 
 			// Log queue status periodically (every 10 ticks or when non-empty)
 			if tickCount%10 == 0 || d.internalQueue.Size() > 0 {
-				d.logger.Info("Scheduler status",
+				d.logger.Debug("Scheduler status",
 					zap.Int("tick", tickCount),
 					zap.Int("internal_queue_size", d.internalQueue.Size()),
 					zap.Int("available_capacity", availableCapacity))
