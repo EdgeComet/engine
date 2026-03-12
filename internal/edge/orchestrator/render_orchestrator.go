@@ -725,26 +725,8 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 	}
 
 	// Build render request with TabID (use resolved config to respect URL pattern overrides)
-	var extraWait time.Duration
-	if renderCtx.ResolvedConfig.Render.Events.AdditionalWait != nil {
-		extraWait = time.Duration(*renderCtx.ResolvedConfig.Render.Events.AdditionalWait)
-	}
-
-	req := &types.RenderRequest{
-		RequestID:            renderCtx.RequestID,
-		URL:                  renderCtx.TargetURL,
-		TabID:                reservation.TabID, // Include reserved tab ID
-		ViewportWidth:        dimension.Width,
-		ViewportHeight:       dimension.Height,
-		UserAgent:            dimension.RenderUA,
-		Timeout:              renderCtx.ResolvedConfig.Render.Timeout,              // Use resolved timeout
-		WaitFor:              renderCtx.ResolvedConfig.Render.Events.WaitFor,       // Use resolved WaitFor
-		ExtraWait:            extraWait,                                            // Use resolved AdditionalWait
-		BlockedPatterns:      renderCtx.ResolvedConfig.Render.BlockedPatterns,      // Use resolved patterns (Global → Host → Pattern)
-		BlockedResourceTypes: renderCtx.ResolvedConfig.Render.BlockedResourceTypes, // Use resolved resource types (Global → Host → Pattern)
-		Headers:              renderCtx.ClientHeaders,                              // Forwarded client request headers
-		StripScripts:         renderCtx.ResolvedConfig.Render.StripScripts,         // Strip executable scripts from rendered HTML
-	}
+	req := BuildRenderRequest(renderCtx.TargetURL, renderCtx.RequestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
+	req.Headers = renderCtx.ClientHeaders
 
 	// Call render service with context
 	ctx, cancel := renderCtx.GetContext()
@@ -1312,6 +1294,7 @@ func (ro *RenderOrchestrator) RenderWithHAR(ctx context.Context, req *types.Rend
 	}
 	req.BlockedPatterns = host.Render.BlockedPatterns
 	req.BlockedResourceTypes = host.Render.BlockedResourceTypes
+	req.StripScripts = host.Render.StripScripts == nil || *host.Render.StripScripts
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)

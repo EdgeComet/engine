@@ -529,7 +529,7 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 
 	httputil.JSONData(ctx, result, fasthttp.StatusOK)
 
-	d.logger.Info("Cache URLs request served",
+	d.logger.Debug("Cache URLs request served",
 		zap.Int("host_id", hostID),
 		zap.String("cursor", cursor),
 		zap.Int("limit", limit),
@@ -552,7 +552,7 @@ func (d *CacheDaemon) handleCacheSummaryAPI(ctx *fasthttp.RequestCtx) {
 
 	httputil.JSONData(ctx, result, fasthttp.StatusOK)
 
-	d.logger.Info("Cache summary request served",
+	d.logger.Debug("Cache summary request served",
 		zap.Int("host_id", hostID),
 		zap.Int("total_urls", result.TotalUrls))
 }
@@ -603,7 +603,7 @@ func (d *CacheDaemon) handleCacheQueueAPI(ctx *fasthttp.RequestCtx) {
 
 	httputil.JSONData(ctx, result, fasthttp.StatusOK)
 
-	d.logger.Info("Cache queue request served",
+	d.logger.Debug("Cache queue request served",
 		zap.Int("host_id", host.ID),
 		zap.Int("items_returned", len(result.Items)),
 		zap.Bool("has_more", result.HasMore))
@@ -622,7 +622,7 @@ func (d *CacheDaemon) handleCacheQueueSummaryAPI(ctx *fasthttp.RequestCtx) {
 
 	httputil.JSONData(ctx, result, fasthttp.StatusOK)
 
-	d.logger.Info("Cache queue summary request served",
+	d.logger.Debug("Cache queue summary request served",
 		zap.Int("host_id", host.ID),
 		zap.Int("pending", result.Pending),
 		zap.Int("processing", result.Processing))

@@ -234,41 +234,9 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// Release tab when done
 	defer rs.releaseTabReservation(context.Background(), reservation)
 
-	// Build render request
+	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Render.Dimensions[dimensionName]
-
-	// Merge blocked patterns: Global → Host-level → Host Render config
-	globalCfg := rs.configManager.GetConfig()
-	var blockedPatterns []string
-	var blockedResourceTypes []string
-
-	// Start with global config
-	if len(globalCfg.Render.BlockedPatterns) > 0 {
-		blockedPatterns = append(blockedPatterns, globalCfg.Render.BlockedPatterns...)
-	}
-	if len(globalCfg.Render.BlockedResourceTypes) > 0 {
-		blockedResourceTypes = append(blockedResourceTypes, globalCfg.Render.BlockedResourceTypes...)
-	}
-
-	// Host render config overrides if specified
-	if len(host.Render.BlockedPatterns) > 0 {
-		blockedPatterns = host.Render.BlockedPatterns
-	}
-	if len(host.Render.BlockedResourceTypes) > 0 {
-		blockedResourceTypes = host.Render.BlockedResourceTypes
-	}
-
-	renderReq := &types.RenderRequest{
-		URL:                  url,
-		Timeout:              time.Duration(host.Render.Timeout),
-		TabID:                reservation.TabID,
-		RequestID:            requestID,
-		ViewportWidth:        dimension.Width,
-		ViewportHeight:       dimension.Height,
-		UserAgent:            dimension.RenderUA,
-		BlockedPatterns:      blockedPatterns,
-		BlockedResourceTypes: blockedResourceTypes,
-	}
+	renderReq := orchestrator.BuildRenderRequest(url, requestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)
