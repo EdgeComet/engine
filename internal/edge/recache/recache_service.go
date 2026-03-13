@@ -307,6 +307,7 @@ func (rs *RecacheService) saveToCache(
 			StatusCode:  renderResult.StatusCode,
 			Metrics:     &renderResult.Metrics,
 			RenderTime:  renderResult.RenderTime,
+			PageSEO:     renderResult.PageSEO,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)
@@ -384,6 +385,8 @@ func (rs *RecacheService) buildRenderResult(renderResp *types.RenderResponse) *o
 		RenderTime:       renderResp.RenderTime,
 		ChromeID:         "recache",
 		Metrics:          renderResp.Metrics,
+		Headers:          renderResp.Headers,
+		PageSEO:          renderResp.PageSEO,
 	}
 }
 
