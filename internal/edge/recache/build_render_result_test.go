@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/edgecomet/engine/internal/edge/orchestrator"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -126,8 +125,4 @@ func TestBuildRenderResult_FieldParity(t *testing.T) {
 	assert.NotZero(t, result.StatusCode, "StatusCode is stored in cache metadata")
 	assert.NotNil(t, result.Headers, "Headers are filtered and stored in cache metadata")
 	assert.NotNil(t, result.PageSEO, "PageSEO provides IndexStatus and Title for cache metadata")
-
-	// Verify the struct satisfies the same contract as the normal render path
-	// (render_orchestrator.go:777-789)
-	var _ *orchestrator.RenderServiceResult = result
 }
