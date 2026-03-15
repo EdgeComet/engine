@@ -568,13 +568,16 @@ func TestExtractHeadings(t *testing.T) {
 
 func TestExtractLinkMetrics(t *testing.T) {
 	tests := []struct {
-		name           string
-		html           string
-		pageURL        string
-		expectTotal    int
-		expectInternal int
-		expectExternal int
-		expectDomains  map[string]int
+		name                   string
+		html                   string
+		pageURL                string
+		expectTotal            int
+		expectInternal         int
+		expectExternal         int
+		expectNofollow         int
+		expectNofollowInternal int
+		expectNofollowExternal int
+		expectDomains          map[string]int
 	}{
 		{
 			name:           "internal links same host",
@@ -667,6 +670,88 @@ func TestExtractLinkMetrics(t *testing.T) {
 			expectExternal: 3,
 			expectDomains:  map[string]int{"a.com": 2, "b.com": 1},
 		},
+		{
+			name:                   "nofollow on internal link",
+			html:                   `<html><body><a href="https://example.com/page" rel="nofollow">Link</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            1,
+			expectInternal:         1,
+			expectExternal:         0,
+			expectNofollow:         1,
+			expectNofollowInternal: 1,
+			expectNofollowExternal: 0,
+		},
+		{
+			name:                   "nofollow on external link",
+			html:                   `<html><body><a href="https://other.com/page" rel="nofollow">Link</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            1,
+			expectInternal:         0,
+			expectExternal:         1,
+			expectNofollow:         1,
+			expectNofollowInternal: 0,
+			expectNofollowExternal: 1,
+			expectDomains:          map[string]int{"other.com": 1},
+		},
+		{
+			name:                   "mixed nofollow internal and external",
+			html:                   `<html><body><a href="https://example.com/a" rel="nofollow">Int</a><a href="https://other.com/b" rel="nofollow">Ext</a><a href="https://example.com/c">Normal</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            3,
+			expectInternal:         2,
+			expectExternal:         1,
+			expectNofollow:         2,
+			expectNofollowInternal: 1,
+			expectNofollowExternal: 1,
+			expectDomains:          map[string]int{"other.com": 1},
+		},
+		{
+			name:                   "nofollow in multi-value rel attribute",
+			html:                   `<html><body><a href="https://other.com/page" rel="external nofollow">Link</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            1,
+			expectInternal:         0,
+			expectExternal:         1,
+			expectNofollow:         1,
+			expectNofollowInternal: 0,
+			expectNofollowExternal: 1,
+			expectDomains:          map[string]int{"other.com": 1},
+		},
+		{
+			name:                   "nofollow among many rel values",
+			html:                   `<html><body><a href="https://other.com/page" rel="noopener noreferrer nofollow">Link</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            1,
+			expectInternal:         0,
+			expectExternal:         1,
+			expectNofollow:         1,
+			expectNofollowInternal: 0,
+			expectNofollowExternal: 1,
+			expectDomains:          map[string]int{"other.com": 1},
+		},
+		{
+			name:                   "nofollow case insensitive",
+			html:                   `<html><body><a href="https://example.com/a" rel="NOFOLLOW">Upper</a><a href="https://example.com/b" rel="Nofollow">Mixed</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            2,
+			expectInternal:         2,
+			expectExternal:         0,
+			expectNofollow:         2,
+			expectNofollowInternal: 2,
+			expectNofollowExternal: 0,
+		},
+		{
+			name:                   "ugc and sponsored without nofollow are not counted",
+			html:                   `<html><body><a href="https://other.com/a" rel="ugc">UGC</a><a href="https://other.com/b" rel="sponsored">Sponsored</a></body></html>`,
+			pageURL:                "https://example.com/",
+			expectTotal:            2,
+			expectInternal:         0,
+			expectExternal:         2,
+			expectNofollow:         0,
+			expectNofollowInternal: 0,
+			expectNofollowExternal: 0,
+			expectDomains:          map[string]int{"other.com": 2},
+		},
 	}
 
 	for _, tt := range tests {
@@ -678,6 +763,9 @@ func TestExtractLinkMetrics(t *testing.T) {
 			assert.Equal(t, tt.expectTotal, seo.LinksTotal, "LinksTotal mismatch")
 			assert.Equal(t, tt.expectInternal, seo.LinksInternal, "LinksInternal mismatch")
 			assert.Equal(t, tt.expectExternal, seo.LinksExternal, "LinksExternal mismatch")
+			assert.Equal(t, tt.expectNofollow, seo.LinksNofollow, "LinksNofollow mismatch")
+			assert.Equal(t, tt.expectNofollowInternal, seo.LinksNofollowInternal, "LinksNofollowInternal mismatch")
+			assert.Equal(t, tt.expectNofollowExternal, seo.LinksNofollowExternal, "LinksNofollowExternal mismatch")
 			if tt.expectDomains != nil {
 				assert.Equal(t, tt.expectDomains, seo.ExternalDomains, "ExternalDomains mismatch")
 			}

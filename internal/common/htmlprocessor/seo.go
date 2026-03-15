@@ -272,29 +272,41 @@ func extractLinkMetrics(body *html.Node, baseHref, pageURL string, seo *types.Pa
 
 		seo.LinksTotal++
 
+		rel := strings.ToLower(getAttr(link, "rel"))
+		isNofollow := strings.Contains(rel, "nofollow")
+
 		// Resolve the URL
 		resolved := resolveURL(href, effectiveBase)
 		parsed, err := url.Parse(resolved)
 		if err != nil {
 			// Can't parse, count as external
 			seo.LinksExternal++
+			if isNofollow {
+				seo.LinksNofollow++
+				seo.LinksNofollowExternal++
+			}
 			continue
 		}
 
 		linkHost := parsed.Host
-		if linkHost == "" {
-			// Relative URL without host, treat as internal
-			seo.LinksInternal++
-			continue
-		}
+		isInternal := linkHost == "" || urlutil.IsSameOrigin(pageOrigin, linkHost)
 
-		if urlutil.IsSameOrigin(pageOrigin, linkHost) {
+		if isInternal {
 			seo.LinksInternal++
 		} else {
 			seo.LinksExternal++
 			hostname := urlutil.ExtractHostname(linkHost)
 			if hostname != "" {
 				externalDomains[hostname]++
+			}
+		}
+
+		if isNofollow {
+			seo.LinksNofollow++
+			if isInternal {
+				seo.LinksNofollowInternal++
+			} else {
+				seo.LinksNofollowExternal++
 			}
 		}
 	}

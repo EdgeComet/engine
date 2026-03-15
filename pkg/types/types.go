@@ -581,10 +581,13 @@ type PageSEO struct {
 	H3s []string `json:"h3s,omitempty"`
 
 	// Links analysis
-	LinksTotal      int            `json:"links_total,omitempty"`
-	LinksInternal   int            `json:"links_internal,omitempty"`
-	LinksExternal   int            `json:"links_external,omitempty"`
-	ExternalDomains map[string]int `json:"external_domains,omitempty"`
+	LinksTotal            int            `json:"links_total,omitempty"`
+	LinksInternal         int            `json:"links_internal,omitempty"`
+	LinksExternal         int            `json:"links_external,omitempty"`
+	LinksNofollow         int            `json:"links_nofollow,omitempty"`
+	LinksNofollowInternal int            `json:"links_nofollow_internal,omitempty"`
+	LinksNofollowExternal int            `json:"links_nofollow_external,omitempty"`
+	ExternalDomains       map[string]int `json:"external_domains,omitempty"`
 
 	// Images analysis
 	ImagesTotal      int `json:"images_total,omitempty"`
