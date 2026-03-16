@@ -172,7 +172,10 @@ func resolveLogLevel(outputLevel string, globalLevel zapcore.Level) zapcore.Leve
 // createEncoder creates a zapcore.Encoder based on format
 func createEncoder(format string) zapcore.Encoder {
 	if format == configtypes.LogFormatJSON {
-		return zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
+		cfg := zap.NewProductionEncoderConfig()
+		cfg.TimeKey = "ts"
+		cfg.EncodeTime = zapcore.ISO8601TimeEncoder
+		return zapcore.NewJSONEncoder(cfg)
 	}
 
 	// Console or text format
