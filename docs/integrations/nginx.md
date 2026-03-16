@@ -49,7 +49,7 @@ Required header: `X-Render-Key` (from your host configuration)
 
 ## Map configuration
 
-Maintain detection logic in a separate file and include it in your server block. This configuration catches crawlers using generic keywords plus explicit patterns for crawlers without these keywords in their name.
+Maintain detection logic in a separate file and include it in the `http` context (map directives cannot be inside a `server` block). This configuration catches crawlers using generic keywords plus explicit patterns for crawlers without these keywords in their name.
 
 ::: code-group
 
@@ -96,21 +96,16 @@ For alternative crawler detection approaches and detailed configuration explanat
 Use the `$ec_should_render` variable from the map configuration to route crawler traffic.
 
 ```nginx [nginx/sites-enabled/example.com.conf]
-# Define upstreams for flexibility
-upstream backend {
-    server 127.0.0.1:3000;
-}
-
 upstream rendergw {
     server 127.0.0.1:10070;
 }
 
+# Map directives require http context (outside server block)
+include conf.d/edge-comet-map.conf;
+
 server {
     listen 80;
     server_name example.com;
-
-    # Include the detection logic
-    include conf.d/edge-comet-map.conf;
 
     location / {
         # Route crawlers to Edge Gateway (logic computed in maps above)
@@ -119,12 +114,7 @@ server {
             return 418;
         }
 
-        # Regular traffic goes to origin
-        proxy_pass http://backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        # ... your existing proxy configuration ...
     }
 
     location @edge_render {
