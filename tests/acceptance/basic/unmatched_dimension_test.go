@@ -1,6 +1,7 @@
 package acceptance_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -77,6 +78,31 @@ var _ = Describe("Unmatched Dimension Handling", Serial, func() {
 			By("Verifying bypass content is served")
 			Expect(response.Body).To(ContainSubstring("Bypass Test Page"),
 				"Bypass content should be present")
+		})
+
+		It("should cache bypass response and serve from cache on second request", func() {
+			By("Making first request with unmatched User-Agent")
+			uniquePath := fmt.Sprintf("/test-unmatched/bypass/cache-test-%d/", time.Now().UnixNano())
+			response1 := makeRequestWithCustomUA(uniquePath, "CacheTestBot/1.0")
+
+			By("Verifying first request is a fresh bypass")
+			Expect(response1.Error).To(BeNil())
+			Expect(response1.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
+			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+				"First request should be a fresh bypass")
+			Expect(response1.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
+				"X-Unmatched-Dimension header should be set")
+
+			By("Making second request with same unmatched User-Agent")
+			response2 := makeRequestWithCustomUA(uniquePath, "CacheTestBot/1.0")
+
+			By("Verifying second request is served from bypass cache")
+			Expect(response2.Error).To(BeNil())
+			Expect(response2.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
+			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"),
+				"Second request should be served from bypass cache")
+			Expect(response2.Headers.Get("X-Render-Cache")).To(Equal("hit"),
+				"Second request should be a cache hit")
 		})
 	})
 

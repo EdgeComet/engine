@@ -640,6 +640,11 @@ hosts:
         action: "render"
         render:
           unmatched_dimension: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 30s
+            status_codes: [200]
 
       # Uses host default (bypass) - no pattern-level override
       - match: "/test-unmatched/default/*"

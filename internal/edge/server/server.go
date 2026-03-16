@@ -27,6 +27,9 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// Dimension ID 0 is used for unmatched bypass cache entries to avoid collisions with real dimensions (IDs start at 1+)
+const unmatchedBypassDimensionID = 0
+
 type Server struct {
 	configManager configtypes.EGConfigManager
 	redis         *redis.Client
@@ -197,41 +200,8 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 		renderCtx.WithDimension(dimension)
 	}
 
-	// Handle unmatched User-Agent according to resolved configuration
-	if !dimensionMatched {
-		unmatchedBehavior := resolved.Render.UnmatchedDimension
-
-		renderCtx.Logger.Info("User-Agent did not match any dimension pattern",
-			zap.String("user_agent", string(ctx.UserAgent())),
-			zap.String("unmatched_behavior", unmatchedBehavior))
-
-		switch unmatchedBehavior {
-		case types.UnmatchedDimensionBlock:
-			// Block the request - return 403 Forbidden
-			return s.handleUnmatchedBlock(ctx, renderCtx, start)
-
-		case types.UnmatchedDimensionBypass:
-			// Skip rendering entirely - use bypass service
-			return s.handleUnmatchedBypass(ctx, renderCtx, start)
-
-		default:
-			// Use specified dimension name as fallback
-			dimension = s.selectFallbackDimension(renderCtx, unmatchedBehavior, dimension)
-			renderCtx.DimensionUnmatched = true
-			renderCtx.WithDimension(dimension)
-		}
-	}
-
-	renderCtx.Logger.Debug("Configuration resolved for URL",
-		zap.String("url", targetURL),
-		zap.String("action", string(resolved.Action)),
-		zap.String("matched_rule", resolved.MatchedRuleID),
-		zap.Bool("tracking_params_enabled", resolved.TrackingParams != nil && resolved.TrackingParams.Enabled),
-		zap.Bool("sharding_enabled", resolved.Sharding.Enabled),
-		zap.Bool("push_on_render", resolved.Sharding.PushOnRender),
-		zap.Bool("replicate_on_pull", resolved.Sharding.ReplicateOnPull))
-
 	// Normalize URL (includes tracking param stripping if enabled)
+	// Done before unmatched dimension check so URLHash is available for bypass cache
 	normalizer := hash.NewURLNormalizer()
 	var stripPatterns []config.CompiledStripPattern
 	if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
@@ -266,6 +236,43 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 
 	// Store in context
 	renderCtx.WithProcessedURL(normalizeResult.NormalizedURL).WithURLHash(urlHash)
+
+	// Handle unmatched User-Agent according to resolved configuration
+	if !dimensionMatched {
+		unmatchedBehavior := resolved.Render.UnmatchedDimension
+
+		renderCtx.Logger.Info("User-Agent did not match any dimension pattern",
+			zap.String("user_agent", string(ctx.UserAgent())),
+			zap.String("unmatched_behavior", unmatchedBehavior))
+
+		switch unmatchedBehavior {
+		case types.UnmatchedDimensionBlock:
+			// Block the request - return 403 Forbidden
+			return s.handleUnmatchedBlock(ctx, renderCtx, start)
+
+		case types.UnmatchedDimensionBypass:
+			// Generate cache key for bypass cache support (dimension ID 0 = unmatched)
+			cacheKey := s.keyGenerator.GenerateCacheKey(host.ID, unmatchedBypassDimensionID, renderCtx.URLHash)
+			lockKey := s.keyGenerator.GenerateLockKey(cacheKey)
+			renderCtx.WithCacheKey(cacheKey).WithLockKey(lockKey)
+			return s.handleUnmatchedBypass(ctx, renderCtx, start)
+
+		default:
+			// Use specified dimension name as fallback
+			dimension = s.selectFallbackDimension(renderCtx, unmatchedBehavior, dimension)
+			renderCtx.DimensionUnmatched = true
+			renderCtx.WithDimension(dimension)
+		}
+	}
+
+	renderCtx.Logger.Debug("Configuration resolved for URL",
+		zap.String("url", targetURL),
+		zap.String("action", string(resolved.Action)),
+		zap.String("matched_rule", resolved.MatchedRuleID),
+		zap.Bool("tracking_params_enabled", resolved.TrackingParams != nil && resolved.TrackingParams.Enabled),
+		zap.Bool("sharding_enabled", resolved.Sharding.Enabled),
+		zap.Bool("push_on_render", resolved.Sharding.PushOnRender),
+		zap.Bool("replicate_on_pull", resolved.Sharding.ReplicateOnPull))
 
 	// Generate cache key and lock key from context data
 	// Safety check: dimension must exist in host configuration
