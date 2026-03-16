@@ -148,6 +148,14 @@ func ssrfSafeDial(addr string) (net.Conn, error) {
 		}
 	}
 
-	// All IPs validated as public; connect to the first one
-	return fasthttp.DialTimeout(net.JoinHostPort(ips[0].String(), port), 10*time.Second)
+	// Prefer IPv4 address since fasthttp.DialTimeout only supports IPv4
+	connectIP := ips[0]
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			connectIP = ip
+			break
+		}
+	}
+
+	return fasthttp.DialTimeout(net.JoinHostPort(connectIP.String(), port), 10*time.Second)
 }
