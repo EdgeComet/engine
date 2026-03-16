@@ -355,6 +355,11 @@ func (pm *PrometheusMetrics) UpdateCacheSize(sizeBytes float64) {
 	pm.cacheSize.Set(sizeBytes)
 }
 
+// AddCacheSize increments the cache size gauge by the given number of bytes
+func (pm *PrometheusMetrics) AddCacheSize(sizeBytes float64) {
+	pm.cacheSize.Add(sizeBytes)
+}
+
 // RecordWaitSuccess records a successful wait for concurrent render
 func (pm *PrometheusMetrics) RecordWaitSuccess(host, dimension string, duration time.Duration) {
 	pm.waitTotal.WithLabelValues(host, dimension, "success").Inc()

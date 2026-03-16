@@ -165,6 +165,10 @@ func (cc *CacheCoordinator) SaveCache(
 			zap.Int64("disk_size", diskSize),
 			zap.Int("status_code", statusCode),
 			zap.String("source", source))
+
+		if cc.metrics != nil {
+			cc.metrics.AddCacheSize(diskSize)
+		}
 	} else {
 		location := ""
 		if locations, ok := getHeaderCaseInsensitive(headers, "Location"); ok && len(locations) > 0 {

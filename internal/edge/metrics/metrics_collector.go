@@ -153,6 +153,11 @@ func (mc *MetricsCollector) RecordCompression(algorithm string, originalSize, co
 		zap.Int64("bytes_saved", bytesSaved))
 }
 
+// AddCacheSize increments the cache size gauge by the given number of bytes
+func (mc *MetricsCollector) AddCacheSize(sizeBytes int64) {
+	mc.prometheus.AddCacheSize(float64(sizeBytes))
+}
+
 // RecordDecompressionError records a decompression failure
 func (mc *MetricsCollector) RecordDecompressionError(algorithm string) {
 	mc.prometheus.RecordDecompressionError(algorithm)

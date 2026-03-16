@@ -186,6 +186,11 @@ func (s *Server) recordResultMetrics(renderCtx *edgectx.RenderContext, result *o
 		s.metricsCollector.RecordCacheMiss(host.Domain, dimension)
 		s.metricsCollector.RecordRequest(host.Domain, dimension, "success", duration)
 
+	case orchestrator.ServedFromBypassCache:
+		sourceStr = "bypass_cache"
+		s.metricsCollector.RecordCacheHit(host.Domain, dimension)
+		s.metricsCollector.RecordRequest(host.Domain, dimension, "bypass_cache_hit", duration)
+
 	default:
 		sourceStr = "unknown"
 		s.metricsCollector.RecordRequest(host.Domain, dimension, "success", duration)
