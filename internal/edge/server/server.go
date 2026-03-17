@@ -136,7 +136,8 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	defer s.metricsCollector.DecActiveRequests()
 
 	// Extract and validate URL
-	targetURL, err := orchestrator.ExtractURL(renderCtx)
+	ssrfProtection := cfg.Bypass.SSRFProtection == nil || *cfg.Bypass.SSRFProtection
+	targetURL, err := orchestrator.ExtractURL(renderCtx, ssrfProtection)
 	if err != nil {
 		duration := time.Since(start)
 		reqErr := &requestError{

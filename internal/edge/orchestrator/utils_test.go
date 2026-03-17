@@ -94,7 +94,7 @@ func TestExtractURL(t *testing.T) {
 			}
 
 			renderCtx := edgectx.NewRenderContext("test-request", ctx, zap.NewNop(), 30*time.Second)
-			extractedURL, err := ExtractURL(renderCtx)
+			extractedURL, err := ExtractURL(renderCtx, true)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -103,6 +103,69 @@ func TestExtractURL(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedURL, extractedURL)
+			}
+		})
+	}
+}
+
+func TestExtractURL_SSRFProtection(t *testing.T) {
+	tests := []struct {
+		name           string
+		urlParam       string
+		ssrfProtection bool
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name:           "private IP blocked when ssrf protection enabled",
+			urlParam:       "http://127.0.0.1/page",
+			ssrfProtection: true,
+			expectError:    true,
+			errorContains:  "SSRF protection",
+		},
+		{
+			name:           "private IP allowed when ssrf protection disabled",
+			urlParam:       "http://127.0.0.1/page",
+			ssrfProtection: false,
+			expectError:    false,
+		},
+		{
+			name:           "private IP 10.x blocked when ssrf protection enabled",
+			urlParam:       "http://10.0.0.1/page",
+			ssrfProtection: true,
+			expectError:    true,
+			errorContains:  "SSRF protection",
+		},
+		{
+			name:           "private IP 10.x allowed when ssrf protection disabled",
+			urlParam:       "http://10.0.0.1/page",
+			ssrfProtection: false,
+			expectError:    false,
+		},
+		{
+			name:           "public IP allowed with ssrf protection enabled",
+			urlParam:       "https://93.184.216.34/page",
+			ssrfProtection: true,
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.Header.SetMethod("GET")
+			ctx.Request.SetRequestURI("/render?url=" + url.QueryEscape(tt.urlParam))
+
+			renderCtx := edgectx.NewRenderContext("test-request", ctx, zap.NewNop(), 30*time.Second)
+			extractedURL, err := ExtractURL(renderCtx, tt.ssrfProtection)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorContains)
+				assert.Empty(t, extractedURL)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.urlParam, extractedURL)
 			}
 		})
 	}

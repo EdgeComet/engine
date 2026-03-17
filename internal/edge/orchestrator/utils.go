@@ -8,8 +8,9 @@ import (
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 )
 
-// ExtractURL extracts and validates URL from the query parameter
-func ExtractURL(renderCtx *edgectx.RenderContext) (string, error) {
+// ExtractURL extracts and validates URL from the query parameter.
+// When ssrfProtection is true, private IP literals are rejected.
+func ExtractURL(renderCtx *edgectx.RenderContext, ssrfProtection bool) (string, error) {
 	urlParam := renderCtx.HTTPCtx.QueryArgs().Peek("url")
 	if len(urlParam) == 0 {
 		return "", fmt.Errorf("missing required 'url' query parameter")
@@ -34,8 +35,10 @@ func ExtractURL(renderCtx *edgectx.RenderContext) (string, error) {
 		return "", fmt.Errorf("URL must have a valid host")
 	}
 
-	if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
-		return "", fmt.Errorf("SSRF protection: %w", err)
+	if ssrfProtection {
+		if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
+			return "", fmt.Errorf("SSRF protection: %w", err)
+		}
 	}
 
 	return targetURL, nil
