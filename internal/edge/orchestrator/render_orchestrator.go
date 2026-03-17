@@ -823,6 +823,7 @@ func (ro *RenderOrchestrator) serveFromCache(renderCtx *edgectx.RenderContext, c
 			BytesServed: 0, // No body content
 			StatusCode:  cacheEntry.StatusCode,
 			CacheAge:    time.Since(cacheEntry.CreatedAt),
+			PageSEO:     pageSEOFromCacheMetadata(cacheEntry),
 		}, nil
 	}
 
@@ -856,7 +857,20 @@ func (ro *RenderOrchestrator) serveFromCache(renderCtx *edgectx.RenderContext, c
 		BytesServed: cacheResp.ContentSize,
 		StatusCode:  cacheEntry.StatusCode,
 		CacheAge:    time.Since(cacheEntry.CreatedAt),
+		PageSEO:     pageSEOFromCacheMetadata(cacheEntry),
 	}, nil
+}
+
+// pageSEOFromCacheMetadata creates a minimal PageSEO from cache metadata.
+// Only Title and IndexStatus are available in Redis cache metadata.
+func pageSEOFromCacheMetadata(meta *cache.CacheMetadata) *types.PageSEO {
+	if meta.Title == "" && meta.IndexStatus == 0 {
+		return nil
+	}
+	return &types.PageSEO{
+		Title:       meta.Title,
+		IndexStatus: types.IndexStatus(meta.IndexStatus),
+	}
 }
 
 // tryPullFromRemoteSmartly attempts to pull cache from remote with smart storage decision
@@ -929,6 +943,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 			BytesServed: int64(len(content)),
 			StatusCode:  metadata.StatusCode,
 			CacheAge:    time.Since(metadata.CreatedAt),
+			PageSEO:     pageSEOFromCacheMetadata(metadata),
 		}, true
 	}
 
@@ -1007,6 +1022,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 			BytesServed: int64(len(content)),
 			StatusCode:  metadata.StatusCode,
 			CacheAge:    time.Since(metadata.CreatedAt),
+			PageSEO:     pageSEOFromCacheMetadata(metadata),
 		}, true
 	}
 }
