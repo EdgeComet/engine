@@ -72,9 +72,9 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 		assert.NotContains(t, tablet.MatchUA, "$AnthropicBot", "Anthropic alias should be expanded")
 		assert.NotContains(t, tablet.MatchUA, "$ChatGPTUserBot", "ChatGPT alias should be expanded")
 
-		assert.Contains(t, tablet.MatchUA, "*ClaudeBot/1.0; +claudebot@anthropic.com*",
+		assert.Contains(t, tablet.MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com",
 			"AnthropicBot should expand to ClaudeBot pattern")
-		assert.Contains(t, tablet.MatchUA, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+		assert.Contains(t, tablet.MatchUA, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot",
 			"ChatGPTUserBot should expand correctly")
 
 		assert.NotNil(t, tablet.CompiledPatterns, "Tablet patterns should be compiled")

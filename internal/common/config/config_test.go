@@ -575,7 +575,7 @@ hosts:
 	desktop := hosts[0].Render.Dimensions["desktop"]
 	assert.Greater(t, len(desktop.MatchUA), 1, "host dimension should have expanded patterns")
 	assert.Contains(t, desktop.MatchUA, "*CustomBot*", "should retain custom pattern")
-	assert.Contains(t, desktop.MatchUA, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
+	assert.Contains(t, desktop.MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
 	assert.NotNil(t, desktop.CompiledPatterns, "patterns should be compiled")
 	assert.Greater(t, len(desktop.CompiledPatterns), 0, "should have compiled patterns")
 }

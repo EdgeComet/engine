@@ -659,18 +659,18 @@ hosts:
 	// Verify global bothit_recache expanded
 	require.NotNil(t, manager.config.BothitRecache)
 	assert.Len(t, manager.config.BothitRecache.MatchUA, 1)
-	assert.Contains(t, manager.config.BothitRecache.MatchUA, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot")
+	assert.Contains(t, manager.config.BothitRecache.MatchUA, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
 
 	// Verify host bothit_recache expanded independently
 	require.Len(t, manager.hosts.Hosts, 1)
 	host := manager.hosts.Hosts[0]
 	require.NotNil(t, host.BothitRecache)
 	assert.Len(t, host.BothitRecache.MatchUA, 1)
-	assert.Contains(t, host.BothitRecache.MatchUA, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
+	assert.Contains(t, host.BothitRecache.MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
 
 	// Verify no cross-contamination
-	assert.NotContains(t, manager.config.BothitRecache.MatchUA, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
-	assert.NotContains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot")
+	assert.NotContains(t, manager.config.BothitRecache.MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
+	assert.NotContains(t, host.BothitRecache.MatchUA, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
 }
 
 // TestBothitRecache_HostLevel_CaseSensitivity tests case-sensitive alias matching at host level

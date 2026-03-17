@@ -243,14 +243,14 @@ func TestGetBotAlias_ChatGPTUserBot(t *testing.T) {
 	patterns, exists := GetBotAlias("ChatGPTUserBot")
 	assert.True(t, exists)
 	assert.Len(t, patterns, 1)
-	assert.Contains(t, patterns, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot")
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
 }
 
 func TestGetBotAlias_OpenAISearchBot(t *testing.T) {
 	patterns, exists := GetBotAlias("OpenAISearchBot")
 	assert.True(t, exists)
 	assert.Len(t, patterns, 1)
-	assert.Contains(t, patterns, "*OAI-SearchBot/1.0; +https://openai.com/searchbot*")
+	assert.Contains(t, patterns, "~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot")
 }
 
 func TestGetBotAlias_ChatGPTTrainingBot(t *testing.T) {
@@ -272,14 +272,14 @@ func TestGetBotAlias_PerplexityUserBot(t *testing.T) {
 	patterns, exists := GetBotAlias("PerplexityUserBot")
 	assert.True(t, exists)
 	assert.Len(t, patterns, 1)
-	assert.Contains(t, patterns, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)")
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko; compatible; Perplexity-User\\/\\d+\\.\\d+; \\+https:\\/\\/perplexity\\.ai\\/perplexity-user\\)")
 }
 
 func TestGetBotAlias_AnthropicBot(t *testing.T) {
 	patterns, exists := GetBotAlias("AnthropicBot")
 	assert.True(t, exists)
 	assert.Len(t, patterns, 1)
-	assert.Contains(t, patterns, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
+	assert.Contains(t, patterns, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
 }
 
 func TestGetBotAlias_AnthropicUserBot(t *testing.T) {

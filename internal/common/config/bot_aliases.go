@@ -42,10 +42,10 @@ var BotAliases = map[string][]string{
 		"~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; bingbot\\/2\\.0\\; \\+http\\:\\/\\/www\\.bing\\.com\\/bingbot\\.htm\\)",
 	},
 	"ChatGPTUserBot": {
-		"Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot",
 	},
 	"OpenAISearchBot": {
-		"*OAI-SearchBot/1.0; +https://openai.com/searchbot*",
+		"~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot",
 	},
 	"ChatGPTTrainingBot": {
 		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\)\\; compatible\\; GPTBot\\/\\d\\.\\d\\; \\+https:\\/\\/openai\\.com\\/gptbot",
@@ -55,10 +55,10 @@ var BotAliases = map[string][]string{
 		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\; compatible\\; PerplexityBot\\/\\d\\.\\d\\; \\+https:\\/\\/perplexity\\.ai\\/perplexitybot\\)",
 	},
 	"PerplexityUserBot": {
-		"Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)",
+		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko; compatible; Perplexity-User\\/\\d+\\.\\d+; \\+https:\\/\\/perplexity\\.ai\\/perplexity-user\\)",
 	},
 	"AnthropicBot": {
-		"*ClaudeBot/1.0; +claudebot@anthropic.com*",
+		"~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com",
 	},
 	"AnthropicUserBot": {
 		"*Claude-User*",

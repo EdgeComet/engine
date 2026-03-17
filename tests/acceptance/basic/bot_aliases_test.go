@@ -319,6 +319,52 @@ var _ = Describe("Bot Aliases", Serial, func() {
 		})
 	})
 
+	Context("when testing version-agnostic bot matching", func() {
+		It("should match OAI-SearchBot with updated version and new UA format", func() {
+			By("Sending request with OAI-SearchBot/1.3 in new Chrome-prefix format")
+			userAgent := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36; compatible; OAI-SearchBot/1.3; +https://openai.com/searchbot"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying OAI-SearchBot with new version was recognized")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+
+		It("should match ChatGPT-User with updated version", func() {
+			By("Sending request with ChatGPT-User/2.0")
+			userAgent := "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/2.0; +https://openai.com/bot"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying ChatGPT-User with new version was recognized")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+
+		It("should match ClaudeBot with updated version", func() {
+			By("Sending request with ClaudeBot/2.0")
+			userAgent := "ClaudeBot/2.0; +claudebot@anthropic.com"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying ClaudeBot with new version was recognized")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+
+		It("should match Perplexity-User with updated version", func() {
+			By("Sending request with Perplexity-User/2.0")
+			userAgent := "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/2.0; +https://perplexity.ai/perplexity-user)"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying Perplexity-User with new version was recognized")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+	})
+
 	Context("when testing negative cases for bot aliases", func() {
 		It("should not match regular browser User-Agents to bot dimensions", func() {
 			By("Sending request with Chrome desktop User-Agent")

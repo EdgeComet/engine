@@ -227,9 +227,9 @@ func TestExpandDimensionAliases_AllAIBots(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, dimensions["ai_bots"].MatchUA, 4)
-	assert.Contains(t, dimensions["ai_bots"].MatchUA, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot")
-	assert.Contains(t, dimensions["ai_bots"].MatchUA, "*OAI-SearchBot/1.0; +https://openai.com/searchbot*")
-	assert.Contains(t, dimensions["ai_bots"].MatchUA, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
+	assert.Contains(t, dimensions["ai_bots"].MatchUA, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
+	assert.Contains(t, dimensions["ai_bots"].MatchUA, "~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot")
+	assert.Contains(t, dimensions["ai_bots"].MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
 }
 
 func TestExpandDimensionAliases_OrderPreserved(t *testing.T) {
@@ -253,7 +253,7 @@ func TestExpandDimensionAliases_OrderPreserved(t *testing.T) {
 	assert.Equal(t, "pattern1", dimensions["ordered"].MatchUA[0])
 	assert.Equal(t, "AdsBot-Google (+http://www.google.com/adsbot.html)", dimensions["ordered"].MatchUA[1])
 	assert.Equal(t, "pattern2", dimensions["ordered"].MatchUA[2])
-	assert.Equal(t, "*ClaudeBot/1.0; +claudebot@anthropic.com*", dimensions["ordered"].MatchUA[3])
+	assert.Equal(t, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com", dimensions["ordered"].MatchUA[3])
 	assert.Equal(t, "pattern3", dimensions["ordered"].MatchUA[4])
 }
 
@@ -443,7 +443,7 @@ func TestExpandBotAliases_OrderPreserved(t *testing.T) {
 	assert.Equal(t, "pattern1", expanded[0])
 	assert.Equal(t, "AdsBot-Google (+http://www.google.com/adsbot.html)", expanded[1])
 	assert.Equal(t, "pattern2", expanded[2])
-	assert.Equal(t, "*ClaudeBot/1.0; +claudebot@anthropic.com*", expanded[3])
+	assert.Equal(t, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com", expanded[3])
 }
 
 func TestExpandBotAliases_ErrorMessageFormat(t *testing.T) {
@@ -493,12 +493,12 @@ func TestExpandBotAliases_CompositeAIBots(t *testing.T) {
 	assert.Len(t, expanded, 11)
 
 	// Verify patterns from various AI bots
-	assert.Contains(t, expanded, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot")
-	assert.Contains(t, expanded, "*OAI-SearchBot/1.0; +https://openai.com/searchbot*")
-	assert.Contains(t, expanded, "*ClaudeBot/1.0; +claudebot@anthropic.com*")
+	assert.Contains(t, expanded, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
+	assert.Contains(t, expanded, "~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot")
+	assert.Contains(t, expanded, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
 	assert.Contains(t, expanded, "*Claude-User*")
 	assert.Contains(t, expanded, "*Claude-SearchBot*")
-	assert.Contains(t, expanded, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)")
+	assert.Contains(t, expanded, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko; compatible; Perplexity-User\\/\\d+\\.\\d+; \\+https:\\/\\/perplexity\\.ai\\/perplexity-user\\)")
 	assert.Contains(t, expanded, "*Amazonbot/*")
 	assert.Contains(t, expanded, "*AMZN-User/*")
 }
