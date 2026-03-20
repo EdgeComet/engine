@@ -1073,9 +1073,9 @@ func (ro *RenderOrchestrator) handleCacheAvailableAfterWait(
 	return ro.serveBypass(renderCtx, "remote_pull_failed_after_wait")
 }
 
-// extractBypassSEO parses HTML bypass response and extracts SEO metadata.
+// ExtractBypassSEO parses HTML bypass response and extracts SEO metadata.
 // Returns nil for non-HTML content types or on parse failure.
-func extractBypassSEO(body []byte, contentType string, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
+func ExtractBypassSEO(body []byte, contentType string, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
 	if !strings.Contains(contentType, contentTypeHTML) {
 		return nil
 	}
@@ -1150,31 +1150,17 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	// 2.5. EXTRACT SEO METADATA from HTML responses
-	pageSEO := extractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, renderCtx.TargetURL, renderCtx.Logger)
+	pageSEO := ExtractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, renderCtx.TargetURL, renderCtx.Logger)
 
-	// 3. SAVE TO CACHE if enabled, TTL > 0, and status code is cacheable
-	if renderCtx.ResolvedConfig.Bypass.Cache.Enabled && renderCtx.ResolvedConfig.Bypass.Cache.TTL > 0 &&
-		ro.cacheCoord.IsStatusCodeCacheable(bypassResp.StatusCode, renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes) {
-		// CRITICAL: Never overwrite render cache with bypass cache (render cache is higher quality)
-		if existing, exists := ro.cacheCoord.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {
-			renderCtx.Logger.Info("Skipping bypass cache save - render cache already exists (higher priority)",
-				zap.String("existing_source", existing.Source),
-				zap.Int("existing_status", existing.StatusCode),
-				zap.Duration("existing_age", time.Since(existing.CreatedAt)))
-		} else {
-			if err := ro.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
-				renderCtx.Logger.Error("Failed to save bypass response to cache", zap.Error(err))
-				// Continue - we can still serve the response
-			}
+	// 3. SAVE TO CACHE if all preconditions are met
+	if canSave, reason := ro.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); canSave {
+		if err := ro.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
+			renderCtx.Logger.Error("Failed to save bypass response to cache", zap.Error(err))
 		}
 	} else if renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
-		if renderCtx.ResolvedConfig.Bypass.Cache.TTL == 0 {
-			renderCtx.Logger.Info("Skipping bypass cache (TTL=0 - no caching)")
-		} else {
-			renderCtx.Logger.Info("Skipping bypass cache for non-cacheable status code",
-				zap.Int("status_code", bypassResp.StatusCode),
-				zap.Ints("cacheable_codes", renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes))
-		}
+		renderCtx.Logger.Info("Skipping bypass cache save",
+			zap.String("reason", reason),
+			zap.Int("status_code", bypassResp.StatusCode))
 	}
 
 	// 4. SERVE RESPONSE to client

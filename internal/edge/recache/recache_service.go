@@ -14,6 +14,7 @@ import (
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/common/urlutil"
+	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/events"
@@ -141,6 +142,7 @@ type TabReservation struct {
 type RecacheService struct {
 	configManager configtypes.EGConfigManager
 	cacheCoord    *orchestrator.CacheCoordinator
+	bypassSvc     *bypass.BypassService
 	redis         *redis.Client
 	rsClient      *rsclient.RSClient
 	metadataStore *cache.MetadataStore
@@ -153,6 +155,7 @@ type RecacheService struct {
 func NewRecacheService(
 	configManager configtypes.EGConfigManager,
 	cacheCoord *orchestrator.CacheCoordinator,
+	bypassSvc *bypass.BypassService,
 	redisClient *redis.Client,
 	rsClient *rsclient.RSClient,
 	metadataStore *cache.MetadataStore,
@@ -163,6 +166,7 @@ func NewRecacheService(
 	return &RecacheService{
 		configManager: configManager,
 		cacheCoord:    cacheCoord,
+		bypassSvc:     bypassSvc,
 		redis:         redisClient,
 		rsClient:      rsClient,
 		metadataStore: metadataStore,
@@ -224,6 +228,11 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		zap.Int("host_id", hostID),
 		zap.Int("dimension_id", dimensionID),
 		zap.String("dimension_name", dimensionName))
+
+	// Route to bypass recache if the URL's resolved action is bypass
+	if renderCtx.ResolvedConfig.Action == types.ActionBypass {
+		return rs.processBypassRecache(ctx, url, renderCtx, startTime)
+	}
 
 	// Select and reserve render service tab
 	reservation, err := rs.selectServiceAndReserveTab(ctx, requestID)
@@ -317,6 +326,61 @@ func (rs *RecacheService) saveToCache(
 		zap.String("url", renderCtx.TargetURL),
 		zap.String("cache_key", renderCtx.CacheKey.String()),
 		zap.Int("html_size", len(renderResult.HTML)))
+
+	return nil
+}
+
+// processBypassRecache fetches content from origin via bypass and saves to bypass cache
+func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, renderCtx *edgectx.RenderContext, startTime time.Time) error {
+	rs.logger.Info("Processing bypass recache request",
+		zap.String("url", url),
+		zap.String("cache_key", renderCtx.CacheKey.String()))
+
+	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Logger)
+	if err != nil {
+		return fmt.Errorf("bypass fetch failed: %w", err)
+	}
+
+	rs.logger.Info("Bypass fetch completed successfully",
+		zap.String("url", url),
+		zap.Int("status_code", bypassResp.StatusCode),
+		zap.Int("response_size", len(bypassResp.Body)))
+
+	if canSave, reason := rs.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); !canSave {
+		return fmt.Errorf("bypass cache save skipped: %s", reason)
+	}
+
+	pageSEO := orchestrator.ExtractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, url, renderCtx.Logger)
+
+	if err := rs.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
+		return fmt.Errorf("failed to save bypass cache: %w", err)
+	}
+
+	// Clear last_bot_hit field (lifecycle completion)
+	if err := rs.metadataStore.ClearLastBotHit(ctx, renderCtx.CacheKey); err != nil {
+		rs.logger.Error("Failed to clear last_bot_hit",
+			zap.String("cache_key", renderCtx.CacheKey.String()),
+			zap.Error(err))
+	}
+
+	totalDuration := time.Since(startTime)
+
+	// Emit recache event for access logging
+	if rs.eventEmitter != nil {
+		result := &orchestrator.RenderResult{
+			Source:      orchestrator.ServedFromBypass,
+			Duration:    totalDuration,
+			BytesServed: int64(len(bypassResp.Body)),
+			StatusCode:  bypassResp.StatusCode,
+			PageSEO:     pageSEO,
+		}
+		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
+		rs.eventEmitter.Emit(event)
+	}
+
+	rs.logger.Info("Bypass recache completed successfully",
+		zap.String("url", url),
+		zap.String("cache_key", renderCtx.CacheKey.String()))
 
 	return nil
 }

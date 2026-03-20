@@ -312,7 +312,7 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	}
 
 	// Bot detection on cache hit (automatic recache scheduling)
-	if result.Source == orchestrator.ServedFromCache && renderCtx.ResolvedConfig.BothitRecache.Enabled {
+	if (result.Source == orchestrator.ServedFromCache || result.Source == orchestrator.ServedFromBypassCache) && renderCtx.ResolvedConfig.BothitRecache.Enabled {
 		userAgent := string(ctx.Request.Header.Peek("User-Agent"))
 		if bot.IsBotRequest(userAgent, &renderCtx.ResolvedConfig.BothitRecache) {
 			now := time.Now().UTC()

@@ -102,7 +102,7 @@ func TestExtractBypassSEO(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			seo := extractBypassSEO(tt.body, tt.contentType, tt.statusCode, tt.targetURL, logger)
+			seo := ExtractBypassSEO(tt.body, tt.contentType, tt.statusCode, tt.targetURL, logger)
 
 			if tt.wantNil {
 				assert.Nil(t, seo)

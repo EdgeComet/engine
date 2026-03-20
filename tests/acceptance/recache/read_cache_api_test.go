@@ -395,9 +395,13 @@ var _ = Describe("Cache Reader", func() {
 
 	Context("GET /internal/cache/queue", func() {
 		It("returns queue items", func() {
+			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
+			err := testEnv.PauseScheduler()
+			Expect(err).NotTo(HaveOccurred())
+
 			now := float64(time.Now().Unix())
 
-			err := addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/q1", 1, now)
+			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/q1", 1, now)
 			Expect(err).NotTo(HaveOccurred())
 			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "normal", "https://example.com/q2", 2, now+10)
 			Expect(err).NotTo(HaveOccurred())
@@ -420,9 +424,13 @@ var _ = Describe("Cache Reader", func() {
 		})
 
 		It("filters by priority=high", func() {
+			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
+			err := testEnv.PauseScheduler()
+			Expect(err).NotTo(HaveOccurred())
+
 			now := float64(time.Now().Unix())
 
-			err := addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high1", 1, now)
+			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high1", 1, now)
 			Expect(err).NotTo(HaveOccurred())
 			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high2", 1, now+1)
 			Expect(err).NotTo(HaveOccurred())
@@ -445,6 +453,10 @@ var _ = Describe("Cache Reader", func() {
 		})
 
 		It("supports cursor pagination", func() {
+			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
+			err := testEnv.PauseScheduler()
+			Expect(err).NotTo(HaveOccurred())
+
 			now := float64(time.Now().Unix())
 
 			for i := 0; i < 8; i++ {

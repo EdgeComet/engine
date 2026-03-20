@@ -186,7 +186,7 @@ func main() {
 
 	// Initialize recache service
 	cacheCoord := orchestrator.NewCacheCoordinator(metadataStore, fsCache, cacheService, shardingManager, metricsCollector, egLogger)
-	recacheService := recache.NewRecacheService(configManager, cacheCoord, redisClient, rsClient, metadataStore, eventEmitter, cfg.EgID, egLogger)
+	recacheService := recache.NewRecacheService(configManager, cacheCoord, bypassService, redisClient, rsClient, metadataStore, eventEmitter, cfg.EgID, egLogger)
 
 	// Create internal server and register endpoints
 	internalSrv := internal_server.NewInternalServer(cfg.Internal.AuthKey, egLogger)
