@@ -642,6 +642,52 @@ func (te *TestEnvironment) RequestRenderWithAPIKey(targetURL string, apiKey stri
 	}
 }
 
+// RequestRenderWithUserAgent makes a render request with a custom User-Agent
+func (te *TestEnvironment) RequestRenderWithUserAgent(targetURL string, userAgent string) *TestResponse {
+	var fullTargetURL string
+	if strings.HasPrefix(targetURL, "/") {
+		fullTargetURL = te.Config.TestPagesURL() + targetURL
+	} else {
+		fullTargetURL = targetURL
+	}
+
+	egPath := "/render?url=" + url.QueryEscape(fullTargetURL)
+
+	req, err := http.NewRequest("GET", te.Config.EGBaseURL()+egPath, nil)
+	if err != nil {
+		return &TestResponse{Error: err}
+	}
+
+	req.Header.Set("X-Render-Key", te.Config.Test.ValidAPIKey)
+	req.Header.Set("User-Agent", userAgent)
+
+	start := time.Now()
+	resp, err := te.HTTPClient.Do(req)
+	duration := time.Since(start)
+
+	if err != nil {
+		return &TestResponse{Error: err, Duration: duration}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return &TestResponse{
+			StatusCode: resp.StatusCode,
+			Headers:    resp.Header,
+			Duration:   duration,
+			Error:      err,
+		}
+	}
+
+	return &TestResponse{
+		StatusCode: resp.StatusCode,
+		Headers:    resp.Header,
+		Body:       string(body),
+		Duration:   duration,
+	}
+}
+
 // RequestRenderWithoutAuth makes a request without authentication headers
 func (te *TestEnvironment) RequestRenderWithoutAuth(targetURL string) *TestResponse {
 	// Build the full URL for the test page

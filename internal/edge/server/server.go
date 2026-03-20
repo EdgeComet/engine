@@ -238,6 +238,11 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	// Store in context
 	renderCtx.WithProcessedURL(normalizeResult.NormalizedURL).WithURLHash(urlHash)
 
+	// Handle status actions before dimension branching - URL-level decision, independent of dimension
+	if resolved.Action.IsStatusAction() {
+		return s.handleStatusAction(renderCtx, start)
+	}
+
 	// Handle unmatched User-Agent according to resolved configuration
 	if !dimensionMatched {
 		unmatchedBehavior := resolved.Render.UnmatchedDimension

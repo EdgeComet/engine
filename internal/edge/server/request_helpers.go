@@ -144,6 +144,35 @@ func (s *Server) handleUnmatchedBypass(ctx *fasthttp.RequestCtx, renderCtx *edge
 	return nil
 }
 
+// handleStatusAction handles status action responses (redirects, blocks, custom codes)
+func (s *Server) handleStatusAction(renderCtx *edgectx.RenderContext, start time.Time) error {
+	result, err := s.renderOrchestrator.ServeStatusAction(renderCtx)
+	if err != nil {
+		duration := time.Since(start)
+		reqErr := &requestError{
+			statusCode: fasthttp.StatusInternalServerError,
+			message:    "Internal server error",
+			category:   "status_action_error",
+		}
+		s.handleRequestError(renderCtx.HTTPCtx, renderCtx, err, reqErr, duration)
+		return err
+	}
+
+	duration := time.Since(start)
+	s.recordResultMetrics(renderCtx, result, duration)
+
+	if s.eventEmitter != nil {
+		event := events.BuildRequestEvent(renderCtx, result, duration, s.instanceID)
+		s.eventEmitter.Emit(event)
+	}
+
+	renderCtx.Logger.Info("Status action applied",
+		zap.Int("status_code", result.StatusCode),
+		zap.String("redirect_to", result.RedirectTo))
+
+	return nil
+}
+
 // selectFallbackDimension selects fallback dimension for unmatched User-Agent
 func (s *Server) selectFallbackDimension(renderCtx *edgectx.RenderContext, unmatchedBehavior, detectedDimension string) string {
 	// Check if configured fallback dimension exists

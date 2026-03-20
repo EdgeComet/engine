@@ -512,6 +512,20 @@ var _ = Describe("Status Actions", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("Forbidden"))
 		})
 
+		It("should apply status action for unmatched User-Agent", func() {
+			By("Making request with User-Agent that does not match any dimension")
+			response := testEnv.RequestRenderWithUserAgent("/blocked/admin-area", "curl/7.64.1")
+
+			By("Verifying status action fires despite unmatched dimension")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(403))
+			Expect(response.Body).To(ContainSubstring("Forbidden"))
+			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+
+			By("Verifying no unmatched dimension header is set")
+			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty())
+		})
+
 		It("should handle concurrent requests to status actions", func() {
 			By("Making multiple concurrent requests to status actions")
 			numRequests := 5

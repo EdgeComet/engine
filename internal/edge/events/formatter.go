@@ -38,6 +38,7 @@ var validFields = map[string]bool{
 	"page_size":                     true,
 	"serve_time":                    true,
 	"source":                        true,
+	"redirect_to":                   true,
 	"render_service_id":             true,
 	"render_time":                   true,
 	"chrome_id":                     true,
@@ -212,6 +213,8 @@ func (f *TemplateFormatter) getTopLevelFieldValue(event *RequestEvent, field str
 		return formatFloat(event.ServeTime)
 	case "source":
 		return formatString(event.Source)
+	case "redirect_to":
+		return formatString(event.RedirectTo)
 	case "render_service_id":
 		return formatString(event.RenderServiceID)
 	case "render_time":

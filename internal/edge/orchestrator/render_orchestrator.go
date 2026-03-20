@@ -279,18 +279,6 @@ func (ro *RenderOrchestrator) ProcessRenderRequest(renderCtx *edgectx.RenderCont
 		zap.Duration("cache_ttl", resolved.Cache.TTL),
 		zap.Duration("render_timeout", resolved.Render.Timeout))
 
-	// Handle status actions immediately (no rendering, no caching, no bypass)
-	if resolved.Action.IsStatusAction() {
-		ro.metricsCollector.RecordBypass(renderCtx.Host.Domain, fmt.Sprintf("status_%d", resolved.Status.Code))
-		ro.responseWriter.WriteStatusResponse(renderCtx, resolved.Status)
-		return &RenderResult{
-			Source:      ServedFromBypass, // Treated similar to bypass
-			Duration:    time.Millisecond, // Minimal duration
-			BytesServed: int64(renderCtx.HTTPCtx.Response.Header.ContentLength()),
-			StatusCode:  resolved.Status.Code,
-		}, nil
-	}
-
 	// Handle bypass action immediately (skip rendering and caching)
 	if resolved.Action == types.ActionBypass {
 		renderCtx.Logger.Info("URL matched bypass rule, fetching from origin directly")
@@ -1204,6 +1192,32 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 		BytesServed: int64(len(bypassResp.Body)),
 		StatusCode:  bypassResp.StatusCode,
 		PageSEO:     pageSEO,
+		RedirectTo:  redirectTo,
+	}, nil
+}
+
+// ServeStatusAction handles status actions (redirects, blocks, custom status codes)
+func (ro *RenderOrchestrator) ServeStatusAction(renderCtx *edgectx.RenderContext) (*RenderResult, error) {
+	resolved := renderCtx.ResolvedConfig
+
+	ro.metricsCollector.RecordBypass(renderCtx.Host.Domain, fmt.Sprintf("status_%d", resolved.Status.Code))
+	ro.responseWriter.WriteStatusResponse(renderCtx, resolved.Status)
+
+	redirectTo := ""
+	if isRedirectStatusCode(resolved.Status.Code) {
+		for k, v := range resolved.Status.Headers {
+			if strings.EqualFold(k, "location") {
+				redirectTo = v
+				break
+			}
+		}
+	}
+
+	return &RenderResult{
+		Source:      ServedFromBypass,
+		Duration:    time.Millisecond,
+		BytesServed: int64(renderCtx.HTTPCtx.Response.Header.ContentLength()),
+		StatusCode:  resolved.Status.Code,
 		RedirectTo:  redirectTo,
 	}, nil
 }
