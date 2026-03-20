@@ -604,6 +604,58 @@ func TestConvertPageSEO_NewFieldsZeroValues(t *testing.T) {
 	assert.Equal(t, "", event.HreflangSelf)
 }
 
+func TestBuildRequestEvent_RedirectTo(t *testing.T) {
+	renderCtx := createTestRenderContext()
+
+	t.Run("render redirect", func(t *testing.T) {
+		result := &orchestrator.RenderResult{
+			Source:     orchestrator.ServedFromRender,
+			StatusCode: 301,
+			RedirectTo: "https://example.com/new-page",
+		}
+
+		event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+		assert.Equal(t, "https://example.com/new-page", event.RedirectTo)
+	})
+
+	t.Run("bypass redirect", func(t *testing.T) {
+		result := &orchestrator.RenderResult{
+			Source:     orchestrator.ServedFromBypass,
+			StatusCode: 302,
+			RedirectTo: "https://example.com/other",
+		}
+
+		event := BuildRequestEvent(renderCtx, result, 50*time.Millisecond, "eg-1")
+
+		assert.Equal(t, "https://example.com/other", event.RedirectTo)
+	})
+
+	t.Run("cache redirect", func(t *testing.T) {
+		result := &orchestrator.RenderResult{
+			Source:     orchestrator.ServedFromCache,
+			StatusCode: 301,
+			RedirectTo: "https://example.com/cached-redirect",
+			CacheAge:   5 * time.Minute,
+		}
+
+		event := BuildRequestEvent(renderCtx, result, 10*time.Millisecond, "eg-1")
+
+		assert.Equal(t, "https://example.com/cached-redirect", event.RedirectTo)
+	})
+
+	t.Run("non-redirect has empty redirect_to", func(t *testing.T) {
+		result := &orchestrator.RenderResult{
+			Source:     orchestrator.ServedFromRender,
+			StatusCode: 200,
+		}
+
+		event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+		assert.Empty(t, event.RedirectTo)
+	})
+}
+
 // createTestRenderContext creates a minimal RenderContext for testing
 func createTestRenderContext() *edgectx.RenderContext {
 	// Create a mock fasthttp context

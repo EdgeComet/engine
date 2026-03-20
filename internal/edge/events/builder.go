@@ -78,6 +78,7 @@ func BuildRequestEvent(
 		event.CacheAge = int(result.CacheAge.Seconds())
 		event.ErrorType = result.ErrorType
 		event.ErrorMessage = result.ErrorMessage
+		event.RedirectTo = result.RedirectTo
 
 		// Map ResponseSource to EventType and Source
 		event.EventType, event.Source = mapResponseSource(result.Source)

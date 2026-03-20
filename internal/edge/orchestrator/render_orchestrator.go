@@ -186,6 +186,7 @@ type RenderResult struct {
 	RenderTime   time.Duration      // Render duration (for renders)
 	ErrorType    string             // Structured error category (e.g., "soft_timeout", "origin_4xx")
 	ErrorMessage string             // Detailed error description
+	RedirectTo   string             // Redirect target URL (Location header value for 3xx)
 }
 
 // RenderOrchestrator coordinates rendering requests, service selection, and fallback handling
@@ -689,6 +690,12 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 	}
 
 	duration := time.Since(startTime)
+
+	redirectTo := ""
+	if isRedirectStatusCode(renderResult.StatusCode) {
+		redirectTo = renderResult.RedirectLocation
+	}
+
 	result := &RenderResult{
 		Source:       ServedFromRender,
 		ServiceID:    reservation.ServiceID,
@@ -701,6 +708,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		RenderTime:   renderResult.RenderTime,
 		ErrorType:    errorType,
 		ErrorMessage: errorMessage,
+		RedirectTo:   redirectTo,
 	}
 
 	// Lock and tab will be released by defer AFTER cache write and serving complete
@@ -824,6 +832,7 @@ func (ro *RenderOrchestrator) serveFromCache(renderCtx *edgectx.RenderContext, c
 			StatusCode:  cacheEntry.StatusCode,
 			CacheAge:    time.Since(cacheEntry.CreatedAt),
 			PageSEO:     pageSEOFromCacheMetadata(cacheEntry),
+			RedirectTo:  location,
 		}, nil
 	}
 
@@ -871,6 +880,17 @@ func pageSEOFromCacheMetadata(meta *cache.CacheMetadata) *types.PageSEO {
 		Title:       meta.Title,
 		IndexStatus: types.IndexStatus(meta.IndexStatus),
 	}
+}
+
+// redirectLocationFromMetadata extracts the Location header from cache metadata for redirect responses
+func redirectLocationFromMetadata(meta *cache.CacheMetadata) string {
+	if !isRedirectStatusCode(meta.StatusCode) {
+		return ""
+	}
+	if locations, ok := getHeaderCaseInsensitive(meta.Headers, "Location"); ok && len(locations) > 0 {
+		return locations[0]
+	}
+	return ""
 }
 
 // tryPullFromRemoteSmartly attempts to pull cache from remote with smart storage decision
@@ -944,6 +964,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 			StatusCode:  metadata.StatusCode,
 			CacheAge:    time.Since(metadata.CreatedAt),
 			PageSEO:     pageSEOFromCacheMetadata(metadata),
+			RedirectTo:  redirectLocationFromMetadata(metadata),
 		}, true
 	}
 
@@ -1023,6 +1044,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 			StatusCode:  metadata.StatusCode,
 			CacheAge:    time.Since(metadata.CreatedAt),
 			PageSEO:     pageSEOFromCacheMetadata(metadata),
+			RedirectTo:  redirectLocationFromMetadata(metadata),
 		}, true
 	}
 }
@@ -1169,12 +1191,20 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	duration := time.Since(startTime)
+	redirectTo := ""
+	if isRedirectStatusCode(bypassResp.StatusCode) {
+		if locations, ok := getHeaderCaseInsensitive(bypassResp.Headers, "Location"); ok && len(locations) > 0 {
+			redirectTo = locations[0]
+		}
+	}
+
 	return &RenderResult{
 		Source:      ServedFromBypass,
 		Duration:    duration,
 		BytesServed: int64(len(bypassResp.Body)),
 		StatusCode:  bypassResp.StatusCode,
 		PageSEO:     pageSEO,
+		RedirectTo:  redirectTo,
 	}, nil
 }
 

@@ -27,6 +27,7 @@ type RequestEvent struct {
 	PageSize   int64   `json:"page_size"`
 	ServeTime  float64 `json:"serve_time"` // seconds
 	Source     string  `json:"source"`     // cache, render, bypass, bypass_cache
+	RedirectTo string  `json:"redirect_to,omitempty"`
 
 	// Render-specific
 	RenderServiceID string  `json:"render_service_id"`
