@@ -68,11 +68,19 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-// resolveDimensionIDs builds the full list of dimension IDs for a host (including bypass dimension 0)
-// and validates any explicitly requested IDs against it. Returns all dimensions if requestedIDs is empty.
-func resolveDimensionIDs(host *types.Host, requestedIDs []int) ([]int, error) {
-	allDimensionIDs := make([]int, 0, len(host.Render.Dimensions)+1)
-	allDimensionIDs = append(allDimensionIDs, bypassDimensionID)
+// resolveDimensionIDs builds the full list of dimension IDs for a host and validates any explicitly
+// requested IDs against it. When includeBypass is true, bypass dimension 0 is included (for invalidation).
+// When false, only render dimensions are included (for recache, since bypass entries can't be re-rendered).
+// Returns all dimensions if requestedIDs is empty.
+func resolveDimensionIDs(host *types.Host, requestedIDs []int, includeBypass bool) ([]int, error) {
+	capacity := len(host.Render.Dimensions)
+	if includeBypass {
+		capacity++
+	}
+	allDimensionIDs := make([]int, 0, capacity)
+	if includeBypass {
+		allDimensionIDs = append(allDimensionIDs, bypassDimensionID)
+	}
 	for _, dim := range host.Render.Dimensions {
 		allDimensionIDs = append(allDimensionIDs, dim.ID)
 	}
@@ -132,7 +140,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, false)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
@@ -217,7 +225,7 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, true)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
@@ -237,13 +245,13 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 			continue
 		}
 
+		urlHash := d.normalizer.Hash(normalizedResult.NormalizedURL)
+		urlDeleted := 0
+
 		for _, dimensionID := range dimensionIDs {
-			// Generate cache metadata key
-			urlHash := d.normalizer.Hash(normalizedResult.NormalizedURL)
 			cacheKey := d.keyGenerator.GenerateCacheKey(req.HostID, dimensionID, urlHash)
 			metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
 
-			// Delete metadata from Redis
 			deleted, err := d.redis.DelCount(reqCtx, metadataKey)
 			if err != nil {
 				d.logger.Error("Failed to delete cache metadata",
@@ -251,15 +259,16 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 					zap.Error(err))
 				continue
 			}
-			if deleted == 0 {
-				d.logger.Warn("Cache metadata key not found during invalidation",
-					zap.String("metadata_key", metadataKey),
-					zap.String("url", normalizedResult.NormalizedURL),
-					zap.String("url_hash", urlHash),
-					zap.Int("dimension_id", dimensionID))
-			}
-			entriesInvalidated += int(deleted)
+			urlDeleted += int(deleted)
 		}
+
+		if urlDeleted == 0 {
+			d.logger.Warn("No cache metadata found for URL during invalidation",
+				zap.String("url", normalizedResult.NormalizedURL),
+				zap.String("url_hash", urlHash),
+				zap.Int("host_id", req.HostID))
+		}
+		entriesInvalidated += urlDeleted
 	}
 
 	// Return response
@@ -360,7 +369,7 @@ func (d *CacheDaemon) handleInvalidateAllAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, true)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return

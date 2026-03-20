@@ -88,7 +88,7 @@ func TestHandleInvalidateAPI_BypassDimension(t *testing.T) {
 }
 
 func TestHandleRecacheAPI_BypassDimension(t *testing.T) {
-	t.Run("recache without dimension_ids includes bypass dimension 0", func(t *testing.T) {
+	t.Run("recache without dimension_ids excludes bypass dimension 0", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
 		body, _ := json.Marshal(types.RecacheAPIRequest{
@@ -100,25 +100,19 @@ func TestHandleRecacheAPI_BypassDimension(t *testing.T) {
 
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
 
-		// Verify bypass dimension 0 was enqueued
 		queueKey := daemon.keyGenerator.RecacheQueueKey(1, "normal")
 		members, err := mr.ZMembers(queueKey)
 		require.NoError(t, err)
 
-		foundBypass := false
 		for _, m := range members {
 			var member types.RecacheMember
 			require.NoError(t, json.Unmarshal([]byte(m), &member))
-			if member.DimensionID == 0 {
-				foundBypass = true
-				break
-			}
+			assert.NotEqual(t, 0, member.DimensionID, "bypass dimension 0 should not be in recache queue")
 		}
-		assert.True(t, foundBypass, "bypass dimension 0 should be in recache queue")
 	})
 
-	t.Run("recache with explicit dimension_ids [0] is accepted", func(t *testing.T) {
-		daemon, mr := setupTestDaemon(t)
+	t.Run("recache with explicit dimension_ids [0] is rejected", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
 
 		body, _ := json.Marshal(types.RecacheAPIRequest{
 			HostID:       1,
@@ -128,16 +122,7 @@ func TestHandleRecacheAPI_BypassDimension(t *testing.T) {
 		})
 		ctx := makePostRequest(daemon, "/internal/cache/recache", body)
 
-		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
-
-		queueKey := daemon.keyGenerator.RecacheQueueKey(1, "high")
-		members, err := mr.ZMembers(queueKey)
-		require.NoError(t, err)
-		require.Len(t, members, 1)
-
-		var member types.RecacheMember
-		require.NoError(t, json.Unmarshal([]byte(members[0]), &member))
-		assert.Equal(t, 0, member.DimensionID)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	})
 }
 
