@@ -16,6 +16,9 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// bypassDimensionID is used for unmatched User-Agent bypass cache entries (dimension IDs 1+ are render dimensions)
+const bypassDimensionID = 0
+
 // ServeHTTP is the main HTTP request handler for the cache daemon API
 func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	path := string(ctx.Path())
@@ -44,6 +47,8 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleRecacheAPI(ctx)
 	case method == "POST" && path == "/internal/cache/invalidate":
 		d.handleInvalidateAPI(ctx)
+	case method == "POST" && path == "/internal/cache/invalidate-all":
+		d.handleInvalidateAllAPI(ctx)
 	case method == "GET" && path == "/status":
 		d.handleStatusAPI(ctx)
 	case method == "POST" && path == "/internal/scheduler/pause":
@@ -61,6 +66,34 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	default:
 		httputil.JSONError(ctx, "not found", fasthttp.StatusNotFound)
 	}
+}
+
+// resolveDimensionIDs builds the full list of dimension IDs for a host (including bypass dimension 0)
+// and validates any explicitly requested IDs against it. Returns all dimensions if requestedIDs is empty.
+func resolveDimensionIDs(host *types.Host, requestedIDs []int) ([]int, error) {
+	allDimensionIDs := make([]int, 0, len(host.Render.Dimensions)+1)
+	allDimensionIDs = append(allDimensionIDs, bypassDimensionID)
+	for _, dim := range host.Render.Dimensions {
+		allDimensionIDs = append(allDimensionIDs, dim.ID)
+	}
+
+	if len(requestedIDs) == 0 {
+		return allDimensionIDs, nil
+	}
+
+	for _, dimID := range requestedIDs {
+		found := false
+		for _, validDimID := range allDimensionIDs {
+			if dimID == validDimID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("dimension_id %d not configured for host '%s'", dimID, host.Domain)
+		}
+	}
+	return requestedIDs, nil
 }
 
 // handleRecacheAPI handles POST /internal/cache/recache
@@ -99,31 +132,10 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Get all dimension IDs from host config
-	allDimensionIDs := make([]int, 0, len(host.Render.Dimensions))
-	for _, dim := range host.Render.Dimensions {
-		allDimensionIDs = append(allDimensionIDs, dim.ID)
-	}
-
-	// Resolve dimension IDs (use all if empty)
-	dimensionIDs := req.DimensionIDs
-	if len(dimensionIDs) == 0 {
-		dimensionIDs = allDimensionIDs
-	} else {
-		// Validate dimension IDs
-		for _, dimID := range dimensionIDs {
-			found := false
-			for _, validDimID := range allDimensionIDs {
-				if dimID == validDimID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				httputil.JSONError(ctx, fmt.Sprintf("dimension_id %d not configured for host '%s'", dimID, host.Domain), fasthttp.StatusBadRequest)
-				return
-			}
-		}
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
 	}
 
 	// Enqueue entries to ZSET
@@ -205,31 +217,10 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Get all dimension IDs from host config
-	allDimensionIDs := make([]int, 0, len(host.Render.Dimensions))
-	for _, dim := range host.Render.Dimensions {
-		allDimensionIDs = append(allDimensionIDs, dim.ID)
-	}
-
-	// Resolve dimension IDs (use all if empty)
-	dimensionIDs := req.DimensionIDs
-	if len(dimensionIDs) == 0 {
-		dimensionIDs = allDimensionIDs
-	} else {
-		// Validate dimension IDs
-		for _, dimID := range dimensionIDs {
-			found := false
-			for _, validDimID := range allDimensionIDs {
-				if dimID == validDimID {
-					found = true
-					break
-				}
-			}
-			if !found {
-				httputil.JSONError(ctx, fmt.Sprintf("dimension_id %d not configured for host '%s'", dimID, host.Domain), fasthttp.StatusBadRequest)
-				return
-			}
-		}
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
 	}
 
 	// Invalidate cache entries
@@ -285,6 +276,162 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("urls_count", len(req.URLs)),
 		zap.Int("dimensions_count", len(dimensionIDs)),
 		zap.Int("entries_invalidated", entriesInvalidated))
+}
+
+// luaInvalidateAllBatch scans and deletes cache metadata keys in a single batch.
+// Returns {nextCursor, deletedCount}. Caller loops until nextCursor is "0".
+// ARGV: [1] hostID, [2] cursor, [3...] dimension IDs to filter (empty = all)
+const luaInvalidateAllBatch = `
+local prefix = "meta:cache:" .. ARGV[1] .. ":"
+local cursor = ARGV[2]
+local max_iterations = 200
+local del_chunk_size = 1000
+local deleted = 0
+
+local dim_filter = {}
+local has_filter = false
+for i = 3, #ARGV do
+    dim_filter[ARGV[i]] = true
+    has_filter = true
+end
+
+local iterations = 0
+local to_delete = {}
+
+repeat
+    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", 500)
+    cursor = res[1]
+    iterations = iterations + 1
+
+    for _, key in ipairs(res[2]) do
+        if has_filter then
+            local parts = {}
+            for part in string.gmatch(key, "[^:]+") do
+                parts[#parts + 1] = part
+            end
+            -- key format: meta:cache:{hostID}:{dimID}:{hash}
+            local dim_id = parts[4]
+            if dim_filter[dim_id] then
+                to_delete[#to_delete + 1] = key
+            end
+        else
+            to_delete[#to_delete + 1] = key
+        end
+    end
+
+    -- Flush in chunks to avoid Lua unpack stack overflow
+    while #to_delete >= del_chunk_size do
+        local chunk = {}
+        for i = 1, del_chunk_size do
+            chunk[i] = to_delete[i]
+        end
+        deleted = deleted + redis.call("DEL", unpack(chunk))
+        local remaining = {}
+        for i = del_chunk_size + 1, #to_delete do
+            remaining[#remaining + 1] = to_delete[i]
+        end
+        to_delete = remaining
+    end
+until cursor == "0" or iterations >= max_iterations
+
+if #to_delete > 0 then
+    deleted = deleted + redis.call("DEL", unpack(to_delete))
+end
+
+return {cursor, deleted}
+`
+
+// handleInvalidateAllAPI handles POST /internal/cache/invalidate-all
+func (d *CacheDaemon) handleInvalidateAllAPI(ctx *fasthttp.RequestCtx) {
+	var req types.InvalidateAllAPIRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		httputil.JSONError(ctx, fmt.Sprintf("invalid json: %s", err.Error()), fasthttp.StatusBadRequest)
+		return
+	}
+
+	if req.HostID == 0 {
+		httputil.JSONError(ctx, "host_id is required", fasthttp.StatusBadRequest)
+		return
+	}
+
+	host := d.GetHost(req.HostID)
+	if host == nil {
+		httputil.JSONError(ctx, fmt.Sprintf("host_id %d not found", req.HostID), fasthttp.StatusBadRequest)
+		return
+	}
+
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+
+	// Build Lua script args: hostID, cursor, dimension IDs...
+	hasFilter := len(req.DimensionIDs) > 0
+	args := make([]interface{}, 0, len(dimensionIDs)+2)
+	args = append(args, strconv.Itoa(req.HostID))
+	args = append(args, "0") // initial cursor
+
+	if hasFilter {
+		for _, dimID := range dimensionIDs {
+			args = append(args, strconv.Itoa(dimID))
+		}
+	}
+
+	reqCtx := context.Background()
+	totalDeleted := 0
+
+	for {
+		result, err := d.redis.Eval(reqCtx, luaInvalidateAllBatch, nil, args...)
+		if err != nil {
+			d.logger.Error("Failed to execute invalidate-all batch",
+				zap.Int("host_id", req.HostID),
+				zap.Int("entries_invalidated_before_error", totalDeleted),
+				zap.Error(err))
+			httputil.JSONError(ctx, "internal error during invalidation", fasthttp.StatusInternalServerError)
+			return
+		}
+
+		batch, ok := result.([]interface{})
+		if !ok || len(batch) != 2 {
+			d.logger.Error("Unexpected Lua script result",
+				zap.Int("host_id", req.HostID),
+				zap.Int("entries_invalidated_before_error", totalDeleted))
+			httputil.JSONError(ctx, "internal error during invalidation", fasthttp.StatusInternalServerError)
+			return
+		}
+
+		nextCursor, cursorOk := batch[0].(string)
+		if !cursorOk {
+			d.logger.Error("Unexpected cursor type in Lua script result",
+				zap.Int("host_id", req.HostID),
+				zap.Int("entries_invalidated_before_error", totalDeleted))
+			httputil.JSONError(ctx, "internal error during invalidation", fasthttp.StatusInternalServerError)
+			return
+		}
+
+		batchDeleted, _ := batch[1].(int64)
+		totalDeleted += int(batchDeleted)
+
+		if nextCursor == "0" {
+			break
+		}
+
+		// Update cursor for next iteration
+		args[1] = nextCursor
+	}
+
+	data := types.InvalidateAllAPIData{
+		HostID:             req.HostID,
+		DimensionIDsCount:  len(dimensionIDs),
+		EntriesInvalidated: totalDeleted,
+	}
+	httputil.JSONData(ctx, data, fasthttp.StatusOK)
+
+	d.logger.Info("Invalidate-all request processed",
+		zap.Int("host_id", req.HostID),
+		zap.Int("dimensions_count", len(dimensionIDs)),
+		zap.Int("entries_invalidated", totalDeleted))
 }
 
 // handleStatusAPI handles GET /status

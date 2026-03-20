@@ -12,6 +12,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/edge/hash"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -79,6 +80,7 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 		redis:           redisClient,
 		logger:          logger,
 		keyGenerator:    keyGen,
+		normalizer:      hash.NewURLNormalizer(),
 		internalQueue:   iq,
 		internalAuthKey: "test-auth-key",
 		configManager:   configMgr,

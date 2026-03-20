@@ -37,3 +37,16 @@ type InvalidateAPIData struct {
 	DimensionIDsCount  int `json:"dimension_ids_count"`
 	EntriesInvalidated int `json:"entries_invalidated"`
 }
+
+// InvalidateAllAPIRequest is the request body for POST /internal/cache/invalidate-all
+type InvalidateAllAPIRequest struct {
+	HostID       int   `json:"host_id"`
+	DimensionIDs []int `json:"dimension_ids"` // Optional, empty = all
+}
+
+// InvalidateAllAPIData is the data payload for POST /internal/cache/invalidate-all response
+type InvalidateAllAPIData struct {
+	HostID             int `json:"host_id"`
+	DimensionIDsCount  int `json:"dimension_ids_count"`
+	EntriesInvalidated int `json:"entries_invalidated"`
+}

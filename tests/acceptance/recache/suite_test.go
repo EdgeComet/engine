@@ -969,6 +969,57 @@ func (env *RecacheTestEnvironment) SendRawInvalidateRequest(rawBody []byte, auth
 	return respBody, statusCode, nil
 }
 
+// SendInvalidateAllRequest sends HTTP POST request to invalidate-all endpoint
+func (env *RecacheTestEnvironment) SendInvalidateAllRequest(req types.InvalidateAllAPIRequest) (*types.InvalidateAllAPIData, int, error) {
+	return env.SendInvalidateAllRequestWithAuth(req, env.InternalAuthKey)
+}
+
+// SendInvalidateAllRequestWithAuth sends HTTP POST request with custom auth header
+func (env *RecacheTestEnvironment) SendInvalidateAllRequestWithAuth(req types.InvalidateAllAPIRequest, authKey string) (*types.InvalidateAllAPIData, int, error) {
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(httpReq)
+
+	httpResp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(httpResp)
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/internal/cache/invalidate-all", env.DaemonPort)
+	httpReq.SetRequestURI(url)
+	httpReq.Header.SetMethod("POST")
+	httpReq.Header.SetContentType("application/json")
+	httpReq.Header.Set("X-Internal-Auth", authKey)
+	httpReq.SetBody(reqBody)
+
+	client := &fasthttp.Client{
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+
+	if err := client.Do(httpReq, httpResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to send request: %w", err)
+	}
+
+	statusCode := httpResp.StatusCode()
+	respBody := httpResp.Body()
+
+	var apiResp httputil.APIResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		return nil, statusCode, fmt.Errorf("failed to parse response: %w (body: %s)", err, string(respBody))
+	}
+
+	var data types.InvalidateAllAPIData
+	if apiResp.Data != nil {
+		dataBytes, _ := json.Marshal(apiResp.Data)
+		json.Unmarshal(dataBytes, &data)
+	}
+
+	return &data, statusCode, nil
+}
+
 // SendStatusRequest sends HTTP GET request to daemon /status endpoint
 func (env *RecacheTestEnvironment) SendStatusRequest() ([]byte, int, error) {
 	return env.SendStatusRequestWithAuth(env.InternalAuthKey)
