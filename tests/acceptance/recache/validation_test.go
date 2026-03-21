@@ -268,7 +268,7 @@ var _ = Describe("Recache Validation Tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(statusCode).To(Equal(200))
 			Expect(resp).NotTo(BeNil())
-			Expect(resp.EntriesEnqueued).To(Equal(2))
+			Expect(resp.EntriesEnqueued).To(Equal(3))
 		})
 
 		It("should accept valid request and create ZSET entries", func() {

@@ -56,29 +56,29 @@ var (
 // getTestHost returns a fresh test host for each test
 func getTestHost() *types.Host {
 	return &types.Host{
-		ID:        1,
-		Domain:    "test.com",
-		RenderKey: "test-key",
-		Enabled:   true,
-		Render: types.RenderConfig{
-			UnmatchedDimension: types.UnmatchedDimensionBypass,
-			Timeout:            types.Duration(30 * time.Second),
-			Dimensions: map[string]types.Dimension{
-				"mobile": {
-					ID:       2,
-					MatchUA:  []string{"Googlebot-Mobile"},
-					Width:    375,
-					Height:   667,
-					RenderUA: "Mobile Bot",
-				},
-				"desktop": {
-					ID:       1,
-					MatchUA:  []string{"Googlebot"},
-					Width:    1920,
-					Height:   1080,
-					RenderUA: "Desktop Bot",
-				},
+		ID:                 1,
+		Domain:             "test.com",
+		RenderKey:          "test-key",
+		Enabled:            true,
+		UnmatchedDimension: types.UnmatchedDimensionBypass,
+		Dimensions: map[string]types.Dimension{
+			"mobile": {
+				ID:       2,
+				MatchUA:  []string{"Googlebot-Mobile"},
+				Width:    375,
+				Height:   667,
+				RenderUA: "Mobile Bot",
 			},
+			"desktop": {
+				ID:       1,
+				MatchUA:  []string{"Googlebot"},
+				Width:    1920,
+				Height:   1080,
+				RenderUA: "Desktop Bot",
+			},
+		},
+		Render: types.RenderConfig{
+			Timeout: types.Duration(30 * time.Second),
 			Events: types.RenderEvents{
 				WaitFor:        "networkIdle",
 				AdditionalWait: nil, // Inherit from global config
@@ -119,42 +119,25 @@ func setupTestServer(t *testing.T) *Server {
 	return testServer
 }
 
-func TestSelectFallbackDimension(t *testing.T) {
+func TestHandleDimensionBlock(t *testing.T) {
 	server := setupTestServer(t)
 	testHost := getTestHost()
 	logger := zap.NewNop()
 
-	tests := []struct {
-		name              string
-		unmatchedBehavior string
-		detectedDimension string
-		expectedDimension string
-	}{
-		{
-			name:              "Valid fallback dimension exists",
-			unmatchedBehavior: "desktop",
-			detectedDimension: "mobile",
-			expectedDimension: "desktop",
-		},
-		{
-			name:              "Fallback dimension does not exist - use detector fallback",
-			unmatchedBehavior: "nonexistent",
-			detectedDimension: "mobile",
-			expectedDimension: "mobile",
-		},
-	}
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Googlebot/2.1")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := &fasthttp.RequestCtx{}
-			renderCtx := edgectx.NewRenderContext("test-req", ctx, logger, 30*time.Second)
-			renderCtx.WithHost(testHost)
+	renderCtx := edgectx.NewRenderContext("test-req", ctx, logger, 30*time.Second)
+	renderCtx.WithHost(testHost)
+	renderCtx.WithDimension("desktop")
 
-			dimension := server.selectFallbackDimension(renderCtx, tt.unmatchedBehavior, tt.detectedDimension)
+	start := time.Now()
+	err := server.handleDimensionBlock(ctx, renderCtx, start)
 
-			assert.Equal(t, tt.expectedDimension, dimension)
-		})
-	}
+	assert.Error(t, err, "Should return error")
+	assert.Equal(t, fasthttp.StatusForbidden, ctx.Response.StatusCode())
+	assert.Contains(t, string(ctx.Response.Body()), "Forbidden")
+	assert.Equal(t, "", string(ctx.Response.Header.Peek("X-Unmatched-Dimension")))
 }
 
 func TestHandleUnmatchedBlock(t *testing.T) {

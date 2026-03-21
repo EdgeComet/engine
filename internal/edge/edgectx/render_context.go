@@ -39,6 +39,9 @@ type RenderContext struct {
 	ClientHeaders      map[string][]string    // Extracted safe request headers from client
 	ClientIP           string
 
+	// Dimension action tracking
+	DimensionAction string
+
 	// Event logging flags
 	IsPrecache bool // True if this is a precache/recache request (set by recache handler)
 }

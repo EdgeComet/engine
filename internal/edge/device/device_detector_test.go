@@ -20,28 +20,26 @@ func TestDeviceDetector_DetectDimension(t *testing.T) {
 	logger := zap.NewNop()
 
 	host := &types.Host{
-		Render: types.RenderConfig{
-			UnmatchedDimension: "desktop",
-			Dimensions: map[string]types.Dimension{
-				"mobile": {
-					ID:      2,
-					MatchUA: []string{"*Googlebot-Mobile*", "*iPhone*", "*Android*"},
-				},
-				"desktop": {
-					ID:      1,
-					MatchUA: []string{"*Googlebot*", "*bingbot*"},
-				},
+		UnmatchedDimension: "desktop",
+		Dimensions: map[string]types.Dimension{
+			"mobile": {
+				ID:      2,
+				MatchUA: []string{"*Googlebot-Mobile*", "*iPhone*", "*Android*"},
+			},
+			"desktop": {
+				ID:      1,
+				MatchUA: []string{"*Googlebot*", "*bingbot*"},
 			},
 		},
 	}
 
 	// Compile patterns for all dimensions
-	for name, dim := range host.Render.Dimensions {
+	for name, dim := range host.Dimensions {
 		err := dim.CompileMatchUAPatterns()
 		if err != nil {
 			t.Fatalf("Failed to compile patterns for dimension %s: %v", name, err)
 		}
-		host.Render.Dimensions[name] = dim
+		host.Dimensions[name] = dim
 	}
 
 	tests := []struct {
@@ -94,24 +92,22 @@ func TestDeviceDetector_DetectDimensionNoMatch(t *testing.T) {
 	logger := zap.NewNop()
 
 	host := &types.Host{
-		Render: types.RenderConfig{
-			UnmatchedDimension: "mobile",
-			Dimensions: map[string]types.Dimension{
-				"mobile": {
-					ID:      1,
-					MatchUA: []string{"*Googlebot-Mobile*"},
-				},
+		UnmatchedDimension: "mobile",
+		Dimensions: map[string]types.Dimension{
+			"mobile": {
+				ID:      1,
+				MatchUA: []string{"*Googlebot-Mobile*"},
 			},
 		},
 	}
 
 	// Compile patterns for all dimensions
-	for name, dim := range host.Render.Dimensions {
+	for name, dim := range host.Dimensions {
 		err := dim.CompileMatchUAPatterns()
 		if err != nil {
 			t.Fatalf("Failed to compile patterns for dimension %s: %v", name, err)
 		}
-		host.Render.Dimensions[name] = dim
+		host.Dimensions[name] = dim
 	}
 
 	ctx := &fasthttp.RequestCtx{}
@@ -144,11 +140,9 @@ func TestDeviceDetector_DetectDimension_RegexpPatterns(t *testing.T) {
 	assert.NoError(t, err)
 
 	host := &types.Host{
-		Render: types.RenderConfig{
-			Dimensions: map[string]types.Dimension{
-				"mobile":  mobileDim,
-				"desktop": desktopDim,
-			},
+		Dimensions: map[string]types.Dimension{
+			"mobile":  mobileDim,
+			"desktop": desktopDim,
 		},
 	}
 
@@ -202,12 +196,12 @@ func TestDeviceDetector_DetectDimension_PatternPriority(t *testing.T) {
 	logger := zap.NewNop()
 
 	// Create dimensions with different pattern types
-	// mobile uses regexp (should be checked first)
+	// mobile uses regexp
 	mobileDim := types.Dimension{
 		ID:      2,
 		MatchUA: []string{"~Mobile.*Googlebot"},
 	}
-	// desktop uses wildcard (should be checked after regexp)
+	// desktop uses wildcard (wildcard has higher priority than regexp)
 	desktopDim := types.Dimension{
 		ID:      1,
 		MatchUA: []string{"*Googlebot*"},
@@ -220,11 +214,9 @@ func TestDeviceDetector_DetectDimension_PatternPriority(t *testing.T) {
 	assert.NoError(t, err)
 
 	host := &types.Host{
-		Render: types.RenderConfig{
-			Dimensions: map[string]types.Dimension{
-				"mobile":  mobileDim,
-				"desktop": desktopDim,
-			},
+		Dimensions: map[string]types.Dimension{
+			"mobile":  mobileDim,
+			"desktop": desktopDim,
 		},
 	}
 
@@ -235,10 +227,10 @@ func TestDeviceDetector_DetectDimension_PatternPriority(t *testing.T) {
 		reason            string
 	}{
 		{
-			name:              "Mobile Googlebot matches mobile regexp (priority)",
+			name:              "Mobile Googlebot matches desktop wildcard (priority)",
 			userAgent:         "Mozilla/5.0 (Linux) Mobile Safari (compatible; Googlebot/2.1)",
-			expectedDimension: "mobile",
-			reason:            "Regexp patterns have higher priority than wildcard",
+			expectedDimension: "desktop",
+			reason:            "Wildcard patterns have higher priority than regexp",
 		},
 		{
 			name:              "Desktop Googlebot matches desktop wildcard",
@@ -259,6 +251,224 @@ func TestDeviceDetector_DetectDimension_PatternPriority(t *testing.T) {
 			assert.True(t, matched)
 		})
 	}
+}
+
+func TestDeviceDetector_DetectDimension_BlockDimension(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	scrapersDim := types.Dimension{
+		ID:      3,
+		Action:  types.ActionBlock,
+		MatchUA: []string{"*SemrushBot*"},
+	}
+	desktopDim := types.Dimension{
+		ID:      1,
+		MatchUA: []string{"*Googlebot*"},
+	}
+
+	err := scrapersDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = desktopDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"scrapers": scrapersDim,
+			"desktop":  desktopDim,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Mozilla/5.0 (compatible; SemrushBot/7~bl; +http://www.semrush.com/bot.html)")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "scrapers", dimension)
+	assert.True(t, matched)
+}
+
+func TestDeviceDetector_DetectDimension_BypassDimensionWithPattern(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	bypassDim := types.Dimension{
+		ID:      2,
+		Action:  types.ActionBypass,
+		MatchUA: []string{"*Chrome*"},
+	}
+	desktopDim := types.Dimension{
+		ID:      1,
+		MatchUA: []string{"*Googlebot*"},
+	}
+
+	err := bypassDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = desktopDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"bypass":  bypassDim,
+			"desktop": desktopDim,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "bypass", dimension)
+	assert.True(t, matched)
+}
+
+func TestDeviceDetector_DetectDimension_BypassWithoutPatternNoMatch(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	bypassDim := types.Dimension{
+		ID:     2,
+		Action: types.ActionBypass,
+	}
+	desktopDim := types.Dimension{
+		ID:      1,
+		MatchUA: []string{"*Googlebot*"},
+	}
+
+	err := bypassDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = desktopDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"bypass":  bypassDim,
+			"desktop": desktopDim,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "", dimension)
+	assert.False(t, matched)
+}
+
+func TestDeviceDetector_DetectDimension_TieBreakByDimensionID(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	// Both dimensions have wildcard patterns of the same length
+	dimA := types.Dimension{
+		ID:      5,
+		MatchUA: []string{"*TestBot*"},
+	}
+	dimB := types.Dimension{
+		ID:      2,
+		MatchUA: []string{"*TestBot*"},
+	}
+
+	err := dimA.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = dimB.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"alpha": dimA,
+			"beta":  dimB,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Mozilla/5.0 (compatible; TestBot/1.0)")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "beta", dimension, "Lower dimension ID should win in tie-breaking")
+	assert.True(t, matched)
+}
+
+func TestDeviceDetector_DetectDimension_RegexpBeatsWildcardAcrossDimensions(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	// Block dimension uses regexp
+	blockDim := types.Dimension{
+		ID:      3,
+		Action:  types.ActionBlock,
+		MatchUA: []string{"~.*ScrapeBot.*"},
+	}
+	// Render dimension uses wildcard
+	renderDim := types.Dimension{
+		ID:      1,
+		MatchUA: []string{"*ScrapeBot*"},
+	}
+
+	err := blockDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = renderDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"blocked": blockDim,
+			"desktop": renderDim,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("Mozilla/5.0 (compatible; ScrapeBot/2.0)")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "blocked", dimension, "Block dimension takes priority regardless of pattern type")
+	assert.True(t, matched)
+}
+
+func TestDeviceDetector_DetectDimension_UnknownUANoPatterns(t *testing.T) {
+	detector := NewDeviceDetector()
+	logger := zap.NewNop()
+
+	desktopDim := types.Dimension{
+		ID:      1,
+		MatchUA: []string{"*Googlebot*"},
+	}
+	bypassDim := types.Dimension{
+		ID:     2,
+		Action: types.ActionBypass,
+	}
+	blockDim := types.Dimension{
+		ID:      3,
+		Action:  types.ActionBlock,
+		MatchUA: []string{"*SemrushBot*"},
+	}
+
+	err := desktopDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = bypassDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+	err = blockDim.CompileMatchUAPatterns()
+	require.NoError(t, err)
+
+	host := &types.Host{
+		Dimensions: map[string]types.Dimension{
+			"desktop": desktopDim,
+			"bypass":  bypassDim,
+			"blocked": blockDim,
+		},
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent("CompletelyUnknownAgent/1.0")
+
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, logger, 30*time.Second).WithHost(host)
+	dimension, matched := detector.DetectDimension(renderCtx)
+	assert.Equal(t, "", dimension)
+	assert.False(t, matched)
 }
 
 // TestGoogleBotUserAgentMatching validates that bot alias patterns correctly match real Google bot user agents

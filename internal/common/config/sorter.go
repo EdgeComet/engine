@@ -116,9 +116,7 @@ func compareExpandedRules(a, b *expandedRule) bool {
 	// PatternTypeWildcard = 0, PatternTypeRegexp = 1, PatternTypeExact = 2
 	// Map to priority: Exact (2) → 3, Wildcard (0) → 2, Regexp (1) → 1
 	if a.patternType != b.patternType {
-		aPriority := getPatternTypePriority(a.patternType)
-		bPriority := getPatternTypePriority(b.patternType)
-		return aPriority > bPriority
+		return pattern.TypePriority(a.patternType) > pattern.TypePriority(b.patternType)
 	}
 
 	// Priority 2: Query Matching (has match_query > no match_query)
@@ -133,21 +131,6 @@ func compareExpandedRules(a, b *expandedRule) bool {
 
 	// Priority 4: Original Index (stable sort - preserve declaration order)
 	return a.originalIndex < b.originalIndex
-}
-
-// getPatternTypePriority maps PatternType to sorting priority
-// Higher value = higher priority (comes first)
-func getPatternTypePriority(pt pattern.PatternType) int {
-	switch pt {
-	case pattern.PatternTypeExact:
-		return 3 // Highest priority
-	case pattern.PatternTypeWildcard:
-		return 2 // Medium priority
-	case pattern.PatternTypeRegexp:
-		return 1 // Lowest priority
-	default:
-		return 0
-	}
 }
 
 // countSlashes counts the number of slashes in a pattern

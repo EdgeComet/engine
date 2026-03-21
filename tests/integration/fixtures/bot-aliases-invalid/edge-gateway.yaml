@@ -19,15 +19,16 @@ render:
     expired:
       strategy: "serve_stale"
       stale_ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $UnknownBotAlias
-        - $AnotherUnknownBot
+
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $UnknownBotAlias
+      - $AnotherUnknownBot
 
 bypass:
   timeout: 20s

@@ -99,7 +99,7 @@ func (h *HARRenderHandler) handleHARRender(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Get dimension config
-	dimConfig := host.Render.Dimensions[dimension]
+	dimConfig := host.Dimensions[dimension]
 
 	// Resolve timeout
 	timeout := params.Timeout
@@ -279,33 +279,33 @@ func (h *HARRenderHandler) resolveDimension(ctx *fasthttp.RequestCtx, host *type
 	dimension := requestedDimension
 	if dimension == "" {
 		// Check if UnmatchedDimension is a valid dimension
-		if _, exists := host.Render.Dimensions[host.Render.UnmatchedDimension]; exists {
-			dimension = host.Render.UnmatchedDimension
+		if _, exists := host.Dimensions[host.UnmatchedDimension]; exists {
+			dimension = host.UnmatchedDimension
 		} else {
 			// UnmatchedDimension is not a valid dimension (e.g., "block")
 			// Return error requiring explicit dimension
-			availableDims := make([]string, 0, len(host.Render.Dimensions))
-			for name := range host.Render.Dimensions {
+			availableDims := make([]string, 0, len(host.Dimensions))
+			for name := range host.Dimensions {
 				availableDims = append(availableDims, name)
 			}
 			sort.Strings(availableDims)
 
 			h.logger.Warn("Invalid default dimension configured",
 				zap.String("host", host.Domain),
-				zap.String("unmatched_dimension", host.Render.UnmatchedDimension),
+				zap.String("unmatched_dimension", host.UnmatchedDimension),
 				zap.Strings("available_dimensions", availableDims))
 
 			msg := fmt.Sprintf("invalid_dimension: Default dimension '%s' not found for host '%s'. Available: %v",
-				host.Render.UnmatchedDimension, host.Domain, availableDims)
+				host.UnmatchedDimension, host.Domain, availableDims)
 			httputil.JSONError(ctx, msg, fasthttp.StatusBadRequest)
 			return "", errValidation
 		}
 	}
 
 	// Validate dimension exists
-	if _, exists := host.Render.Dimensions[dimension]; !exists {
-		availableDims := make([]string, 0, len(host.Render.Dimensions))
-		for name := range host.Render.Dimensions {
+	if _, exists := host.Dimensions[dimension]; !exists {
+		availableDims := make([]string, 0, len(host.Dimensions))
+		for name := range host.Dimensions {
 			availableDims = append(availableDims, name)
 		}
 		sort.Strings(availableDims)

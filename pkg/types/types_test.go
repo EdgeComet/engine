@@ -1294,3 +1294,39 @@ func TestHost_UnmarshalJSON_PreservesOtherFields(t *testing.T) {
 	assert.Equal(t, "my-secret-key", host.RenderKey)
 	assert.True(t, host.Enabled)
 }
+
+func TestDimension_EffectiveAction(t *testing.T) {
+	tests := []struct {
+		name     string
+		action   URLRuleAction
+		expected URLRuleAction
+	}{
+		{
+			name:     "empty action defaults to render",
+			action:   "",
+			expected: ActionRender,
+		},
+		{
+			name:     "explicit render action",
+			action:   ActionRender,
+			expected: ActionRender,
+		},
+		{
+			name:     "bypass action",
+			action:   ActionBypass,
+			expected: ActionBypass,
+		},
+		{
+			name:     "block action",
+			action:   ActionBlock,
+			expected: ActionBlock,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dim := Dimension{Action: tt.action}
+			assert.Equal(t, tt.expected, dim.EffectiveAction())
+		})
+	}
+}

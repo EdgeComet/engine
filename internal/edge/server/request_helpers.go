@@ -101,47 +101,35 @@ func (s *Server) handleUnmatchedBlock(ctx *fasthttp.RequestCtx, renderCtx *edgec
 	return fmt.Errorf("user-agent not supported")
 }
 
-// handleUnmatchedBypass serves content via bypass service for unmatched User-Agent
-func (s *Server) handleUnmatchedBypass(ctx *fasthttp.RequestCtx, renderCtx *edgectx.RenderContext, start time.Time) error {
-	result, err := s.renderOrchestrator.ServeUnmatchedBypass(renderCtx)
-	if err != nil {
-		duration := time.Since(start)
-		s.writeError(ctx, fasthttp.StatusBadGateway, "Failed to fetch content")
-		s.metricsCollector.RecordRequest(renderCtx.Host.Domain, "", "unmatched_bypass_failed", duration)
+// handleDimensionBlock blocks request with 403 Forbidden for a matched block dimension
+func (s *Server) handleDimensionBlock(ctx *fasthttp.RequestCtx, renderCtx *edgectx.RenderContext, start time.Time) error {
+	duration := time.Since(start)
 
-		// Emit error event for access logging
-		if s.eventEmitter != nil {
-			event := events.BuildErrorEvent(
-				renderCtx.RequestID,
-				renderCtx.Host.Domain,
-				renderCtx.Host.ID,
-				renderCtx.TargetURL,
-				string(ctx.UserAgent()),
-				renderCtx.ClientIP,
-				"unmatched_bypass_failed",
-				err.Error(),
-				fasthttp.StatusBadGateway,
-				s.instanceID,
-			)
-			s.eventEmitter.Emit(event)
-		}
-		return err
-	}
+	renderCtx.Logger.Warn("Blocking request - dimension action is block",
+		zap.String("dimension", renderCtx.Dimension),
+		zap.String("user_agent", string(ctx.UserAgent())))
 
-	s.metricsCollector.RecordRequest(renderCtx.Host.Domain, "", "unmatched_bypass", result.Duration)
+	s.writeError(ctx, fasthttp.StatusForbidden, "Forbidden")
+	s.metricsCollector.RecordRequest(renderCtx.Host.Domain, renderCtx.Dimension, "dimension_blocked", duration)
+	s.metricsCollector.RecordError("dimension_blocked", renderCtx.Host.Domain)
 
-	// Emit request event for successful unmatched bypass
 	if s.eventEmitter != nil {
-		duration := time.Since(start)
-		event := events.BuildRequestEvent(renderCtx, result, duration, s.instanceID)
+		event := events.BuildErrorEvent(
+			renderCtx.RequestID,
+			renderCtx.Host.Domain,
+			renderCtx.Host.ID,
+			renderCtx.TargetURL,
+			string(ctx.UserAgent()),
+			renderCtx.ClientIP,
+			"dimension_blocked",
+			"Dimension action is block",
+			fasthttp.StatusForbidden,
+			s.instanceID,
+		)
 		s.eventEmitter.Emit(event)
 	}
 
-	renderCtx.Logger.Info("Successfully bypassed for unmatched User-Agent",
-		zap.Duration("duration", result.Duration),
-		zap.Int64("bytes_served", result.BytesServed))
-
-	return nil
+	return fmt.Errorf("dimension action is block")
 }
 
 // handleStatusAction handles status action responses (redirects, blocks, custom codes)
@@ -171,26 +159,6 @@ func (s *Server) handleStatusAction(renderCtx *edgectx.RenderContext, start time
 		zap.String("redirect_to", result.RedirectTo))
 
 	return nil
-}
-
-// selectFallbackDimension selects fallback dimension for unmatched User-Agent
-func (s *Server) selectFallbackDimension(renderCtx *edgectx.RenderContext, unmatchedBehavior, detectedDimension string) string {
-	// Check if configured fallback dimension exists
-	if _, exists := renderCtx.Host.Render.Dimensions[unmatchedBehavior]; !exists {
-		// Fallback dimension doesn't exist - configuration error
-		renderCtx.Logger.Error("Configured unmatched_dimension not found in host dimensions",
-			zap.String("configured", unmatchedBehavior),
-			zap.String("host", renderCtx.Host.Domain),
-			zap.String("detector_fallback", detectedDimension))
-		// Return detector fallback (may be empty string)
-		// Runtime safety check at dimension lookup will catch empty value
-		return detectedDimension
-	}
-
-	renderCtx.Logger.Info("Using configured fallback dimension for unmatched User-Agent",
-		zap.String("fallback_dimension", unmatchedBehavior))
-
-	return unmatchedBehavior
 }
 
 // recordResultMetrics records metrics based on render result source

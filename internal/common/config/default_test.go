@@ -74,16 +74,16 @@ hosts:
       cache:
         ttl: 1h
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua: []
       events:
         wait_for: "networkIdle"
         additional_wait: 1s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua: []
 `
 
 	// Create hosts.d directory and write host file

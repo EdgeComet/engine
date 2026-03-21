@@ -17,6 +17,13 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// validDimensionActions contains the valid values for a dimension's action field
+var validDimensionActions = map[types.URLRuleAction]bool{
+	types.ActionRender: true,
+	types.ActionBypass: true,
+	types.ActionBlock:  true,
+}
+
 // validResourceTypes contains all valid Chrome DevTools Protocol resource types
 var validResourceTypes = map[string]bool{
 	"Document":           true,
@@ -411,7 +418,7 @@ func loadAndValidateHostsFromInclude(egConfig *configtypes.EgConfig, configPath 
 	seenIDs := make(map[int]string)        // Track host IDs to detect duplicates across files
 	seenDomains := make(map[string]string) // Track domains to detect duplicates across files
 
-	hasGlobalDimensions := len(egConfig.Render.Dimensions) > 0
+	hasGlobalDimensions := len(egConfig.Dimensions) > 0
 
 	for _, file := range files {
 		hosts, err := loadAndValidateHostsConfig(file, hasGlobalDimensions, collector)
@@ -476,9 +483,9 @@ func loadAndValidateHostsConfig(path string, hasGlobalDimensions bool, collector
 		errStr := err.Error()
 		if strings.Contains(errStr, "cannot unmarshal") && strings.Contains(errStr, "into types.Dimension") {
 			if strings.Contains(errStr, "unmatched_dimension") || strings.Contains(string(data), "unmatched_dimension:") {
-				errMsg += "\n  → Hint: 'unmatched_dimension' should be at host render level, not inside 'dimensions' map"
-				errMsg += "\n  → Correct placement: hosts[].render.unmatched_dimension"
-				errMsg += "\n  → Incorrect placement: hosts[].render.dimensions.unmatched_dimension"
+				errMsg += "\n  → Hint: 'unmatched_dimension' should be at host level, not inside 'dimensions' map"
+				errMsg += "\n  → Correct placement: hosts[].unmatched_dimension"
+				errMsg += "\n  → Incorrect placement: hosts[].dimensions.unmatched_dimension"
 			}
 		}
 
@@ -691,45 +698,84 @@ func validateGlobalEvents(cfg *configtypes.EgConfig, filename string, collector 
 
 // validateGlobalDimensions validates global dimension configuration
 func validateGlobalDimensions(cfg *configtypes.EgConfig, filename string, collector *ErrorCollector) {
-	if len(cfg.Render.Dimensions) == 0 {
+	if len(cfg.Dimensions) == 0 {
 		return
 	}
 
 	dimensionIDs := make(map[int]string)
 
-	for dimensionName, dimension := range cfg.Render.Dimensions {
-		// Validate dimension ID
-		if dimension.ID <= 0 {
-			collector.Add(filename, 0, "render.dimensions: dimension '%s' has invalid ID %d (must be positive)",
-				dimensionName, dimension.ID)
+	for dimensionName, dimension := range cfg.Dimensions {
+		isBypassDimension := dimensionName == types.BypassDimensionName
+
+		// Validate action value
+		if dimension.Action != "" && !validDimensionActions[dimension.Action] {
+			collector.Add(filename, 0, "dimensions: dimension '%s' has invalid action '%s' (must be 'render', 'bypass', or 'block')",
+				dimensionName, dimension.Action)
+		}
+
+		// Bypass dimension constraints
+		if isBypassDimension {
+			if dimension.ID != types.BypassDimensionID {
+				collector.Add(filename, 0, "dimensions: dimension 'bypass' must use reserved ID 0")
+			}
+			if dimension.Action != "" && dimension.Action != types.ActionBypass {
+				collector.Add(filename, 0, "dimensions: dimension 'bypass' must have action 'bypass'")
+			}
+		} else {
+			// Non-bypass dimension constraints
+			if dimension.ID == types.BypassDimensionID {
+				collector.Add(filename, 0, "dimensions: dimension '%s': ID 0 is reserved for the built-in bypass dimension",
+					dimensionName)
+			} else if dimension.ID < 0 {
+				collector.Add(filename, 0, "dimensions: dimension '%s' has invalid ID %d (must be positive)",
+					dimensionName, dimension.ID)
+			}
+			if dimension.Action == types.ActionBypass {
+				collector.Add(filename, 0, "dimensions: dimension '%s': only the built-in bypass dimension can have action 'bypass'",
+					dimensionName)
+			}
+		}
+
+		// Block dimension constraints
+		if dimension.Action == types.ActionBlock {
+			if len(dimension.MatchUA) == 0 {
+				collector.Add(filename, 0, "dimensions: dimension '%s': block dimensions must have at least one match_ua pattern",
+					dimensionName)
+			}
+			if dimension.ID <= 0 {
+				collector.Add(filename, 0, "dimensions: dimension '%s': block dimensions must have a positive ID",
+					dimensionName)
+			}
 		}
 
 		// Check for duplicate IDs
 		if existingDimension, exists := dimensionIDs[dimension.ID]; exists {
-			collector.Add(filename, 0, "render.dimensions: dimension ID %d is used by both '%s' and '%s' (must be unique)",
+			collector.Add(filename, 0, "dimensions: dimension ID %d is used by both '%s' and '%s' (must be unique)",
 				dimension.ID, existingDimension, dimensionName)
 		}
 		dimensionIDs[dimension.ID] = dimensionName
 
-		// Validate dimension fields
-		if dimension.Width <= 0 {
-			collector.Add(filename, 0, "render.dimensions: dimension '%s' has invalid width %d (must be positive)",
-				dimensionName, dimension.Width)
-		}
-		if dimension.Height <= 0 {
-			collector.Add(filename, 0, "render.dimensions: dimension '%s' has invalid height %d (must be positive)",
-				dimensionName, dimension.Height)
+		// Validate dimension fields (not needed for block or bypass dimensions)
+		if dimension.Action != types.ActionBlock && !isBypassDimension {
+			if dimension.Width <= 0 {
+				collector.Add(filename, 0, "dimensions: dimension '%s' has invalid width %d (must be positive)",
+					dimensionName, dimension.Width)
+			}
+			if dimension.Height <= 0 {
+				collector.Add(filename, 0, "dimensions: dimension '%s' has invalid height %d (must be positive)",
+					dimensionName, dimension.Height)
+			}
 		}
 
 		// Validate match_ua patterns
 		for _, pattern := range dimension.MatchUA {
 			if pattern == "" {
-				collector.Add(filename, 0, "render.dimensions: dimension '%s': match_ua pattern contains empty string",
+				collector.Add(filename, 0, "dimensions: dimension '%s': match_ua pattern contains empty string",
 					dimensionName)
 				continue
 			}
 			if err := validatePatternSyntax(pattern, "user-agent"); err != nil {
-				collector.Add(filename, 0, "render.dimensions: dimension '%s': invalid match_ua pattern '%s': %v",
+				collector.Add(filename, 0, "dimensions: dimension '%s': invalid match_ua pattern '%s': %v",
 					dimensionName, pattern, err)
 			}
 		}
@@ -1583,7 +1629,7 @@ func validateHosts(hosts *configtypes.HostsConfig, filename string, hasGlobalDim
 
 // validateDimensions validates dimension configuration
 func validateDimensions(hostIndex int, host *types.Host, filename string, hasGlobalDimensions bool, ht *HostsLineTracker, collector *ErrorCollector) {
-	if len(host.Render.Dimensions) == 0 {
+	if len(host.Dimensions) == 0 {
 		if !hasGlobalDimensions {
 			collector.Add(filename, 0, "host[%d] (%s): at least one dimension must be configured (no global dimensions defined)", hostIndex, host.Domain)
 		}
@@ -1592,11 +1638,50 @@ func validateDimensions(hostIndex int, host *types.Host, filename string, hasGlo
 
 	dimensionIDs := make(map[int]string)
 
-	for dimensionName, dimension := range host.Render.Dimensions {
-		// Validate dimension ID
-		if dimension.ID <= 0 {
-			collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid ID %d (must be positive)",
-				hostIndex, host.Domain, dimensionName, dimension.ID)
+	for dimensionName, dimension := range host.Dimensions {
+		isBypassDimension := dimensionName == types.BypassDimensionName
+
+		// Validate action value
+		if dimension.Action != "" && !validDimensionActions[dimension.Action] {
+			collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid action '%s' (must be 'render', 'bypass', or 'block')",
+				hostIndex, host.Domain, dimensionName, dimension.Action)
+		}
+
+		// Bypass dimension constraints
+		if isBypassDimension {
+			if dimension.ID != types.BypassDimensionID {
+				collector.Add(filename, 0, "host[%d] (%s): dimension 'bypass' must use reserved ID 0",
+					hostIndex, host.Domain)
+			}
+			if dimension.Action != "" && dimension.Action != types.ActionBypass {
+				collector.Add(filename, 0, "host[%d] (%s): dimension 'bypass' must have action 'bypass'",
+					hostIndex, host.Domain)
+			}
+		} else {
+			// Non-bypass dimension constraints
+			if dimension.ID == types.BypassDimensionID {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s': ID 0 is reserved for the built-in bypass dimension",
+					hostIndex, host.Domain, dimensionName)
+			} else if dimension.ID < 0 {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid ID %d (must be positive)",
+					hostIndex, host.Domain, dimensionName, dimension.ID)
+			}
+			if dimension.Action == types.ActionBypass {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s': only the built-in bypass dimension can have action 'bypass'",
+					hostIndex, host.Domain, dimensionName)
+			}
+		}
+
+		// Block dimension constraints
+		if dimension.Action == types.ActionBlock {
+			if len(dimension.MatchUA) == 0 {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s': block dimensions must have at least one match_ua pattern",
+					hostIndex, host.Domain, dimensionName)
+			}
+			if dimension.ID <= 0 {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s': block dimensions must have a positive ID",
+					hostIndex, host.Domain, dimensionName)
+			}
 		}
 
 		// Check for duplicate IDs
@@ -1606,14 +1691,16 @@ func validateDimensions(hostIndex int, host *types.Host, filename string, hasGlo
 		}
 		dimensionIDs[dimension.ID] = dimensionName
 
-		// Validate dimension fields
-		if dimension.Width <= 0 {
-			collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid width %d (must be positive)",
-				hostIndex, host.Domain, dimensionName, dimension.Width)
-		}
-		if dimension.Height <= 0 {
-			collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid height %d (must be positive)",
-				hostIndex, host.Domain, dimensionName, dimension.Height)
+		// Validate dimension fields (not needed for block or bypass dimensions)
+		if dimension.Action != types.ActionBlock && !isBypassDimension {
+			if dimension.Width <= 0 {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid width %d (must be positive)",
+					hostIndex, host.Domain, dimensionName, dimension.Width)
+			}
+			if dimension.Height <= 0 {
+				collector.Add(filename, 0, "host[%d] (%s): dimension '%s' has invalid height %d (must be positive)",
+					hostIndex, host.Domain, dimensionName, dimension.Height)
+			}
 		}
 
 		// Validate match_ua patterns
@@ -1633,7 +1720,7 @@ func validateDimensions(hostIndex int, host *types.Host, filename string, hasGlo
 
 // validateUnmatchedDimension validates unmatched_dimension configuration
 func validateUnmatchedDimension(hostIndex int, host *types.Host, filename string, ht *HostsLineTracker, collector *ErrorCollector) {
-	unmatchedDim := host.Render.UnmatchedDimension
+	unmatchedDim := host.UnmatchedDimension
 
 	// Empty value is valid - will be defaulted to "bypass" later
 	if unmatchedDim == "" {
@@ -1646,15 +1733,15 @@ func validateUnmatchedDimension(hostIndex int, host *types.Host, filename string
 	}
 
 	// Otherwise, it must be a valid dimension name
-	if _, exists := host.Render.Dimensions[unmatchedDim]; !exists {
-		collector.Add(filename, 0, "host[%d] (%s): unmatched_dimension '%s' is invalid (must be '%s', '%s', or a dimension name defined in this host's render.dimensions)",
+	if _, exists := host.Dimensions[unmatchedDim]; !exists {
+		collector.Add(filename, 0, "host[%d] (%s): unmatched_dimension '%s' is invalid (must be '%s', '%s', or a dimension name defined in this host's dimensions)",
 			hostIndex, host.Domain, unmatchedDim, types.UnmatchedDimensionBlock, types.UnmatchedDimensionBypass)
 	}
 }
 
 // validateGlobalUnmatchedDimension validates global unmatched_dimension configuration
 func validateGlobalUnmatchedDimension(cfg *configtypes.EgConfig, filename string, collector *ErrorCollector) {
-	unmatchedDim := cfg.Render.UnmatchedDimension
+	unmatchedDim := cfg.UnmatchedDimension
 
 	// Empty value is valid - will be defaulted to "bypass" later
 	if unmatchedDim == "" {
@@ -1667,8 +1754,8 @@ func validateGlobalUnmatchedDimension(cfg *configtypes.EgConfig, filename string
 	}
 
 	// Otherwise, it must be a valid dimension name in global dimensions
-	if _, exists := cfg.Render.Dimensions[unmatchedDim]; !exists {
-		collector.Add(filename, 0, "render.unmatched_dimension '%s' is invalid (must be '%s', '%s', or a dimension name defined in render.dimensions at the global level)",
+	if _, exists := cfg.Dimensions[unmatchedDim]; !exists {
+		collector.Add(filename, 0, "unmatched_dimension '%s' is invalid (must be '%s', '%s', or a dimension name defined in dimensions at the global level)",
 			unmatchedDim, types.UnmatchedDimensionBlock, types.UnmatchedDimensionBypass)
 	}
 }
@@ -1792,21 +1879,12 @@ func validateRuleActionConfig(hostIndex, ruleIndex int, rule *types.URLRule, hos
 			}
 			// Validate dimension exists
 			if rule.Render.Dimension != "" {
-				if _, exists := host.Render.Dimensions[rule.Render.Dimension]; !exists {
+				if dim, exists := host.Dimensions[rule.Render.Dimension]; !exists {
 					collector.Add(filename, 0, "host[%d] (%s): url_rules[%d]: render.dimension '%s' does not exist",
 						hostIndex, host.Domain, ruleIndex, rule.Render.Dimension)
-				}
-			}
-			// Validate unmatched_dimension override
-			if rule.Render.UnmatchedDimension != "" {
-				unmatchedDim := rule.Render.UnmatchedDimension
-				// Check if it's a valid constant
-				if unmatchedDim != types.UnmatchedDimensionBlock && unmatchedDim != types.UnmatchedDimensionBypass {
-					// Otherwise, must be a valid dimension name from host dimensions
-					if _, exists := host.Render.Dimensions[unmatchedDim]; !exists {
-						collector.Add(filename, 0, "host[%d] (%s): url_rules[%d]: render.unmatched_dimension '%s' is invalid (must be '%s', '%s', or a dimension name defined in this host's render.dimensions)",
-							hostIndex, host.Domain, ruleIndex, unmatchedDim, types.UnmatchedDimensionBlock, types.UnmatchedDimensionBypass)
-					}
+				} else if dim.EffectiveAction() == types.ActionBlock {
+					collector.Add(filename, 0, "host[%d] (%s): url_rules[%d]: render.dimension cannot reference a block dimension '%s'",
+						hostIndex, host.Domain, ruleIndex, rule.Render.Dimension)
 				}
 			}
 			// Validate events override

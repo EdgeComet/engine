@@ -83,7 +83,6 @@ type RenderCacheOverride struct {
 type RenderRuleConfig struct {
 	Timeout              *Duration            `yaml:"timeout,omitempty" json:"timeout,omitempty"`                               // Override render timeout
 	Dimension            string               `yaml:"dimension,omitempty" json:"dimension,omitempty"`                           // Force specific dimension
-	UnmatchedDimension   string               `yaml:"unmatched_dimension,omitempty" json:"unmatched_dimension,omitempty"`       // Override unmatched User-Agent behavior
 	Events               *RenderEvents        `yaml:"events,omitempty" json:"events,omitempty"`                                 // Override events
 	Cache                *RenderCacheOverride `yaml:"cache,omitempty" json:"cache,omitempty"`                                   // Override cache behavior
 	BlockedPatterns      []string             `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // Override blocked URL patterns

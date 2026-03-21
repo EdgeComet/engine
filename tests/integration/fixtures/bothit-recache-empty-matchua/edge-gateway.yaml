@@ -16,16 +16,18 @@ storage:
 render:
   cache:
     ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua:
-        - "*Googlebot*"
   events:
     wait_for: "networkIdle"
+
+
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua:
+      - "*Googlebot*"
 
 bothit_recache:
   enabled: false

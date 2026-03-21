@@ -182,11 +182,6 @@ render:
     # Default: 0s
     additional_wait: 0s
 
-  # Behavior for unmatched User-Agent
-  # Options: "bypass", "block"
-  # Default: "bypass"
-  unmatched_dimension: "bypass"
-
   # Resource types to block during rendering
   # Options: "Document", "Stylesheet", "Image", "Media", "Font", "Script", "TextTrack", "XHR", "Fetch", "Prefetch", "EventSource", "WebSocket", "Manifest", "SignedExchange", "Ping", "CSPViolationReport", "Preflight", "Other"
   # Default: []
@@ -205,42 +200,70 @@ render:
   # Default: true
   strip_scripts: true
 
-  # Viewport dimensions for different user agents
-  # Required at global or host level
-  dimensions:
-    desktop:
-      # Unique numeric identifier
-      # Required
-      id: 1
+# Behavior for unmatched User-Agent
+# Options: "bypass", "block", or dimension name
+# Default: "bypass"
+unmatched_dimension: "bypass"
 
-      # Viewport width in pixels
-      # Required
-      width: 1920
+# Viewport and User-Agent configurations for different device types
+# Each dimension creates separate cache entries
+# Dimensions at host level REPLACE global dimensions (no merge)
+dimensions:
+  desktop:
+    # Unique numeric identifier (ID 0 is reserved for built-in bypass dimension)
+    # Required, must be unique per host
+    id: 1
 
-      # Viewport height in pixels
-      # Required
-      height: 1080
+    # Dimension action
+    # Options: "render" (default), "block"
+    # "render" - render with Chrome and cache the result
+    # "block" - return 403 Forbidden (requires match_ua)
+    # "bypass" is reserved for the built-in bypass dimension
+    action: "render"
 
-      # User-Agent string for rendering
-      # Required
-      render_ua: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    # Viewport width in pixels
+    # Required for render dimensions
+    width: 1920
 
-      # User-Agent patterns to match this dimension
-      # Supports: exact, wildcard (*), regexp (~), case-insensitive regexp (~*)
-      # Required
-      match_ua:
-        - "*Googlebot*"
-        - "*Bingbot*"
-        - "*baiduspider*"
+    # Viewport height in pixels
+    # Required for render dimensions
+    height: 1080
 
-    mobile:
-      id: 2
-      width: 412
-      height: 915
-      render_ua: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
-      match_ua:
-        - "*Googlebot-Mobile*"
-        - "*iPhone*"
+    # User-Agent string for rendering
+    # Required for render dimensions
+    render_ua: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
+    # User-Agent patterns to match this dimension
+    # Supports: exact, wildcard (*), regexp (~), case-insensitive regexp (~*)
+    # Required for block dimensions, recommended for render dimensions
+    match_ua:
+      - "*Googlebot*"
+      - "*Bingbot*"
+      - "*baiduspider*"
+
+  mobile:
+    id: 2
+    action: "render"
+    width: 412
+    height: 915
+    render_ua: "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+    match_ua:
+      - "*Googlebot-Mobile*"
+      - "*iPhone*"
+
+  # Block dimension - rejects matching User-Agents with 403 Forbidden
+  # scrapers:
+  #   id: 3
+  #   action: "block"
+  #   match_ua:
+  #     - "*SemrushBot*"
+  #     - "*AhrefsBot*"
+
+  # The bypass dimension (ID 0) is auto-injected if not declared.
+  # Customize it to add explicit User-Agent matching:
+  # bypass:
+  #   match_ua:
+  #     - "*Chrome*"
 
 bypass:
   # Timeout for origin requests
@@ -436,6 +459,30 @@ hosts:
     # Required
     enabled: true
 
+    # Override unmatched User-Agent behavior
+    # Options: "bypass" (default), "block", or dimension name
+    unmatched_dimension: "bypass"
+
+    # Override dimensions (replaces global map)
+    # Omit to inherit global dimensions
+    dimensions:
+      desktop:
+        id: 1
+        action: "render"
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+        match_ua:
+          - "*Googlebot*"
+          - "*Bingbot*"
+
+      # Block dimension example
+      # scrapers:
+      #   id: 3
+      #   action: "block"
+      #   match_ua:
+      #     - "*SemrushBot*"
+
     render:
       # Chrome render timeout
       # Required
@@ -457,9 +504,6 @@ hosts:
         wait_for: "networkIdle"
         additional_wait: 500ms
 
-      # Override unmatched User-Agent behavior
-      unmatched_dimension: "bypass"
-
       # Override blocked resources (replaces global array)
       blocked_resource_types:
         - Image
@@ -472,18 +516,6 @@ hosts:
 
       # Override script stripping
       strip_scripts: true
-
-      # Override dimensions (replaces global map)
-      # Omit to inherit global dimensions
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
-          match_ua:
-            - "*Googlebot*"
-            - "*Bingbot*"
 
     bypass:
       timeout: 15s

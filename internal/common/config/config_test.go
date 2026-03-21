@@ -143,16 +143,16 @@ hosts:
       cache:
         ttl: 1h
       timeout: %ds
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua: []
       events:
         wait_for: "networkIdle"
         additional_wait: 1s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua: []
 `, i+1, i+1, i+1, timeout)
 			}
 
@@ -271,16 +271,16 @@ hosts:
       cache:
         ttl: 1h
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua: []
       events:
         wait_for: "networkIdle"
         additional_wait: 1s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua: []
 `
 
 			// Create hosts.d directory and write host file
@@ -363,11 +363,11 @@ func TestExampleConfigsLoad(t *testing.T) {
 
 		hosts := cm.GetHosts()
 		for _, host := range hosts {
-			assert.Greater(t, len(host.Render.Dimensions), 0, "Host %s should have at least one dimension", host.Domain)
+			assert.Greater(t, len(host.Dimensions), 0, "Host %s should have at least one dimension", host.Domain)
 
 			// Verify dimension IDs are unique
 			dimensionIDs := make(map[int]string)
-			for name, dim := range host.Render.Dimensions {
+			for name, dim := range host.Dimensions {
 				assert.Greater(t, dim.ID, 0, "Dimension %s should have positive ID", name)
 				if existingDim, exists := dimensionIDs[dim.ID]; exists {
 					t.Errorf("Host %s has duplicate dimension ID %d for %s and %s", host.Domain, dim.ID, name, existingDim)
@@ -404,19 +404,20 @@ render:
     expired:
       strategy: "serve_stale"
       stale_ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua: ["$GooglebotSearchDesktop", "*CustomBot*"]
-    mobile:
-      id: 2
-      width: 375
-      height: 667
-      render_ua: "TestMobileAgent"
-      match_ua: ["$BingbotMobile"]
+
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua: ["$GooglebotSearchDesktop", "*CustomBot*"]
+  mobile:
+    id: 2
+    width: 375
+    height: 667
+    render_ua: "TestMobileAgent"
+    match_ua: ["$BingbotMobile"]
 
 bypass:
   timeout: 20s
@@ -470,16 +471,16 @@ hosts:
 	require.NotNil(t, cm)
 
 	config := cm.GetConfig()
-	require.NotNil(t, config.Render.Dimensions)
+	require.NotNil(t, config.Dimensions)
 
-	desktop := config.Render.Dimensions["desktop"]
+	desktop := config.Dimensions["desktop"]
 	assert.Greater(t, len(desktop.MatchUA), 2, "desktop dimension should have expanded patterns")
 	assert.Contains(t, desktop.MatchUA, "*CustomBot*", "desktop should retain custom pattern")
 	assert.Contains(t, desktop.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.NotNil(t, desktop.CompiledPatterns, "desktop patterns should be compiled")
 	assert.Greater(t, len(desktop.CompiledPatterns), 0, "desktop should have compiled patterns")
 
-	mobile := config.Render.Dimensions["mobile"]
+	mobile := config.Dimensions["mobile"]
 	assert.Greater(t, len(mobile.MatchUA), 1, "mobile dimension should have expanded patterns")
 	assert.NotNil(t, mobile.CompiledPatterns, "mobile patterns should be compiled")
 }
@@ -545,16 +546,16 @@ hosts:
       cache:
         ttl: 1h
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua: ["$AnthropicBot", "*CustomBot*"]
       events:
         wait_for: "networkIdle"
         additional_wait: 1s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua: ["$AnthropicBot", "*CustomBot*"]
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")
@@ -572,7 +573,7 @@ hosts:
 	hosts := cm.GetHosts()
 	require.Len(t, hosts, 1)
 
-	desktop := hosts[0].Render.Dimensions["desktop"]
+	desktop := hosts[0].Dimensions["desktop"]
 	assert.Greater(t, len(desktop.MatchUA), 1, "host dimension should have expanded patterns")
 	assert.Contains(t, desktop.MatchUA, "*CustomBot*", "should retain custom pattern")
 	assert.Contains(t, desktop.MatchUA, "~ClaudeBot\\/\\d+\\.\\d+; \\+claudebot@anthropic\\.com")
@@ -606,13 +607,14 @@ render:
     expired:
       strategy: "serve_stale"
       stale_ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua: ["$UnknownBotAlias"]
+
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua: ["$UnknownBotAlias"]
 
 bypass:
   timeout: 20s
@@ -730,16 +732,16 @@ hosts:
       cache:
         ttl: 1h
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua: ["$InvalidBotAlias"]
       events:
         wait_for: "networkIdle"
         additional_wait: 1s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua: ["$InvalidBotAlias"]
 `
 
 	hostsDir := filepath.Join(tempDir, "hosts.d")

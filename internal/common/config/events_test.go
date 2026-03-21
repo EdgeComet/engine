@@ -35,13 +35,13 @@ render:
   events:
     wait_for: "load"
     additional_wait: 2s
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -70,13 +70,13 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
@@ -127,13 +127,13 @@ render:
   events:
     wait_for: "networkIdle"
     additional_wait: 1s
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -165,13 +165,13 @@ hosts:
       events:
         wait_for: "DOMContentLoaded"
         additional_wait: 500ms
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
@@ -215,13 +215,13 @@ render:
   events:
     wait_for: "networkAlmostIdle"
     additional_wait: 3s
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -251,13 +251,13 @@ hosts:
     render:
       timeout: 30s
       events: {}
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
@@ -298,13 +298,13 @@ storage:
 render:
   cache:
     ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -333,13 +333,13 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
@@ -388,13 +388,13 @@ render:
   events:
     wait_for: "networkIdle"
     additional_wait: 2s
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -425,13 +425,13 @@ hosts:
       timeout: 30s
       events:
         wait_for: "load"
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")
@@ -478,13 +478,13 @@ render:
   events:
     wait_for: "networkIdle"
     additional_wait: 3s
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Googlebot*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Googlebot*"]
 bypass:
   user_agent: "EdgeComet"
   cache:
@@ -515,13 +515,13 @@ hosts:
       timeout: 30s
       events:
         additional_wait: 500ms
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Googlebot*"]
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Googlebot*"]
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-host.yaml")

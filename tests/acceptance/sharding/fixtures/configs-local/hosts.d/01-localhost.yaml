@@ -5,23 +5,23 @@ hosts:
     render_key: "sk_test_sharding_12345"
     enabled: true
 
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua:
+          - "*Googlebot*"
+          - "*Chrome*"
+          - "*Safari*"
+          - "*Mozilla*"
+
     render:
       timeout: 15s
 
       cache:
         ttl: 5m
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          match_ua:
-            - "*Googlebot*"
-            - "*Chrome*"
-            - "*Safari*"
-            - "*Mozilla*"
 
       events:
         wait_for: "networkIdle"

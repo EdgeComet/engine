@@ -25,39 +25,40 @@ render:
     wait_for: "networkIdle"
     additional_wait: 1s
 
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $GooglebotSearchDesktop
-        - $BingbotDesktop
-        - "*Slurp*"
-
-    mobile:
-      id: 2
-      width: 375
-      height: 812
-      render_ua: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36"
-      match_ua:
-        - $GooglebotSearchMobile
-        - $BingbotMobile
-
-    ai_bots:
-      id: 3
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $ChatGPTUserBot
-        - $PerplexityBot
-
   blocked_resource_types:
     - "Image"
     - "Media"
     - "Font"
+
+
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $GooglebotSearchDesktop
+      - $BingbotDesktop
+      - "*Slurp*"
+
+  mobile:
+    id: 2
+    width: 375
+    height: 812
+    render_ua: "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36"
+    match_ua:
+      - $GooglebotSearchMobile
+      - $BingbotMobile
+
+  ai_bots:
+    id: 3
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $ChatGPTUserBot
+      - $PerplexityBot
 
 bypass:
   timeout: 30s

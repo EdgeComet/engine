@@ -52,6 +52,7 @@ func BuildRequestEvent(
 			event.UserAgent = string(renderCtx.HTTPCtx.UserAgent())
 		}
 		event.ClientIP = renderCtx.ClientIP
+		event.DimensionAction = renderCtx.DimensionAction
 
 		if renderCtx.Host != nil {
 			event.Host = renderCtx.Host.Domain

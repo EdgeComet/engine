@@ -115,13 +115,9 @@ func (cm *EGConfigManager) LoadConfig() error {
 	}
 
 	// Expand bot aliases in global dimensions
-	if err := ExpandDimensionAliases(cm.config.Render.Dimensions, cm.configPath, cm.logger); err != nil {
+	if err := ExpandDimensionAliases(cm.config.Dimensions, cm.configPath, cm.logger); err != nil {
 		return fmt.Errorf("failed to expand bot aliases in global config: %w", err)
 	}
-
-	//cm.logger.Debug("Expanded bot aliases in global configuration",
-	//	zap.String("config_path", cm.configPath),
-	//	zap.Int("dimension_count", len(cm.config.Render.Dimensions)))
 
 	// Compile user agent patterns for global dimensions
 	if err := cm.compileGlobalDimensions(); err != nil {
@@ -146,8 +142,8 @@ func (cm *EGConfigManager) LoadConfig() error {
 	cm.applyDefaults()
 
 	// Sanity check: global unmatched_dimension must be non-empty after defaults
-	if cm.config.Render.UnmatchedDimension == "" {
-		return fmt.Errorf("INTERNAL ERROR: render.unmatched_dimension is empty after applying defaults")
+	if cm.config.UnmatchedDimension == "" {
+		return fmt.Errorf("INTERNAL ERROR: unmatched_dimension is empty after applying defaults")
 	}
 
 	// Build and store thread-safe hosts cache for O(1) domain lookup
@@ -258,7 +254,7 @@ func (cm *EGConfigManager) loadHostsFile(path string) ([]types.Host, error) {
 		host := &hostsConfig.Hosts[i]
 		contextPath := fmt.Sprintf("%s:host_id=%d", path, host.ID)
 
-		if err := PrepareHost(host, &cm.config.Render, contextPath, cm.logger); err != nil {
+		if err := PrepareHost(host, cm.config, contextPath, cm.logger); err != nil {
 			return nil, fmt.Errorf("host '%s': %w", host.Domain, err)
 		}
 	}
@@ -268,19 +264,19 @@ func (cm *EGConfigManager) loadHostsFile(path string) ([]types.Host, error) {
 
 // compileGlobalDimensions compiles user agent patterns for global dimensions
 func (cm *EGConfigManager) compileGlobalDimensions() error {
-	if len(cm.config.Render.Dimensions) == 0 {
+	if len(cm.config.Dimensions) == 0 {
 		return nil
 	}
 
-	for dimensionName, dimension := range cm.config.Render.Dimensions {
+	for dimensionName, dimension := range cm.config.Dimensions {
 		if err := dimension.CompileMatchUAPatterns(); err != nil {
 			return fmt.Errorf("global dimension '%s': %w", dimensionName, err)
 		}
-		cm.config.Render.Dimensions[dimensionName] = dimension
+		cm.config.Dimensions[dimensionName] = dimension
 	}
 
 	cm.logger.Info("Compiled global dimensions",
-		zap.Int("count", len(cm.config.Render.Dimensions)),
+		zap.Int("count", len(cm.config.Dimensions)),
 	)
 
 	return nil
@@ -352,8 +348,8 @@ func (cm *EGConfigManager) applyDefaults() {
 
 	// Apply default unmatched_dimension at global level if not specified
 	// This is the ONLY place where the default is applied - no fallbacks elsewhere
-	if cm.config.Render.UnmatchedDimension == "" {
-		cm.config.Render.UnmatchedDimension = types.UnmatchedDimensionBypass
+	if cm.config.UnmatchedDimension == "" {
+		cm.config.UnmatchedDimension = types.UnmatchedDimensionBypass
 	}
 
 	// Apply default compression algorithm if not specified

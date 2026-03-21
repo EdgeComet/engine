@@ -190,7 +190,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// Validate dimension ID and get dimension name
 	var dimensionName string
 	dimensionFound := false
-	for dimName, dim := range host.Render.Dimensions {
+	for dimName, dim := range host.Dimensions {
 		if dim.ID == dimensionID {
 			dimensionName = dimName
 			dimensionFound = true
@@ -229,7 +229,16 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		zap.Int("dimension_id", dimensionID),
 		zap.String("dimension_name", dimensionName))
 
-	// Route to bypass recache if the URL's resolved action is bypass
+	// Apply dimension action override when no URL rule matched (same logic as server.go)
+	dimConfig := host.Dimensions[dimensionName]
+	if renderCtx.ResolvedConfig.MatchedRuleID == "" {
+		dimAction := dimConfig.EffectiveAction()
+		if dimAction != types.ActionRender {
+			renderCtx.ResolvedConfig.Action = dimAction
+		}
+	}
+
+	// Route to bypass recache if the effective action is bypass
 	if renderCtx.ResolvedConfig.Action == types.ActionBypass {
 		return rs.processBypassRecache(ctx, url, renderCtx, startTime)
 	}
@@ -244,7 +253,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	defer rs.releaseTabReservation(context.Background(), reservation)
 
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
-	dimension := host.Render.Dimensions[dimensionName]
+	dimension := host.Dimensions[dimensionName]
 	renderReq := orchestrator.BuildRenderRequest(url, requestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 
 	// Build service URL

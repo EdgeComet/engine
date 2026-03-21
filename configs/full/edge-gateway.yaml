@@ -145,65 +145,6 @@ render:
     additional_wait: 500ms
 
   # -------------------------------------------------------------------------
-  # DIMENSION HANDLING
-  # -------------------------------------------------------------------------
-  # Action when User-Agent doesn't match any dimension
-  # Options: "bypass", "block", or dimension name (e.g., "desktop")
-  # Default: "bypass"
-  # "bypass" - fetch directly from origin without rendering
-  # "block" - return 403 Forbidden
-  # dimension name - use specified dimension for unmatched UAs
-  unmatched_dimension: "bypass"
-
-  # -------------------------------------------------------------------------
-  # DIMENSIONS
-  # -------------------------------------------------------------------------
-  # Viewport and User-Agent configurations for different device types
-  # Each dimension creates separate cache entries
-  # Dimensions at host level REPLACE global dimensions (no merge)
-  dimensions:
-    desktop:
-      # Unique numeric identifier (prevents cache invalidation when adding dimensions)
-      # Required, must be unique per host
-      id: 1
-
-      # Viewport width in pixels
-      # Required
-      width: 1920
-
-      # Viewport height in pixels
-      # Required
-      height: 1080
-
-      # User-Agent string sent to origin during rendering
-      # Required
-      render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-      # User-Agent patterns to match for this dimension
-      # Supports: exact, wildcard (*), regexp (~), case-insensitive regexp (~*)
-      # Bot aliases supported: $GooglebotSearchDesktop, $BingbotDesktop, etc.
-      # Required
-      match_ua:
-        - "*Googlebot*"
-        - "*Bingbot*"
-        - "*bingbot*"
-        - "$GooglebotSearchDesktop"
-        - "$BingbotDesktop"
-        - "~(GPTBot|ChatGPT-User)"
-        - "~*anthropic"
-
-    mobile:
-      id: 2
-      width: 390
-      height: 844
-      render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-      match_ua:
-        - "*Googlebot-Mobile*"
-        - "$GooglebotSearchMobile"
-        - "$BingbotMobile"
-        - "~Mobile.*Bot"
-
-  # -------------------------------------------------------------------------
   # RESOURCE BLOCKING
   # -------------------------------------------------------------------------
   # Block certain resource types during rendering to speed up page load
@@ -231,6 +172,75 @@ render:
 
 # =============================================================================
 # GLOBAL BYPASS CONFIGURATION
+# =============================================================================
+# DIMENSION HANDLING
+# =============================================================================
+# Action when User-Agent doesn't match any dimension
+# Options: "bypass", "block", or dimension name (e.g., "desktop")
+# Default: "bypass"
+# "bypass" - fetch directly from origin without rendering
+# "block" - return 403 Forbidden
+# dimension name - use specified dimension for unmatched UAs
+unmatched_dimension: "bypass"
+
+# =============================================================================
+# DIMENSIONS
+# =============================================================================
+# Viewport and User-Agent configurations for different device types
+# Each dimension creates separate cache entries
+# Dimensions at host level REPLACE global dimensions (no merge)
+dimensions:
+  desktop:
+    # Unique numeric identifier (prevents cache invalidation when adding dimensions)
+    # Required, must be unique per host
+    id: 1
+
+    # Dimension action: "render" (default), "bypass", or "block"
+    # "render" - render with Chrome and cache the result
+    # "bypass" - fetch directly from origin without rendering
+    # "block" - return 403 Forbidden (requires match_ua)
+    # Default: "render"
+    action: "render"
+
+    # Viewport width in pixels
+    # Required for render dimensions
+    width: 1920
+
+    # Viewport height in pixels
+    # Required for render dimensions
+    height: 1080
+
+    # User-Agent string sent to origin during rendering
+    # Required for render dimensions
+    render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    # User-Agent patterns to match for this dimension
+    # Supports: exact, wildcard (*), regexp (~), case-insensitive regexp (~*)
+    # Bot aliases supported: $GooglebotSearchDesktop, $BingbotDesktop, etc.
+    # Required
+    match_ua:
+      - "*Googlebot*"
+      - "*Bingbot*"
+      - "*bingbot*"
+      - "$GooglebotSearchDesktop"
+      - "$BingbotDesktop"
+      - "~(GPTBot|ChatGPT-User)"
+      - "~*anthropic"
+
+  mobile:
+    id: 2
+    action: "render"
+    width: 390
+    height: 844
+    render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    match_ua:
+      - "*Googlebot-Mobile*"
+      - "$GooglebotSearchMobile"
+      - "$BingbotMobile"
+      - "~Mobile.*Bot"
+
+# =============================================================================
+# BYPASS CONFIGURATION
 # =============================================================================
 # Settings for direct origin fetches (when not rendering)
 

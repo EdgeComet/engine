@@ -508,9 +508,9 @@ hosts:
     domain: "test.example.com"
     render_key: "test-key"
     enabled: true
+    unmatched_dimension: "bypass"
     render:
       timeout: 30s
-      unmatched_dimension: "bypass"
       cache:
         ttl: 1h
 `
@@ -549,16 +549,15 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    broken_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $UnknownBotAlias
-        - $AnotherUnknownBot
+dimensions:
+  broken_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $UnknownBotAlias
+      - $AnotherUnknownBot
 
 log:
   level: "info"
@@ -622,15 +621,14 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    valid_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $GooglebotSearchDesktop
+dimensions:
+  valid_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $GooglebotSearchDesktop
 
 log:
   level: "info"
@@ -661,19 +659,19 @@ hosts:
     domain: "error-test.example.com"
     render_key: "test-key"
     enabled: true
+    unmatched_dimension: "bypass"
+    dimensions:
+      broken_host_dimension:
+        id: 10
+        width: 1920
+        height: 1080
+        render_ua: "TestAgent"
+        match_ua:
+          - $InvalidBotAlias
     render:
       timeout: 30s
-      unmatched_dimension: "bypass"
       cache:
         ttl: 1h
-      dimensions:
-        broken_host_dimension:
-          id: 10
-          width: 1920
-          height: 1080
-          render_ua: "TestAgent"
-          match_ua:
-            - $InvalidBotAlias
 `
 			hostConfigPath := filepath.Join(hostsDir, "error-host.yaml")
 			err = os.WriteFile(hostConfigPath, []byte(hostConfigContent), 0644)
@@ -718,15 +716,14 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    case_sensitive_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $googlebotSearchDesktop
+dimensions:
+  case_sensitive_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $googlebotSearchDesktop
 
 log:
   level: "info"
@@ -783,15 +780,14 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    helpful_error_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $NonExistentBot
+dimensions:
+  helpful_error_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $NonExistentBot
 
 log:
   level: "info"
@@ -853,16 +849,15 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    multi_error_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $FirstUnknownBot
-        - $GooglebotSearchDesktop
+dimensions:
+  multi_error_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $FirstUnknownBot
+      - $GooglebotSearchDesktop
         - $SecondUnknownBot
         - $ThirdUnknownBot
 
@@ -921,24 +916,23 @@ redis:
 storage:
   base_path: "/tmp/cache"
 
-render:
-  dimensions:
-    valid_google_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $GooglebotSearchDesktop
-        - $GooglebotSearchMobile
-    valid_ai_dimension:
-      id: 2
-      width: 1920
-      height: 1080
-      render_ua: "TestAgent"
-      match_ua:
-        - $ChatGPTUserBot
-        - $PerplexityBot
+dimensions:
+  valid_google_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $GooglebotSearchDesktop
+      - $GooglebotSearchMobile
+  valid_ai_dimension:
+    id: 2
+    width: 1920
+    height: 1080
+    render_ua: "TestAgent"
+    match_ua:
+      - $ChatGPTUserBot
+      - $PerplexityBot
 
 log:
   level: "info"
@@ -967,11 +961,11 @@ hosts:
 
 			By("Verifying dimensions are loaded")
 			cfg := cm.GetConfig()
-			Expect(cfg.Render.Dimensions).To(HaveKey("valid_google_dimension"))
-			Expect(cfg.Render.Dimensions).To(HaveKey("valid_ai_dimension"))
+			Expect(cfg.Dimensions).To(HaveKey("valid_google_dimension"))
+			Expect(cfg.Dimensions).To(HaveKey("valid_ai_dimension"))
 
 			By("Verifying bot aliases were expanded in dimensions")
-			googleDim := cfg.Render.Dimensions["valid_google_dimension"]
+			googleDim := cfg.Dimensions["valid_google_dimension"]
 			// After expansion, should have more patterns than the 2 aliases
 			Expect(len(googleDim.MatchUA)).To(BeNumerically(">", 2),
 				"Bot aliases should expand to multiple patterns")

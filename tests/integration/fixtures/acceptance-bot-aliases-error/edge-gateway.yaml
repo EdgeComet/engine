@@ -28,20 +28,21 @@ render:
       strategy: "serve_stale"
       stale_ttl: 1h
 
-  dimensions:
-    broken_dimension:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $UnknownBotAlias
-        - $AnotherUnknownBot
-        - $NonExistentAlias
-
   events:
     wait_for: "networkIdle"
     additional_wait: 1s
+
+
+dimensions:
+  broken_dimension:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $UnknownBotAlias
+      - $AnotherUnknownBot
+      - $NonExistentAlias
 
 bypass:
   timeout: 20s

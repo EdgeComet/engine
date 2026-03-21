@@ -1,7 +1,6 @@
 package acceptance_test
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,100 +11,6 @@ import (
 )
 
 var _ = Describe("Unmatched Dimension Handling", Serial, func() {
-	Context("Pattern-Level Override - Block", func() {
-		It("should return 403 for unmatched User-Agent", func() {
-			By("Making request with unknown User-Agent to /test-unmatched/block/")
-			response := makeRequestWithCustomUA("/test-unmatched/block/", "UnknownBot/1.0")
-
-			By("Verifying 403 response")
-			Expect(response.Error).To(BeNil())
-			Expect(response.StatusCode).To(Equal(403), "Should return HTTP 403 Forbidden for unmatched UA with block config")
-
-			By("Verifying X-Unmatched-Dimension header is set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set to 'true'")
-		})
-	})
-
-	Context("Pattern-Level Override - Desktop Fallback", func() {
-		It("should render with desktop dimension for unmatched User-Agent", func() {
-			By("Making request with unknown User-Agent to /test-unmatched/desktop/")
-			response := makeRequestWithCustomUA("/test-unmatched/desktop/", "UnknownBot/1.0")
-
-			By("Verifying successful render")
-			Expect(response.Error).To(BeNil())
-			Expect(response.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
-
-			By("Verifying X-Unmatched-Dimension header is set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set to 'true'")
-
-			By("Verifying X-Render-Source indicates rendering occurred")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
-				"Content should be rendered")
-
-			By("Verifying rendered content")
-			Expect(response.Body).To(ContainSubstring("Desktop Fallback Test Page"),
-				"Rendered content should be present")
-
-			By("Verifying cache key uses desktop dimension")
-			cacheKey, err := testEnv.GetCacheKey(
-				testEnv.Config.TestPagesURL()+"/test-unmatched/desktop/",
-				"desktop")
-			Expect(err).To(BeNil(), "Should generate cache key successfully")
-			Expect(testEnv.CacheExists(cacheKey)).To(BeTrue(),
-				"Cache entry should exist for desktop dimension")
-		})
-	})
-
-	Context("Pattern-Level Override - Bypass", func() {
-		It("should bypass rendering for unmatched User-Agent", func() {
-			By("Making request with unknown User-Agent to /test-unmatched/bypass/")
-			response := makeRequestWithCustomUA("/test-unmatched/bypass/", "UnknownBot/1.0")
-
-			By("Verifying successful response")
-			Expect(response.Error).To(BeNil())
-			Expect(response.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
-
-			By("Verifying X-Unmatched-Dimension header is set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set to 'true'")
-
-			By("Verifying X-Render-Source indicates bypass")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("bypass"),
-				"Content should be bypassed (not rendered)")
-
-			By("Verifying bypass content is served")
-			Expect(response.Body).To(ContainSubstring("Bypass Test Page"),
-				"Bypass content should be present")
-		})
-
-		It("should cache bypass response and serve from cache on second request", func() {
-			By("Making first request with unmatched User-Agent")
-			uniquePath := fmt.Sprintf("/test-unmatched/bypass/cache-test-%d/", time.Now().UnixNano())
-			response1 := makeRequestWithCustomUA(uniquePath, "CacheTestBot/1.0")
-
-			By("Verifying first request is a fresh bypass")
-			Expect(response1.Error).To(BeNil())
-			Expect(response1.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("bypass"),
-				"First request should be a fresh bypass")
-			Expect(response1.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set")
-
-			By("Making second request with same unmatched User-Agent")
-			response2 := makeRequestWithCustomUA(uniquePath, "CacheTestBot/1.0")
-
-			By("Verifying second request is served from bypass cache")
-			Expect(response2.Error).To(BeNil())
-			Expect(response2.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"),
-				"Second request should be served from bypass cache")
-			Expect(response2.Headers.Get("X-Render-Cache")).To(Equal("hit"),
-				"Second request should be a cache hit")
-		})
-	})
-
 	Context("Matched Dimension - No Fallback", func() {
 		It("should NOT set X-Unmatched-Dimension header when User-Agent matches", func() {
 			By("Making request with Googlebot User-Agent")

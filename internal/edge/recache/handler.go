@@ -38,7 +38,7 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if req.URL == "" || req.HostID == 0 || req.DimensionID == 0 {
+	if req.URL == "" || req.HostID == 0 {
 		rs.logger.Warn("Missing required fields",
 			zap.String("url", req.URL),
 			zap.Int("host_id", req.HostID),

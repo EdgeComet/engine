@@ -38,9 +38,9 @@ Render configuration includes event waiting behavior. The `wait_for` field speci
 
 ## Device dimension
 
-When a website needs to be rendered differently for mobile and desktop user agents, dimensions determine how EG renders pages. Each dimension specifies viewport size (width and height), User-Agent string sent to Chrome during rendering, and patterns to match incoming request User-Agents. When a bot accesses EG, the system matches its User-Agent against dimension patterns to determine which viewport to use.
+Dimensions determine how EG handles requests based on User-Agent. Each dimension has an action: `render` (open in Chrome with a specified viewport), `bypass` (fetch from origin directly), or `block` (reject with 403). When a bot accesses EG, the system matches its User-Agent against dimension patterns to determine which dimension applies.
 
-Also, it’s a way to manage a rendering behaviour, for example, Googlebot and AI bots' requests will be rendered, while any other bots will be bypassed or simply blocked.
+Every host has a built-in bypass dimension (ID 0) that handles unmatched User-Agents by default. You can also define block dimensions to reject specific scrapers before any URL rule processing. Dimensions are configured at the host level alongside `unmatched_dimension`.
 
 
 

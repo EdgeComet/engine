@@ -22,43 +22,47 @@ hosts:
         - "custom_ref"
         - "custom_source"
 
+    unmatched_dimension: "bypass"
+
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua:
+          - "*Googlebot*"
+          - "*Chrome*"
+          - "*Safari*"
+          - "*Mozilla*"
+      mobile:
+        id: 2
+        width: 375
+        height: 812
+        render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        match_ua:
+          - "*iPhone*"
+          - "*Android*"
+          - "*Mobile*"
+      scrapers:
+        id: 3
+        action: "block"
+        match_ua:
+          - "*SemrushBot*"
+          - "*AhrefsBot*"
+          - "*MJ12bot*"
+
     render:
-      timeout: 15s       # 15 seconds for testing (faster than production)
-      unmatched_dimension: "bypass"  # Default behavior for unmatched User-Agent
-
-      # Blocked patterns for domain blocking tests
+      timeout: 15s
       blocked_patterns:
-        - "*/api/tracking/*"      # Block custom tracking API
-        - "*/api/analytics/*"     # Block custom analytics API
-        - "*/ads/*"              # Block custom ads paths
-
+        - "*/api/tracking/*"
+        - "*/api/analytics/*"
+        - "*/ads/*"
       cache:
-        ttl: 5m    # 5 minutes for faster testing
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          match_ua:
-            - "*Googlebot*"
-            - "*Chrome*"
-            - "*Safari*"
-            - "*Mozilla*"
-        mobile:
-          id: 2
-          width: 375
-          height: 812
-          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-          match_ua:
-            - "*iPhone*"
-            - "*Android*"
-            - "*Mobile*"
-
+        ttl: 5m
       events:
-        wait_for: "networkIdle"  # Wait for network to be idle
-        additional_wait: 500ms   # Additional 500ms wait
+        wait_for: "networkIdle"
+        additional_wait: 500ms
 
     # Comprehensive URL rules for pattern matching tests
     url_rules:
@@ -486,7 +490,7 @@ hosts:
         bypass:
           cache:
             enabled: true
-            ttl: 2s
+            ttl: 5s
             status_codes: [200]
 
       - match: "/bypass-test/disabled*"
@@ -619,36 +623,6 @@ hosts:
             expired:
               strategy: "serve_stale"
               stale_ttl: 10s
-
-      # --- UNMATCHED DIMENSION TESTS (for unmatched_dimension_test.go) ---
-      # Test unmatched_dimension behavior with different configurations
-
-      # Pattern-level "block" override - returns 403 for unmatched User-Agent
-      - match: "/test-unmatched/block/*"
-        action: "render"
-        render:
-          unmatched_dimension: "block"
-
-      # Pattern-level "desktop" fallback - renders with desktop dimension
-      - match: "/test-unmatched/desktop/*"
-        action: "render"
-        render:
-          unmatched_dimension: "desktop"
-
-      # Pattern-level "bypass" (explicit override)
-      - match: "/test-unmatched/bypass/*"
-        action: "render"
-        render:
-          unmatched_dimension: "bypass"
-        bypass:
-          cache:
-            enabled: true
-            ttl: 30s
-            status_codes: [200]
-
-      # Uses host default (bypass) - no pattern-level override
-      - match: "/test-unmatched/default/*"
-        action: "render"
 
       # --- SAFE HEADERS TESTS (for safe_headers_test.go) ---
       # Test safe headers filtering for rendered and bypass responses

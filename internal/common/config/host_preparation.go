@@ -8,11 +8,17 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	defaultBypassWidth    = 1920
+	defaultBypassHeight   = 1080
+	defaultBypassRenderUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 // PrepareHost prepares a host by applying global inheritance, expanding aliases,
 // compiling patterns, and sorting URL rules.
-// globalRender can be nil if no inheritance needed (e.g., standalone tests).
+// globalConfig can be nil if no inheritance needed (e.g., standalone tests).
 // contextPath is used for error messages (e.g., "hosts.yaml:host_id=1" or "mysql:host_id=1").
-func PrepareHost(host *types.Host, globalRender *configtypes.GlobalRenderConfig, contextPath string, logger *zap.Logger) error {
+func PrepareHost(host *types.Host, globalConfig *configtypes.EgConfig, contextPath string, logger *zap.Logger) error {
 	if host == nil {
 		return fmt.Errorf("host cannot be nil")
 	}
@@ -23,22 +29,23 @@ func PrepareHost(host *types.Host, globalRender *configtypes.GlobalRenderConfig,
 	// Track if dimensions were inherited (already expanded and compiled at global level)
 	dimensionsInherited := false
 
-	// Step 1: Apply global inheritance (if globalRender provided)
-	if globalRender != nil {
+	// Step 1: Apply global inheritance (if globalConfig provided)
+	if globalConfig != nil {
 		// Inherit dimensions if host has none and global has some
-		if len(host.Render.Dimensions) == 0 && len(globalRender.Dimensions) > 0 {
-			host.Render.Dimensions = make(map[string]types.Dimension, len(globalRender.Dimensions))
-			for dimName, dim := range globalRender.Dimensions {
-				host.Render.Dimensions[dimName] = dim
+		if len(host.Dimensions) == 0 && len(globalConfig.Dimensions) > 0 {
+			host.Dimensions = make(map[string]types.Dimension, len(globalConfig.Dimensions))
+			for dimName, dim := range globalConfig.Dimensions {
+				host.Dimensions[dimName] = dim
 			}
 			dimensionsInherited = true
 			logger.Debug("Host inherited global dimensions",
 				zap.String("context", contextPath),
-				zap.Int("count", len(globalRender.Dimensions)),
+				zap.Int("count", len(globalConfig.Dimensions)),
 			)
 		}
 
 		// Inherit events (field-level merge)
+		globalRender := &globalConfig.Render
 		if globalRender.Events.WaitFor != "" {
 			inheritedFields := []string{}
 
@@ -62,17 +69,20 @@ func PrepareHost(host *types.Host, globalRender *configtypes.GlobalRenderConfig,
 		}
 	}
 
+	// Step 1.5: Inject built-in bypass dimension
+	injectBypassDimension(host, logger, contextPath)
+
 	// Step 2: Expand and compile dimensions (skip if inherited - already done at global level)
-	if !dimensionsInherited && host.Render.Dimensions != nil {
-		if err := ExpandDimensionAliases(host.Render.Dimensions, contextPath, logger); err != nil {
+	if !dimensionsInherited && host.Dimensions != nil {
+		if err := ExpandDimensionAliases(host.Dimensions, contextPath, logger); err != nil {
 			return fmt.Errorf("failed to expand dimension aliases: %w", err)
 		}
 
-		for dimName, dim := range host.Render.Dimensions {
+		for dimName, dim := range host.Dimensions {
 			if err := dim.CompileMatchUAPatterns(); err != nil {
 				return fmt.Errorf("dimension '%s': %w", dimName, err)
 			}
-			host.Render.Dimensions[dimName] = dim
+			host.Dimensions[dimName] = dim
 		}
 	}
 
@@ -122,4 +132,53 @@ func PrepareHost(host *types.Host, globalRender *configtypes.GlobalRenderConfig,
 	}
 
 	return nil
+}
+
+func injectBypassDimension(host *types.Host, logger *zap.Logger, contextPath string) {
+	if host.Dimensions == nil {
+		host.Dimensions = make(map[string]types.Dimension)
+	}
+
+	dim, exists := host.Dimensions[types.BypassDimensionName]
+	if !exists {
+		host.Dimensions[types.BypassDimensionName] = types.Dimension{
+			ID:       types.BypassDimensionID,
+			Action:   types.ActionBypass,
+			Width:    defaultBypassWidth,
+			Height:   defaultBypassHeight,
+			RenderUA: defaultBypassRenderUA,
+		}
+		logger.Debug("Injected built-in bypass dimension",
+			zap.String("context", contextPath),
+		)
+		return
+	}
+
+	changed := false
+	if dim.ID == 0 {
+		dim.ID = types.BypassDimensionID
+	}
+	if dim.Action == "" {
+		dim.Action = types.ActionBypass
+		changed = true
+	}
+	if dim.Width == 0 {
+		dim.Width = defaultBypassWidth
+		changed = true
+	}
+	if dim.Height == 0 {
+		dim.Height = defaultBypassHeight
+		changed = true
+	}
+	if dim.RenderUA == "" {
+		dim.RenderUA = defaultBypassRenderUA
+		changed = true
+	}
+
+	if changed {
+		logger.Debug("Merged defaults into user-declared bypass dimension",
+			zap.String("context", contextPath),
+		)
+	}
+	host.Dimensions[types.BypassDimensionName] = dim
 }

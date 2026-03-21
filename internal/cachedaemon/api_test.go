@@ -2,6 +2,7 @@ package cachedaemon
 
 import (
 	"encoding/json"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,22 +23,57 @@ func makePostRequest(daemon *CacheDaemon, path string, body []byte) *fasthttp.Re
 	return ctx
 }
 
+func TestResolveDimensionIDs(t *testing.T) {
+	host := &types.Host{
+		Domain: "example.com",
+		Dimensions: map[string]types.Dimension{
+			"bypass":  {ID: 0, Action: types.ActionBypass},
+			"mobile":  {ID: 1},
+			"desktop": {ID: 2},
+			"blocked": {ID: 3, Action: types.ActionBlock},
+		},
+	}
+
+	t.Run("empty request returns all non-block dimension IDs", func(t *testing.T) {
+		ids, err := resolveDimensionIDs(host, nil)
+		require.NoError(t, err)
+		sort.Ints(ids)
+		assert.Equal(t, []int{0, 1, 2}, ids)
+	})
+
+	t.Run("requesting bypass dimension 0 is accepted", func(t *testing.T) {
+		ids, err := resolveDimensionIDs(host, []int{0})
+		require.NoError(t, err)
+		assert.Equal(t, []int{0}, ids)
+	})
+
+	t.Run("requesting block dimension 3 is rejected", func(t *testing.T) {
+		_, err := resolveDimensionIDs(host, []int{3})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "dimension_id 3 not configured")
+	})
+
+	t.Run("requesting unconfigured dimension is rejected", func(t *testing.T) {
+		_, err := resolveDimensionIDs(host, []int{99})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "dimension_id 99 not configured")
+	})
+
+	t.Run("requesting specific valid IDs returns them", func(t *testing.T) {
+		ids, err := resolveDimensionIDs(host, []int{1, 2})
+		require.NoError(t, err)
+		assert.Equal(t, []int{1, 2}, ids)
+	})
+}
+
 func TestHandleInvalidateAPI_BypassDimension(t *testing.T) {
 	t.Run("invalidate without dimension_ids includes bypass dimension 0", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		// Create bypass cache entry (dimension 0)
-		populateMetadataHash(mr, 1, 0, "abc123", map[string]string{
-			"url": "https://example.com/page", "dimension": "",
-			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "bypass",
-		})
-
-		// Normalize the URL the same way the handler does
 		normalizedResult, err := daemon.normalizer.Normalize("https://example.com/page", nil)
 		require.NoError(t, err)
 		urlHash := daemon.normalizer.Hash(normalizedResult.NormalizedURL)
 
-		// Re-populate with the correct hash
 		populateMetadataHash(mr, 1, 0, urlHash, map[string]string{
 			"url": normalizedResult.NormalizedURL, "dimension": "",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "bypass",
@@ -88,7 +124,7 @@ func TestHandleInvalidateAPI_BypassDimension(t *testing.T) {
 }
 
 func TestHandleRecacheAPI_BypassDimension(t *testing.T) {
-	t.Run("recache without dimension_ids excludes bypass dimension 0", func(t *testing.T) {
+	t.Run("recache without dimension_ids includes bypass and excludes block", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
 		body, _ := json.Marshal(types.RecacheAPIRequest{
@@ -104,20 +140,46 @@ func TestHandleRecacheAPI_BypassDimension(t *testing.T) {
 		members, err := mr.ZMembers(queueKey)
 		require.NoError(t, err)
 
+		var dimensionIDs []int
 		for _, m := range members {
 			var member types.RecacheMember
 			require.NoError(t, json.Unmarshal([]byte(m), &member))
-			assert.NotEqual(t, 0, member.DimensionID, "bypass dimension 0 should not be in recache queue")
+			dimensionIDs = append(dimensionIDs, member.DimensionID)
 		}
+		sort.Ints(dimensionIDs)
+		assert.Equal(t, []int{0, 1, 2}, dimensionIDs, "should include bypass (0) and render dims, but not block (3)")
 	})
 
-	t.Run("recache with explicit dimension_ids [0] is rejected", func(t *testing.T) {
-		daemon, _ := setupTestDaemon(t)
+	t.Run("recache with explicit dimension_ids [0] is accepted", func(t *testing.T) {
+		daemon, mr := setupTestDaemon(t)
 
 		body, _ := json.Marshal(types.RecacheAPIRequest{
 			HostID:       1,
 			URLs:         []string{"https://example.com/page"},
 			DimensionIDs: []int{0},
+			Priority:     "high",
+		})
+		ctx := makePostRequest(daemon, "/internal/cache/recache", body)
+
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+
+		queueKey := daemon.keyGenerator.RecacheQueueKey(1, "high")
+		members, err := mr.ZMembers(queueKey)
+		require.NoError(t, err)
+		require.Len(t, members, 1)
+
+		var member types.RecacheMember
+		require.NoError(t, json.Unmarshal([]byte(members[0]), &member))
+		assert.Equal(t, 0, member.DimensionID)
+	})
+
+	t.Run("recache with explicit block dimension_ids [3] is rejected", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+
+		body, _ := json.Marshal(types.RecacheAPIRequest{
+			HostID:       1,
+			URLs:         []string{"https://example.com/page"},
+			DimensionIDs: []int{3},
 			Priority:     "high",
 		})
 		ctx := makePostRequest(daemon, "/internal/cache/recache", body)
@@ -130,7 +192,6 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 	t.Run("deletes all metadata for host", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		// Create entries across dimensions 0, 1, 2
 		populateMetadataHash(mr, 1, 0, "hash1", map[string]string{
 			"url": "https://example.com/a", "dimension": "",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "bypass",
@@ -233,12 +294,10 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 	t.Run("does not delete metadata for other hosts", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		// Host 1 entry
 		populateMetadataHash(mr, 1, 1, "hash1", map[string]string{
 			"url": "https://example.com/a", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
-		// Host 2 entry
 		populateMetadataHash(mr, 2, 1, "hash2", map[string]string{
 			"url": "https://nocache.com/b", "dimension": "mobile",
 			"size": "200", "created_at": "1000000", "expires_at": "9999999999", "source": "render",

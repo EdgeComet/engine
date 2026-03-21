@@ -237,20 +237,27 @@ func (env *RecacheTestEnvironment) Start() error {
     enabled: true
     render:
       timeout: 30s
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "desktop"
-        mobile:
-          id: 2
-          width: 375
-          height: 667
-          render_ua: "mobile"
       events:
         wait_for: "networkIdle"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "desktop"
+      mobile:
+        id: 2
+        width: 375
+        height: 667
+        render_ua: "mobile"
+      blocked_bots:
+        id: 3
+        action: "block"
+        width: 1920
+        height: 1080
+        render_ua: "blocked"
+        match_ua:
+          - "*BadBot*"
 `, env.TestHostID)
 
 	if err := os.WriteFile(hostsConfigPath, []byte(hostsYAML), 0644); err != nil {

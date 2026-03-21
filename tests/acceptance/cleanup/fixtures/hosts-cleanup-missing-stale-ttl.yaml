@@ -3,24 +3,31 @@ hosts:
     domain: "host777.test"
     render_key: "test-key-777"
     enabled: true
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        match_ua:
+          - "*"
     render:
       timeout: 10s
       cache:
         ttl: 5m
         expired:
           strategy: "delete"
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          match_ua:
-            - "*"
 
   - id: 999
     domain: "host999.test"
     render_key: "test-key-999"
     enabled: true
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        match_ua:
+          - "*"
     render:
       timeout: 10s
       cache:
@@ -28,10 +35,3 @@ hosts:
         expired:
           strategy: "serve_stale"
           stale_ttl: 20m
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          match_ua:
-            - "*"

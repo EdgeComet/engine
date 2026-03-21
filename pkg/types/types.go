@@ -32,19 +32,21 @@ type ClientIPConfig struct {
 
 // Host represents a domain configuration
 type Host struct {
-	ID             int                          `yaml:"id" json:"id"`
-	Domain         string                       `yaml:"-" json:"-"`
-	Domains        []string                     `yaml:"-" json:"domain"`
-	RenderKey      string                       `yaml:"render_key" json:"render_key"`
-	Enabled        bool                         `yaml:"enabled" json:"enabled"`
-	Render         RenderConfig                 `yaml:"render" json:"render"`
-	Bypass         *BypassConfig                `yaml:"bypass,omitempty" json:"bypass,omitempty"`                   // Host-level bypass override (optional, pointer for override detection)
-	TrackingParams *TrackingParamsConfig        `yaml:"tracking_params,omitempty" json:"tracking_params,omitempty"` // Host-level tracking params override
-	CacheSharding  *CacheShardingBehaviorConfig `yaml:"cache_sharding,omitempty" json:"cache_sharding,omitempty"`   // Host-level cache sharding override (behavioral settings only)
-	BothitRecache  *BothitRecacheConfig         `yaml:"bothit_recache,omitempty" json:"bothit_recache,omitempty"`   // Host-level bot hit recache override
-	Headers        *HeadersConfig               `yaml:"headers,omitempty" json:"headers,omitempty"`                 // Host-level headers override
-	ClientIP       *ClientIPConfig              `yaml:"client_ip,omitempty" json:"client_ip,omitempty"`             // Host-level client IP override
-	URLRules       []URLRule                    `yaml:"url_rules,omitempty" json:"url_rules,omitempty"`             // URL pattern rules
+	ID                 int                          `yaml:"id" json:"id"`
+	Domain             string                       `yaml:"-" json:"-"`
+	Domains            []string                     `yaml:"-" json:"domain"`
+	RenderKey          string                       `yaml:"render_key" json:"render_key"`
+	Enabled            bool                         `yaml:"enabled" json:"enabled"`
+	Dimensions         map[string]Dimension         `yaml:"dimensions" json:"dimensions"`
+	UnmatchedDimension string                       `yaml:"unmatched_dimension" json:"unmatched_dimension"`
+	Render             RenderConfig                 `yaml:"render" json:"render"`
+	Bypass             *BypassConfig                `yaml:"bypass,omitempty" json:"bypass,omitempty"`                   // Host-level bypass override (optional, pointer for override detection)
+	TrackingParams     *TrackingParamsConfig        `yaml:"tracking_params,omitempty" json:"tracking_params,omitempty"` // Host-level tracking params override
+	CacheSharding      *CacheShardingBehaviorConfig `yaml:"cache_sharding,omitempty" json:"cache_sharding,omitempty"`   // Host-level cache sharding override (behavioral settings only)
+	BothitRecache      *BothitRecacheConfig         `yaml:"bothit_recache,omitempty" json:"bothit_recache,omitempty"`   // Host-level bot hit recache override
+	Headers            *HeadersConfig               `yaml:"headers,omitempty" json:"headers,omitempty"`                 // Host-level headers override
+	ClientIP           *ClientIPConfig              `yaml:"client_ip,omitempty" json:"client_ip,omitempty"`             // Host-level client IP override
+	URLRules           []URLRule                    `yaml:"url_rules,omitempty" json:"url_rules,omitempty"`             // URL pattern rules
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for Host.
@@ -188,6 +190,12 @@ const (
 	UnmatchedDimensionBypass = "bypass" // Fetch from origin (default)
 )
 
+// Bypass dimension constants
+const (
+	BypassDimensionName = "bypass"
+	BypassDimensionID   = 0
+)
+
 // Compression algorithm constants
 const (
 	CompressionNone   = "none"   // No compression
@@ -207,26 +215,33 @@ const CompressionMinSize = 1024
 
 // RenderConfig defines rendering behavior
 type RenderConfig struct {
-	Timeout              Duration             `yaml:"timeout" json:"timeout"`
-	UnmatchedDimension   string               `yaml:"unmatched_dimension" json:"unmatched_dimension"` // UnmatchedDimensionBlock | UnmatchedDimensionBypass | dimension name (default: UnmatchedDimensionBypass)
-	Dimensions           map[string]Dimension `yaml:"dimensions" json:"dimensions"`
-	Events               RenderEvents         `yaml:"events" json:"events"`
-	Cache                *RenderCacheConfig   `yaml:"cache,omitempty" json:"cache,omitempty"`                                   // Cache configuration for render action
-	BlockedResourceTypes []string             `yaml:"blocked_resource_types,omitempty" json:"blocked_resource_types,omitempty"` // Resource types to block during rendering
-	BlockedPatterns      []string             `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // URL patterns to block (domains/paths)
-	StripScripts         *bool                `yaml:"strip_scripts,omitempty" json:"strip_scripts,omitempty"`
+	Timeout              Duration           `yaml:"timeout" json:"timeout"`
+	Events               RenderEvents       `yaml:"events" json:"events"`
+	Cache                *RenderCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty"`                                   // Cache configuration for render action
+	BlockedResourceTypes []string           `yaml:"blocked_resource_types,omitempty" json:"blocked_resource_types,omitempty"` // Resource types to block during rendering
+	BlockedPatterns      []string           `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // URL patterns to block (domains/paths)
+	StripScripts         *bool              `yaml:"strip_scripts,omitempty" json:"strip_scripts,omitempty"`
 }
 
 // Dimension defines viewport configuration
 type Dimension struct {
-	ID       int      `yaml:"id" json:"id"`
-	Width    int      `yaml:"width" json:"width"`
-	Height   int      `yaml:"height" json:"height"`
-	RenderUA string   `yaml:"render_ua" json:"render_ua"`
-	MatchUA  []string `yaml:"match_ua" json:"match_ua"`
+	ID       int           `yaml:"id" json:"id"`
+	Width    int           `yaml:"width" json:"width"`
+	Height   int           `yaml:"height" json:"height"`
+	RenderUA string        `yaml:"render_ua" json:"render_ua"`
+	MatchUA  []string      `yaml:"match_ua" json:"match_ua"`
+	Action   URLRuleAction `yaml:"action,omitempty" json:"action,omitempty"`
 
 	// CompiledPatterns stores pre-compiled user agent patterns
 	CompiledPatterns []*pattern.Pattern `yaml:"-" json:"-"`
+}
+
+// EffectiveAction returns the dimension's action, defaulting to ActionRender
+func (d Dimension) EffectiveAction() URLRuleAction {
+	if d.Action == "" {
+		return ActionRender
+	}
+	return d.Action
 }
 
 // CompileMatchUAPatterns pre-compiles patterns for user agent matching

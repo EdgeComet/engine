@@ -123,6 +123,22 @@ func (p *Pattern) Match(input string) bool {
 	}
 }
 
+// TypePriority returns a sorting priority for a PatternType.
+// Higher value = higher priority (checked first).
+// Order: Exact (3) > Wildcard (2) > Regexp (1).
+func TypePriority(pt PatternType) int {
+	switch pt {
+	case PatternTypeExact:
+		return 3
+	case PatternTypeWildcard:
+		return 2
+	case PatternTypeRegexp:
+		return 1
+	default:
+		return 0
+	}
+}
+
 // MatchWildcard performs wildcard pattern matching on raw strings (utility function)
 // This is a low-level utility for special cases where you need direct wildcard
 // matching without compiling a Pattern. For normal use, prefer Compile() + Match().

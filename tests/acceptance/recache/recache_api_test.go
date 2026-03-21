@@ -62,7 +62,7 @@ var _ = Describe("Recache API - Extended Scenarios", func() {
 			Expect(size).To(Equal(int64(4)))
 		})
 
-		It("should default to all dimensions when dimension_ids is empty", func() {
+		It("should default to all non-block dimensions when dimension_ids is empty", func() {
 			req := types.RecacheAPIRequest{
 				HostID:       testEnv.TestHostID,
 				URLs:         []string{"https://example.com/test"},
@@ -75,13 +75,14 @@ var _ = Describe("Recache API - Extended Scenarios", func() {
 			Expect(statusCode).To(Equal(200))
 			Expect(resp).NotTo(BeNil())
 			Expect(resp.URLsCount).To(Equal(1))
-			Expect(resp.DimensionIDsCount).To(Equal(2))
-			Expect(resp.EntriesEnqueued).To(Equal(2))
+			// 3 non-block dimensions: bypass(0), desktop(1), mobile(2); block(3) excluded
+			Expect(resp.DimensionIDsCount).To(Equal(3))
+			Expect(resp.EntriesEnqueued).To(Equal(3))
 
 			zsetKey := fmt.Sprintf("recache:%d:high", testEnv.TestHostID)
 			size, err := testEnv.GetZSETSize(zsetKey)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(size).To(Equal(int64(2)))
+			Expect(size).To(Equal(int64(3)))
 		})
 	})
 

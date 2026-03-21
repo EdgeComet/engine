@@ -83,14 +83,14 @@ hosts:
   - id: 1
     domain: "example.com"
     render_key: "test-key"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
 `
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
@@ -157,14 +157,14 @@ hosts:
   - id: 1
     domain: "example.com"
     render_key: "test-key"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
 `
 	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostConfigContent), 0644)
 	Expect(err).NotTo(HaveOccurred())

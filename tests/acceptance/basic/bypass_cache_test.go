@@ -102,13 +102,13 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.StatusCode).To(Equal(200))
 
-			By("Second request after 1s - still cached")
-			time.Sleep(1 * time.Second)
+			By("Second request after 2s - still cached")
+			time.Sleep(2 * time.Second)
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
 
-			By("Third request after 3s total - cache expired, new fetch")
-			time.Sleep(2 * time.Second)
+			By("Third request after 6s total - cache expired, new fetch")
+			time.Sleep(4 * time.Second)
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("bypass"))
 		})

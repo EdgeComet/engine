@@ -7,6 +7,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/pkg/pattern"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // DeviceDetector handles user agent analysis and dimension detection
@@ -27,36 +28,53 @@ func (dd *DeviceDetector) DetectDimension(renderCtx *edgectx.RenderContext) (str
 		patternStr      string
 		compiledPattern *pattern.Pattern
 		dimension       string
+		dimensionID     int
+		isBlock         bool
+		literalLen      int
 	}
 
 	var allPatterns []patternInfo
-	for dimensionName, dimension := range renderCtx.Host.Render.Dimensions {
+	for dimensionName, dimension := range renderCtx.Host.Dimensions {
+		isBlock := dimension.Action == types.ActionBlock
 		for i := range dimension.MatchUA {
 			info := patternInfo{
 				patternStr:      dimension.MatchUA[i],
 				compiledPattern: dimension.CompiledPatterns[i],
 				dimension:       dimensionName,
+				dimensionID:     dimension.ID,
+				isBlock:         isBlock,
+				literalLen:      countLiteralChars(dimension.MatchUA[i]),
 			}
 
 			allPatterns = append(allPatterns, info)
 		}
 	}
 
-	// Sort by pattern type (Regexp > Exact > Wildcard), then by pattern length (descending)
+	// Sort by specificity aligned with URL rule approach:
+	// 1. Block dimensions first
+	// 2. Pattern type: Exact > Wildcard > Regexp
+	// 3. Literal character count (more = more specific)
+	// 4. Dimension ID (deterministic tie-break)
 	sort.Slice(allPatterns, func(i, j int) bool {
+		// Block dimensions always come first
+		if allPatterns[i].isBlock != allPatterns[j].isBlock {
+			return allPatterns[i].isBlock
+		}
+
 		iType := allPatterns[i].compiledPattern.Type
 		jType := allPatterns[j].compiledPattern.Type
 
-		// Assign priority: Regexp=3, Exact=2, Wildcard=1
-		iPriority := getPatternPriority(iType)
-		jPriority := getPatternPriority(jType)
-
-		if iPriority != jPriority {
-			return iPriority > jPriority
+		if iType != jType {
+			return pattern.TypePriority(iType) > pattern.TypePriority(jType)
 		}
 
-		// Same type, sort by length (longest first)
-		return len(allPatterns[i].patternStr) > len(allPatterns[j].patternStr)
+		// More literal characters = more specific
+		if allPatterns[i].literalLen != allPatterns[j].literalLen {
+			return allPatterns[i].literalLen > allPatterns[j].literalLen
+		}
+
+		// Deterministic tie-break
+		return allPatterns[i].dimensionID < allPatterns[j].dimensionID
 	})
 
 	// Check patterns in order of specificity
@@ -79,16 +97,13 @@ func (dd *DeviceDetector) DetectDimension(renderCtx *edgectx.RenderContext) (str
 	return "", false
 }
 
-// getPatternPriority returns priority for sorting (higher = checked first)
-func getPatternPriority(pType pattern.PatternType) int {
-	switch pType {
-	case pattern.PatternTypeRegexp:
-		return 3 // Check regexp first (most specific)
-	case pattern.PatternTypeExact:
-		return 2 // Then exact matches
-	case pattern.PatternTypeWildcard:
-		return 1 // Then wildcards (least specific)
-	default:
-		return 0
+// countLiteralChars counts non-wildcard characters in a pattern string
+func countLiteralChars(s string) int {
+	count := 0
+	for _, c := range s {
+		if c != '*' {
+			count++
+		}
 	}
+	return count
 }

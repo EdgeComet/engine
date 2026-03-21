@@ -16,9 +16,6 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// bypassDimensionID is used for unmatched User-Agent bypass cache entries (dimension IDs 1+ are render dimensions)
-const bypassDimensionID = 0
-
 // ServeHTTP is the main HTTP request handler for the cache daemon API
 func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	path := string(ctx.Path())
@@ -68,20 +65,15 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	}
 }
 
-// resolveDimensionIDs builds the full list of dimension IDs for a host and validates any explicitly
-// requested IDs against it. When includeBypass is true, bypass dimension 0 is included (for invalidation).
-// When false, only render dimensions are included (for recache, since bypass entries can't be re-rendered).
-// Returns all dimensions if requestedIDs is empty.
-func resolveDimensionIDs(host *types.Host, requestedIDs []int, includeBypass bool) ([]int, error) {
-	capacity := len(host.Render.Dimensions)
-	if includeBypass {
-		capacity++
-	}
-	allDimensionIDs := make([]int, 0, capacity)
-	if includeBypass {
-		allDimensionIDs = append(allDimensionIDs, bypassDimensionID)
-	}
-	for _, dim := range host.Render.Dimensions {
+// resolveDimensionIDs builds the list of non-block dimension IDs for a host and validates any
+// explicitly requested IDs against it. Block dimensions never produce cache entries.
+// Returns all non-block dimensions if requestedIDs is empty.
+func resolveDimensionIDs(host *types.Host, requestedIDs []int) ([]int, error) {
+	allDimensionIDs := make([]int, 0, len(host.Dimensions))
+	for _, dim := range host.Dimensions {
+		if dim.EffectiveAction() == types.ActionBlock {
+			continue
+		}
 		allDimensionIDs = append(allDimensionIDs, dim.ID)
 	}
 
@@ -140,7 +132,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, false)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
@@ -225,7 +217,7 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, true)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
@@ -369,7 +361,7 @@ func (d *CacheDaemon) handleInvalidateAllAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs, true)
+	dimensionIDs, err := resolveDimensionIDs(host, req.DimensionIDs)
 	if err != nil {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 		return
@@ -564,7 +556,7 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		trimmedDims := make([]string, 0, len(dims))
 		for _, dimName := range dims {
 			dimName = strings.TrimSpace(dimName)
-			if _, exists := host.Render.Dimensions[dimName]; !exists {
+			if _, exists := host.Dimensions[dimName]; !exists {
 				httputil.JSONError(ctx, fmt.Sprintf("dimension '%s' not configured for host", dimName), fasthttp.StatusBadRequest)
 				return
 			}
@@ -752,7 +744,7 @@ func (d *CacheDaemon) handleCacheQueueAPI(ctx *fasthttp.RequestCtx) {
 		PriorityFilter: priorityFilter,
 	}
 
-	result, err := d.queueReader.ListQueueItems(params, host.Render.Dimensions)
+	result, err := d.queueReader.ListQueueItems(params, host.Dimensions)
 	if handleRedisError(ctx, err, d.logger) {
 		return
 	}

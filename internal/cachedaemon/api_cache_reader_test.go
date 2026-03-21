@@ -56,21 +56,22 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 			{
 				ID:     1,
 				Domain: "example.com",
+				Dimensions: map[string]types.Dimension{
+					"bypass":  {ID: 0, Action: types.ActionBypass},
+					"mobile":  {ID: 1},
+					"desktop": {ID: 2},
+					"blocked": {ID: 3, Action: types.ActionBlock},
+				},
 				Render: types.RenderConfig{
-					Dimensions: map[string]types.Dimension{
-						"mobile":  {ID: 1},
-						"desktop": {ID: 2},
-					},
 					Cache: &types.RenderCacheConfig{},
 				},
 			},
 			{
 				ID:     2,
 				Domain: "nocache.com",
-				Render: types.RenderConfig{
-					Dimensions: map[string]types.Dimension{
-						"mobile": {ID: 1},
-					},
+				Dimensions: map[string]types.Dimension{
+					"bypass": {ID: 0, Action: types.ActionBypass},
+					"mobile": {ID: 1},
 				},
 			},
 		},

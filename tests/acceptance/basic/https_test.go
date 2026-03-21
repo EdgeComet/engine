@@ -398,18 +398,18 @@ hosts:
     domain: ["localhost", "127.0.0.1"]
     render_key: "sk_test_render_12345"
     enabled: true
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+        match_ua:
+          - "*Googlebot*"
     render:
       timeout: 30s
       cache:
         ttl: 1h
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
-          match_ua:
-            - "*Googlebot*"
 `
 
 	hostConfigPath := filepath.Join(hostsDir, "01-localhost.yaml")
@@ -620,18 +620,18 @@ hosts:
     domain: "localhost"
     render_key: "test-key"
     enabled: true
+    dimensions:
+      default:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Test"
+        match_ua:
+          - "*"
     render:
       timeout: 30s
       cache:
         ttl: 1h
-      dimensions:
-        default:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Test"
-          match_ua:
-            - "*"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-test.yaml")
 	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0644)
@@ -684,18 +684,18 @@ hosts:
     domain: "localhost"
     render_key: "test-key"
     enabled: true
+    dimensions:
+      default:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Test"
+        match_ua:
+          - "*"
     render:
       timeout: 30s
       cache:
         ttl: 1h
-      dimensions:
-        default:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Test"
-          match_ua:
-            - "*"
 `
 	hostConfigPath := filepath.Join(hostsDir, "01-test.yaml")
 	err = os.WriteFile(hostConfigPath, []byte(hostConfig), 0644)

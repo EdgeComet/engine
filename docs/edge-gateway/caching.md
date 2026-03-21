@@ -17,7 +17,7 @@ Cache settings can be configured at global, host, and URL pattern levels.
 
 ### Redis metadata
 
-Redis stores cache metadata for quick lookups without filesystem access. Each cache entry contains the URL and its hash, creation and expiration timestamps, dimension ID, and replication status across EG instances. Edge Gateway checks Redis first on every request to determine cache hits, verify expiration, and locate replicas in sharded deployments. The key format is `cache:{host_id}:{dimension_id}:{url_hash}`.
+Redis stores cache metadata for quick lookups without filesystem access. Each cache entry contains the URL and its hash, creation and expiration timestamps, dimension ID, and replication status across EG instances. Edge Gateway checks Redis first on every request to determine cache hits, verify expiration, and locate replicas in sharded deployments. The key format is `cache:{host_id}:{dimension_id}:{url_hash}`. The built-in bypass dimension uses ID `0`, so bypass cache entries use the key `cache:{host_id}:0:{url_hash}`.
 
 ### Filesystem content
 

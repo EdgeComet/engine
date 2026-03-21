@@ -44,7 +44,6 @@ type ResolvedCacheConfig struct {
 type ResolvedRenderConfig struct {
 	Timeout              time.Duration
 	Dimension            string // empty = use detected
-	UnmatchedDimension   string // block, bypass, or dimension name fallback
 	Events               types.RenderEvents
 	BlockedPatterns      []string // Merged global → host → pattern
 	BlockedResourceTypes []string // Merged global → host → pattern
@@ -275,12 +274,6 @@ func (r *ConfigResolver) resolveRenderConfig(resolved *ResolvedConfig, matchedRu
 	resolved.Render.Events = r.host.Render.Events
 	resolved.Render.Dimension = "" // Empty means use detected dimension
 
-	// Resolve UnmatchedDimension: Global → Host (replacement semantics)
-	resolved.Render.UnmatchedDimension = r.globalRender.UnmatchedDimension
-	if r.host.Render.UnmatchedDimension != "" {
-		resolved.Render.UnmatchedDimension = r.host.Render.UnmatchedDimension
-	}
-
 	// Host render config overrides blocked fields (replaces global)
 	if len(r.host.Render.BlockedResourceTypes) > 0 {
 		resolved.Render.BlockedResourceTypes = r.host.Render.BlockedResourceTypes
@@ -296,9 +289,6 @@ func (r *ConfigResolver) resolveRenderConfig(resolved *ResolvedConfig, matchedRu
 		}
 		if matchedRule.Render.Dimension != "" {
 			resolved.Render.Dimension = matchedRule.Render.Dimension
-		}
-		if matchedRule.Render.UnmatchedDimension != "" {
-			resolved.Render.UnmatchedDimension = matchedRule.Render.UnmatchedDimension
 		}
 		if matchedRule.Render.Events != nil {
 			r.mergeRenderEvents(&resolved.Render.Events, matchedRule.Render.Events)

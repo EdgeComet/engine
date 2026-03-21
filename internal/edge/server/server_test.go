@@ -10,6 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/pkg/types"
@@ -155,6 +156,78 @@ func TestHandleRequestErrorClientIPFallback(t *testing.T) {
 
 			require.Len(t, emitter.emittedEvents, 1)
 			assert.Equal(t, tt.expectedIP, emitter.emittedEvents[0].ClientIP)
+		})
+	}
+}
+
+func TestDimensionDefaultAction(t *testing.T) {
+	tests := []struct {
+		name           string
+		dimAction      types.URLRuleAction
+		resolvedAction types.URLRuleAction
+		matchedRuleID  string
+		expectedAction types.URLRuleAction
+	}{
+		{
+			name:           "bypass dimension with no URL rule match overrides to bypass",
+			dimAction:      types.ActionBypass,
+			resolvedAction: types.ActionRender,
+			matchedRuleID:  "",
+			expectedAction: types.ActionBypass,
+		},
+		{
+			name:           "render dimension with no URL rule match stays render",
+			dimAction:      types.ActionRender,
+			resolvedAction: types.ActionRender,
+			matchedRuleID:  "",
+			expectedAction: types.ActionRender,
+		},
+		{
+			name:           "bypass dimension with URL rule action=render keeps render",
+			dimAction:      types.ActionBypass,
+			resolvedAction: types.ActionRender,
+			matchedRuleID:  "rule_0:/blog/*",
+			expectedAction: types.ActionRender,
+		},
+		{
+			name:           "render dimension with URL rule action=bypass keeps bypass",
+			dimAction:      types.ActionRender,
+			resolvedAction: types.ActionBypass,
+			matchedRuleID:  "rule_0:/api/*",
+			expectedAction: types.ActionBypass,
+		},
+		{
+			name:           "empty dimension action defaults to render with no URL rule",
+			dimAction:      "",
+			resolvedAction: types.ActionRender,
+			matchedRuleID:  "",
+			expectedAction: types.ActionRender,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dimConfig := types.Dimension{
+				ID:     1,
+				Width:  1920,
+				Height: 1080,
+				Action: tt.dimAction,
+			}
+
+			resolved := &config.ResolvedConfig{
+				Action:        tt.resolvedAction,
+				MatchedRuleID: tt.matchedRuleID,
+			}
+
+			// Apply the same logic as in processRenderRequest
+			if resolved.MatchedRuleID == "" {
+				dimAction := dimConfig.EffectiveAction()
+				if dimAction != types.ActionRender {
+					resolved.Action = dimAction
+				}
+			}
+
+			assert.Equal(t, tt.expectedAction, resolved.Action)
 		})
 	}
 }

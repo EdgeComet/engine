@@ -281,6 +281,9 @@ func (ro *RenderOrchestrator) ProcessRenderRequest(renderCtx *edgectx.RenderCont
 
 	// Handle bypass action immediately (skip rendering and caching)
 	if resolved.Action == types.ActionBypass {
+		if renderCtx.DimensionUnmatched {
+			return ro.ServeUnmatchedBypass(renderCtx)
+		}
 		renderCtx.Logger.Info("URL matched bypass rule, fetching from origin directly")
 		return ro.serveBypass(renderCtx, "url_rule")
 	}
@@ -715,7 +718,7 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 		zap.String("service_url", serviceURL))
 
 	// Get dimension config for viewport
-	dimension, exists := renderCtx.Host.Render.Dimensions[renderCtx.Dimension]
+	dimension, exists := renderCtx.Host.Dimensions[renderCtx.Dimension]
 	if !exists {
 		return nil, fmt.Errorf("dimension '%s' not found in host config", renderCtx.Dimension)
 	}

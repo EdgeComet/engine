@@ -22,9 +22,9 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 	require.NotNil(t, config, "Config should not be nil")
 
 	t.Run("global dimensions expanded", func(t *testing.T) {
-		require.NotNil(t, config.Render.Dimensions, "Global dimensions should exist")
+		require.NotNil(t, config.Dimensions, "Global dimensions should exist")
 
-		desktop, exists := config.Render.Dimensions["desktop"]
+		desktop, exists := config.Dimensions["desktop"]
 		require.True(t, exists, "Desktop dimension should exist")
 
 		assert.Greater(t, len(desktop.MatchUA), 3, "Desktop should have more than 3 patterns (2 aliases + 1 custom)")
@@ -48,9 +48,9 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 	assert.Equal(t, "test.example.com", host.Domain)
 
 	t.Run("host dimensions expanded", func(t *testing.T) {
-		require.NotNil(t, host.Render.Dimensions, "Host dimensions should exist")
+		require.NotNil(t, host.Dimensions, "Host dimensions should exist")
 
-		mobile, exists := host.Render.Dimensions["mobile"]
+		mobile, exists := host.Dimensions["mobile"]
 		require.True(t, exists, "Mobile dimension should exist")
 
 		assert.Greater(t, len(mobile.MatchUA), 3, "Mobile should have multiple expanded patterns")
@@ -65,7 +65,7 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 		assert.NotNil(t, mobile.CompiledPatterns, "Mobile patterns should be compiled")
 		assert.Greater(t, len(mobile.CompiledPatterns), 0, "Mobile compiled patterns should exist")
 
-		tablet, exists := host.Render.Dimensions["tablet"]
+		tablet, exists := host.Dimensions["tablet"]
 		require.True(t, exists, "Tablet dimension should exist")
 
 		assert.Greater(t, len(tablet.MatchUA), 1, "Tablet should have expanded patterns")
@@ -81,9 +81,9 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 	})
 
 	t.Run("pattern counts validate expansion", func(t *testing.T) {
-		desktop := config.Render.Dimensions["desktop"]
-		mobile := host.Render.Dimensions["mobile"]
-		tablet := host.Render.Dimensions["tablet"]
+		desktop := config.Dimensions["desktop"]
+		mobile := host.Dimensions["mobile"]
+		tablet := host.Dimensions["tablet"]
 
 		assert.Equal(t, 5+3+1, len(desktop.MatchUA),
 			"Desktop should have 5 Googlebot + 3 Bingbot + 1 custom = 9 patterns")
@@ -96,7 +96,7 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 	})
 
 	t.Run("order preserved during expansion", func(t *testing.T) {
-		desktop := config.Render.Dimensions["desktop"]
+		desktop := config.Dimensions["desktop"]
 
 		assert.Contains(t, desktop.MatchUA[len(desktop.MatchUA)-1], "*DesktopCustomBot*",
 			"Custom pattern should remain at the end")
@@ -131,20 +131,20 @@ func TestBotAliasIntegration_AliasExpansionVsInheritance(t *testing.T) {
 	host := hosts[0]
 
 	t.Run("host does not inherit global dimensions", func(t *testing.T) {
-		_, hasDesktop := host.Render.Dimensions["desktop"]
+		_, hasDesktop := host.Dimensions["desktop"]
 		assert.False(t, hasDesktop, "Host should not inherit desktop dimension (has own dimensions)")
 
-		_, hasMobile := host.Render.Dimensions["mobile"]
+		_, hasMobile := host.Dimensions["mobile"]
 		assert.True(t, hasMobile, "Host should have its own mobile dimension")
 
-		_, hasTablet := host.Render.Dimensions["tablet"]
+		_, hasTablet := host.Dimensions["tablet"]
 		assert.True(t, hasTablet, "Host should have its own tablet dimension")
 	})
 
 	t.Run("global dimensions only in global config", func(t *testing.T) {
 		globalConfig := cm.GetConfig()
 
-		globalDesktop, exists := globalConfig.Render.Dimensions["desktop"]
+		globalDesktop, exists := globalConfig.Dimensions["desktop"]
 		require.True(t, exists, "Global desktop dimension should exist")
 
 		assert.Contains(t, globalDesktop.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
@@ -160,7 +160,7 @@ func TestBotAliasIntegration_CompiledPatternsWork(t *testing.T) {
 	require.NoError(t, err)
 
 	config := cm.GetConfig()
-	desktop := config.Render.Dimensions["desktop"]
+	desktop := config.Dimensions["desktop"]
 
 	t.Run("all patterns are compiled", func(t *testing.T) {
 		assert.Greater(t, len(desktop.CompiledPatterns), 0, "Should have compiled patterns")
@@ -173,8 +173,8 @@ func TestBotAliasIntegration_CompiledPatternsWork(t *testing.T) {
 	})
 
 	hosts := cm.GetHosts()
-	mobile := hosts[0].Render.Dimensions["mobile"]
-	tablet := hosts[0].Render.Dimensions["tablet"]
+	mobile := hosts[0].Dimensions["mobile"]
+	tablet := hosts[0].Dimensions["tablet"]
 
 	t.Run("host dimensions are compiled", func(t *testing.T) {
 		assert.Equal(t, len(mobile.MatchUA), len(mobile.CompiledPatterns),
@@ -192,7 +192,7 @@ func TestBotAliasIntegration_MixedPatternsPreserved(t *testing.T) {
 	require.NoError(t, err)
 
 	hosts := cm.GetHosts()
-	mobile := hosts[0].Render.Dimensions["mobile"]
+	mobile := hosts[0].Dimensions["mobile"]
 
 	t.Run("aliases expand and custom patterns preserve", func(t *testing.T) {
 		aliasPatternCount := 0
@@ -379,15 +379,15 @@ storage:
 render:
   cache:
     ttl: 1h
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*Bot*"]
   events:
     wait_for: "networkIdle"
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*Bot*"]
 bothit_recache:
   enabled: true
   interval: 30m
@@ -416,13 +416,13 @@ hosts:
     render_key: "key"
     render:
       timeout: 60s
-      dimensions:
-        mobile:
-          id: 2
-          width: 375
-          height: 667
-          render_ua: "Mozilla/5.0"
-          match_ua: ["*Bot*"]`
+    dimensions:
+      mobile:
+        id: 2
+        width: 375
+        height: 667
+        render_ua: "Mozilla/5.0"
+        match_ua: ["*Bot*"]`
 	require.NoError(t, os.WriteFile(filepath.Join(hostsDir, "test.yaml"), []byte(hostsYAML), 0644))
 
 	logger := zaptest.NewLogger(t)

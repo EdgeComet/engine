@@ -27,74 +27,73 @@ render:
     expired:
       strategy: "serve_stale"
       stale_ttl: 1h
-
-  unmatched_dimension: "bypass"
-
-  dimensions:
-    googlebot_desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $GooglebotSearchDesktop
-
-    googlebot_mobile:
-      id: 2
-      width: 375
-      height: 812
-      render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-      match_ua:
-        - $GooglebotSearchMobile
-
-    bing_desktop:
-      id: 3
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $BingbotDesktop
-
-    bing_mobile:
-      id: 4
-      width: 375
-      height: 812
-      render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-      match_ua:
-        - $BingbotMobile
-
-    ai_bots:
-      id: 5
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $ChatGPTUserBot
-        - $PerplexityBot
-        - $AnthropicBot
-
-    google_ads:
-      id: 6
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $GoogleBotAds
-        - $GoogleBotAdsMobileWeb
-
-    mixed_patterns:
-      id: 7
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      match_ua:
-        - $OpenAISearchBot
-        - "*CustomBot*"
-        - "~^SpecialBot/.*"
-
   events:
     wait_for: "networkIdle"
     additional_wait: 1s
+
+unmatched_dimension: "bypass"
+
+dimensions:
+  googlebot_desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $GooglebotSearchDesktop
+
+  googlebot_mobile:
+    id: 2
+    width: 375
+    height: 812
+    render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    match_ua:
+      - $GooglebotSearchMobile
+
+  bing_desktop:
+    id: 3
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $BingbotDesktop
+
+  bing_mobile:
+    id: 4
+    width: 375
+    height: 812
+    render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+    match_ua:
+      - $BingbotMobile
+
+  ai_bots:
+    id: 5
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $ChatGPTUserBot
+      - $PerplexityBot
+      - $AnthropicBot
+
+  google_ads:
+    id: 6
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $GoogleBotAds
+      - $GoogleBotAdsMobileWeb
+
+  mixed_patterns:
+    id: 7
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    match_ua:
+      - $OpenAISearchBot
+      - "*CustomBot*"
+      - "~^SpecialBot/.*"
 
 bypass:
   timeout: 20s

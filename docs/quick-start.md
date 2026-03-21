@@ -101,19 +101,20 @@ hosts:
     render_key: "test-key-123"
     enabled: true
 
+    unmatched_dimension: "desktop"
+
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua: ["Googlebot", "bingbot", "Slurp"]
+
     render:
       timeout: 30s
-      unmatched_dimension: "desktop"
       cache:
         ttl: 1h
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          match_ua: ["Googlebot", "bingbot", "Slurp"]
 
       events:
         wait_for: "networkIdle"

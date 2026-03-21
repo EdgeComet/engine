@@ -9,8 +9,9 @@ When a request arrives at Edge Gateway, it first extracts or generates a unique 
 The target URL is extracted from the query parameter and validated for proper format and scheme. 
 Authentication follows by checking the `X-Render-Key` header against configured hosts.
 
-EG then analyzes the `User-Agent` header to detect device dimension (desktop, mobile, or custom patterns) 
-and resolves the final configuration by matching the URL path against patterns and merging settings from global, host, and pattern levels. 
+EG then analyzes the `User-Agent` header to detect the device dimension (desktop, mobile, or custom patterns).
+If the matched dimension has `action: "block"`, EG returns 403 Forbidden immediately before any further processing.
+Otherwise, EG resolves the final configuration by matching the URL path against patterns and merging settings from global, host, and pattern levels.
 The action determines the next step: status codes return immediately, bypass fetches from origin directly, and render continues to cache logic.
 
 For render actions, EG checks Redis for fresh cache. On cache hit, it serves the content immediately. 
@@ -28,6 +29,7 @@ or bypassing directly to the origin.
 
 | Trigger | Fallback Path |
 |---------|---------------|
+| **Block dimension matched** | 403 Forbidden (absolute, before config resolution) |
 | **No render services available** | Stale cache → Bypass |
 | **Render timeout** | Stale cache → Bypass |
 | **Render 5xx error** | Stale cache → Serve 5xx |

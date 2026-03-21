@@ -91,12 +91,12 @@ func TestValidateConfiguration_WithInvalidYAML(t *testing.T) {
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -181,12 +181,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 	require.NoError(t, err)
 
 	result, err := ValidateConfiguration(configPath)
@@ -280,12 +280,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -403,23 +403,23 @@ hosts:
     render_key: "key-1"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
   - id: 2
     domain: "example2.com"
     render_key: "key-2"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `,
 			wantErr: false,
 		},
@@ -432,12 +432,12 @@ hosts:
     render_key: "key-1"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `,
 			wantErr:       true,
 			expectedError: "id must be positive (got 0)",
@@ -451,12 +451,12 @@ hosts:
     render_key: "key-1"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `,
 			wantErr:       true,
 			expectedError: "id must be positive (got -1)",
@@ -470,23 +470,23 @@ hosts:
     render_key: "key-1"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
   - id: 1
     domain: "example2.com"
     render_key: "key-2"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `,
 			wantErr:       true,
 			expectedError: "duplicate host id 1",
@@ -499,12 +499,12 @@ hosts:
     render_key: "key-1"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `,
 			wantErr:       true,
 			expectedError: "id must be positive (got 0)",
@@ -699,12 +699,12 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     url_rules:
       - match: "~/api/v[unclosed"
         action: "render"
@@ -803,14 +803,14 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s
-      dimensions:
-        mobile:
-          id: 1
-          width: 375
-          height: 812
-          render_ua: "Mozilla/5.0"
-          match_ua:
-            - "~(Mobile"
+    dimensions:
+      mobile:
+        id: 1
+        width: 375
+        height: 812
+        render_ua: "Mozilla/5.0"
+        match_ua:
+          - "~(Mobile"
     url_rules:
       - match: "/api/*"
         action: "render"
@@ -902,12 +902,12 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     bothit_recache:
       enabled: true
       interval: 1h
@@ -1006,12 +1006,12 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     url_rules:
       - match:
           - "~/api/v[0-9]+"
@@ -1152,20 +1152,20 @@ hosts:
   - id: 1
     domain: "example.com"
     render_key: "test-key-123"
+    %s
     render:
       timeout: 30s
-      %s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
-        mobile:
-          id: 2
-          width: 375
-          height: 667
-          render_ua: "Mobile/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      mobile:
+        id: 2
+        width: 375
+        height: 667
+        render_ua: "Mobile/5.0"
 `, tt.unmatchedDimValue)
 
 			err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -1289,8 +1289,8 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s
-      %s
-      %s
+    %s
+    %s
 `, tt.unmatchedDimValue, tt.dimensionsConfig)
 
 			err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -1507,12 +1507,12 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s%s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `, tt.eventsConfig)
 
 			err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -1641,12 +1641,12 @@ hosts:
       timeout: 30s
       events:
         wait_for: "networkIdle"
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
     url_rules:
       - match: "/special/*"
         action: "render"
@@ -1868,12 +1868,12 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 30s%s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `, tt.cacheConfig)
 
 			err := os.WriteFile(configPath, []byte(configContent), 0644)
@@ -2014,12 +2014,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2180,12 +2180,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: %s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`, tt.hostRenderTimeout)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`, tt.hostRenderTimeout)
 
 			// Create hosts.d directory
 			err = os.MkdirAll(hostsDir, 0755)
@@ -2342,12 +2342,12 @@ hosts:
         expired:
           strategy: "serve_stale"
           stale_ttl: %s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`, tt.staleTTL)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`, tt.staleTTL)
 
 			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
 			require.NoError(t, err)
@@ -2487,12 +2487,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2693,12 +2693,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -2975,12 +2975,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -3171,12 +3171,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: %s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`, tt.renderTimeout)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`, tt.renderTimeout)
 
 			err = os.MkdirAll(hostsDir, 0755)
 			require.NoError(t, err)
@@ -3337,12 +3337,12 @@ hosts:
     enabled: true
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `, tt.domains)
 
 			err = os.MkdirAll(hostsDir, 0755)
@@ -3422,12 +3422,12 @@ hosts:
     enabled: true
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `
 	// Write second host with same domain
 	host2Content := `hosts:
@@ -3437,12 +3437,12 @@ hosts:
     enabled: true
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `
 
 	err = os.MkdirAll(hostsDir, 0755)
@@ -3518,12 +3518,12 @@ hosts:
     enabled: true
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `
 	// Second host with one domain that overlaps
 	host2Content := `hosts:
@@ -3533,12 +3533,12 @@ hosts:
     enabled: true
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
 `
 
 	err = os.MkdirAll(hostsDir, 0755)
@@ -3722,12 +3722,12 @@ hosts:
     render_key: "test-key"
     render:
       timeout: 30s
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0"`), 0644)
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`), 0644)
 			require.NoError(t, err)
 
 			result, err := ValidateConfiguration(configPath)
@@ -3791,6 +3791,446 @@ func TestValidateClientIPConfig(t *testing.T) {
 				assert.Contains(t, err.Error(), tt.errContains)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func writeValidationTestConfig(t *testing.T, dimensionsYAML string, urlRulesYAML string) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
+	hostsDir := filepath.Join(tmpDir, "hosts.d")
+
+	configContent := `
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":8080"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+
+storage:
+  base_path: "cache/"
+
+render:
+  cache: {}
+
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: false
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"
+`
+	if urlRulesYAML == "" {
+		urlRulesYAML = `    url_rules:
+      - match: "/*"
+        action: "render"`
+	}
+
+	hostsContent := fmt.Sprintf(`
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-key-123"
+    render:
+      timeout: 30s
+    dimensions:
+%s
+%s
+`, dimensionsYAML, urlRulesYAML)
+
+	err := os.WriteFile(configPath, []byte(configContent), 0644)
+	require.NoError(t, err)
+	err = os.MkdirAll(hostsDir, 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+	require.NoError(t, err)
+
+	return configPath
+}
+
+func TestValidateConfiguration_DimensionAction(t *testing.T) {
+	tests := []struct {
+		name          string
+		dimensions    string
+		urlRules      string
+		wantErr       bool
+		expectedError string
+	}{
+		{
+			name: "valid action render",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        action: "render"
+        match_ua:
+          - "*Desktop*"`,
+			wantErr: false,
+		},
+		{
+			name: "valid action empty defaults to render",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua:
+          - "*Desktop*"`,
+			wantErr: false,
+		},
+		{
+			name: "valid action block with match_ua",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        match_ua:
+          - "*Desktop*"
+      blocker:
+        id: 2
+        width: 1920
+        height: 1080
+        action: "block"
+        match_ua:
+          - "*BadBot*"`,
+			wantErr: false,
+		},
+		{
+			name: "invalid action unknown",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        action: "unknown"`,
+			wantErr:       true,
+			expectedError: "has invalid action 'unknown'",
+		},
+		{
+			name: "bypass dimension with wrong id",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      bypass:
+        id: 5
+        width: 1920
+        height: 1080
+        action: "bypass"`,
+			wantErr:       true,
+			expectedError: "dimension 'bypass' must use reserved ID 0",
+		},
+		{
+			name: "bypass dimension with action render",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      bypass:
+        id: 0
+        width: 1920
+        height: 1080
+        action: "render"`,
+			wantErr:       true,
+			expectedError: "dimension 'bypass' must have action 'bypass'",
+		},
+		{
+			name: "bypass dimension with action bypass and id 0 passes",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      bypass:
+        id: 0
+        width: 1920
+        height: 1080
+        action: "bypass"`,
+			wantErr: false,
+		},
+		{
+			name: "non-bypass dimension with id 0",
+			dimensions: `      desktop:
+        id: 0
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`,
+			wantErr:       true,
+			expectedError: "ID 0 is reserved for the built-in bypass dimension",
+		},
+		{
+			name: "non-bypass dimension with action bypass",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+        action: "bypass"`,
+			wantErr:       true,
+			expectedError: "only the built-in bypass dimension can have action 'bypass'",
+		},
+		{
+			name: "block dimension without match_ua",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      blocker:
+        id: 2
+        width: 1920
+        height: 1080
+        action: "block"`,
+			wantErr:       true,
+			expectedError: "block dimensions must have at least one match_ua pattern",
+		},
+		{
+			name: "block dimension with match_ua passes",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      blocker:
+        id: 2
+        width: 1920
+        height: 1080
+        action: "block"
+        match_ua:
+          - "*BadBot*"`,
+			wantErr: false,
+		},
+		{
+			name: "block dimension without width/height passes",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      blocker:
+        id: 2
+        action: "block"
+        match_ua:
+          - "*BadBot*"`,
+			wantErr: false,
+		},
+		{
+			name: "render.dimension referencing block dimension",
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+      blocker:
+        id: 2
+        width: 1920
+        height: 1080
+        action: "block"
+        match_ua:
+          - "*BadBot*"`,
+			urlRules: `    url_rules:
+      - match: "/api/*"
+        action: "render"
+        render:
+          dimension: "blocker"`,
+			wantErr:       true,
+			expectedError: "render.dimension cannot reference a block dimension",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := writeValidationTestConfig(t, tt.dimensions, tt.urlRules)
+			result, err := ValidateConfiguration(configPath)
+			require.NoError(t, err)
+
+			if tt.wantErr {
+				assert.False(t, result.Valid, "Expected configuration to be invalid")
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e.Message, tt.expectedError) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected error containing '%s', got errors: %v", tt.expectedError, result.Errors)
+			} else {
+				assert.True(t, result.Valid, "Expected configuration to be valid, got errors: %v", result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateConfiguration_UnmatchedDimensionWithNewActions(t *testing.T) {
+	tests := []struct {
+		name              string
+		unmatchedDimValue string
+		dimensions        string
+		wantErr           bool
+		expectedError     string
+	}{
+		{
+			name:              "unmatched_dimension block passes",
+			unmatchedDimValue: `    unmatched_dimension: "block"`,
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`,
+			wantErr: false,
+		},
+		{
+			name:              "unmatched_dimension bypass passes",
+			unmatchedDimValue: `    unmatched_dimension: "bypass"`,
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`,
+			wantErr: false,
+		},
+		{
+			name:              "unmatched_dimension existing dimension name passes",
+			unmatchedDimValue: `    unmatched_dimension: "desktop"`,
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`,
+			wantErr: false,
+		},
+		{
+			name:              "unmatched_dimension nonexistent dimension rejected",
+			unmatchedDimValue: `    unmatched_dimension: "nonexistent"`,
+			dimensions: `      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"`,
+			wantErr:       true,
+			expectedError: "unmatched_dimension 'nonexistent' is invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
+			hostsDir := filepath.Join(tmpDir, "hosts.d")
+
+			configContent := `
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":8080"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+
+storage:
+  base_path: "cache/"
+
+render:
+  cache: {}
+
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: false
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"
+`
+			hostsContent := fmt.Sprintf(`
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-key-123"
+%s
+    render:
+      timeout: 30s
+    dimensions:
+%s
+    url_rules:
+      - match: "/*"
+        action: "render"
+`, tt.unmatchedDimValue, tt.dimensions)
+
+			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			require.NoError(t, err)
+			err = os.MkdirAll(hostsDir, 0755)
+			require.NoError(t, err)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			require.NoError(t, err)
+
+			result, err := ValidateConfiguration(configPath)
+			require.NoError(t, err)
+
+			if tt.wantErr {
+				assert.False(t, result.Valid, "Expected configuration to be invalid")
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e.Message, tt.expectedError) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected error containing '%s', got errors: %v", tt.expectedError, result.Errors)
+			} else {
+				assert.True(t, result.Valid, "Expected configuration to be valid, got errors: %v", result.Errors)
 			}
 		})
 	}

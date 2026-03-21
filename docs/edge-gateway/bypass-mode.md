@@ -28,8 +28,7 @@ problems. Bypass mode triggers when no render services are registered, all servi
 render service failures, or Chrome process errors.
 
 Bypass mode also serves as a fallback for cache-related issues in distributed environments, including lock acquisition errors, concurrent render timeouts, and cache pull
-failures across sharded instances. When you configure `unmatched_dimension_action: bypass`, requests with User-Agents that don't match any configured dimension automatically
-use bypass mode. These responses include the `X-Unmatched-Dimension: true` header to indicate the fallback behavior occurred.
+failures across sharded instances. When `unmatched_dimension` is set to `"bypass"` (the default), requests with User-Agents that don't match any configured dimension are routed through the built-in bypass dimension (ID 0) and fetched directly from origin. These responses include the `X-Unmatched-Dimension: true` header to indicate the fallback behavior occurred.
 
 
 ### Explicit configuration

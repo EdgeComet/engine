@@ -88,37 +88,31 @@ func createTestConfigManager() *mockConfigManager {
 	return &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-						"mobile":  {ID: 2, Width: 375, Height: 667},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
+					"mobile":  {ID: 2, Width: 375, Height: 667},
 				},
 			},
 			{
-				ID:      2,
-				Domain:  "other.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 2,
+				Domain:             "other.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 			},
 			{
-				ID:      3,
-				Domain:  "disabled.com",
-				Enabled: false,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 3,
+				Domain:             "disabled.com",
+				Enabled:            false,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 			},
 		},
@@ -325,14 +319,12 @@ func TestHandleHARRender_MixedCaseDomainInConfig(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "MixedCase.COM",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "MixedCase.COM",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 			},
 		},
@@ -396,14 +388,12 @@ func TestHandleHARRender_InvalidDefaultDimension(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "baddefault.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "nonexistent", // Invalid default
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "baddefault.com",
+				Enabled:            true,
+				UnmatchedDimension: "nonexistent", // Invalid default
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 			},
 		},
@@ -436,14 +426,12 @@ func TestHandleHARRender_URLMatchesRenderRule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/render/*", Action: types.ActionRender},
@@ -467,14 +455,12 @@ func TestHandleHARRender_URLMatchesBlockRule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/admin/*", Action: types.ActionBlock},
@@ -498,14 +484,12 @@ func TestHandleHARRender_URLMatchesBypassRule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/static/*", Action: types.ActionBypass},
@@ -530,14 +514,12 @@ func TestHandleHARRender_URLMatchesStatus404Rule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/deleted/*", Action: types.ActionStatus404},
@@ -562,14 +544,12 @@ func TestHandleHARRender_URLMatchesStatus410Rule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/gone/*", Action: types.ActionStatus410},
@@ -594,14 +574,12 @@ func TestHandleHARRender_URLMatchesCustomStatusRule(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: []types.URLRule{
 					{Match: "/redirect/*", Action: types.ActionStatus, Status: &types.StatusRuleConfig{Code: intPtr(301)}},
@@ -627,14 +605,12 @@ func TestHandleHARRender_NoURLRules(t *testing.T) {
 	cm := &mockConfigManager{
 		hosts: []types.Host{
 			{
-				ID:      1,
-				Domain:  "example.com",
-				Enabled: true,
-				Render: types.RenderConfig{
-					UnmatchedDimension: "desktop",
-					Dimensions: map[string]types.Dimension{
-						"desktop": {ID: 1, Width: 1920, Height: 1080},
-					},
+				ID:                 1,
+				Domain:             "example.com",
+				Enabled:            true,
+				UnmatchedDimension: "desktop",
+				Dimensions: map[string]types.Dimension{
+					"desktop": {ID: 1, Width: 1920, Height: 1080},
 				},
 				URLRules: nil, // No rules
 			},

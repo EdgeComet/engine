@@ -4,14 +4,14 @@ hosts:
     render_key: "test-key-123"
     render:
       timeout: 60s
-      dimensions:
-        mobile:
-          id: 2
-          width: 375
-          height: 667
-          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"
-          match_ua:
-            - "*iPhone*"
+    dimensions:
+      mobile:
+        id: 2
+        width: 375
+        height: 667
+        render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"
+        match_ua:
+          - "*iPhone*"
     url_rules:
       - match: "/api/*"
         action: "bypass"

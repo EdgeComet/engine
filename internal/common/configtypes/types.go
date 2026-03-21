@@ -24,23 +24,25 @@ const (
 
 // EgConfig represents Edge Gateway main application configuration
 type EgConfig struct {
-	Server         ServerConfig                `yaml:"server"`
-	Redis          RedisConfig                 `yaml:"redis"`
-	Storage        GlobalStorageConfig         `yaml:"storage"`
-	Render         GlobalRenderConfig          `yaml:"render"`
-	Bypass         GlobalBypassConfig          `yaml:"bypass"`
-	Registry       EdgeRegistryConfig          `yaml:"registry"`
-	Log            LogConfig                   `yaml:"log"`
-	Metrics        MetricsConfig               `yaml:"metrics"`
-	TrackingParams *types.TrackingParamsConfig `yaml:"tracking_params,omitempty"`
-	BothitRecache  *types.BothitRecacheConfig  `yaml:"bothit_recache,omitempty"`
-	Hosts          HostsIncludeConfig          `yaml:"hosts"`
-	CacheSharding  *CacheShardingConfig        `yaml:"cache_sharding,omitempty"`
-	Headers        *types.HeadersConfig        `yaml:"headers,omitempty"`
-	ClientIP       *types.ClientIPConfig       `yaml:"client_ip,omitempty"`
-	EventLogging   *EventLoggingConfig         `yaml:"event_logging,omitempty"`
-	EgID           string                      `yaml:"eg_id,omitempty"`
-	Internal       InternalConfig              `yaml:"internal"`
+	Server             ServerConfig                `yaml:"server"`
+	Redis              RedisConfig                 `yaml:"redis"`
+	Storage            GlobalStorageConfig         `yaml:"storage"`
+	Render             GlobalRenderConfig          `yaml:"render"`
+	Bypass             GlobalBypassConfig          `yaml:"bypass"`
+	Registry           EdgeRegistryConfig          `yaml:"registry"`
+	Log                LogConfig                   `yaml:"log"`
+	Metrics            MetricsConfig               `yaml:"metrics"`
+	Dimensions         map[string]types.Dimension  `yaml:"dimensions,omitempty"`
+	UnmatchedDimension string                      `yaml:"unmatched_dimension,omitempty"`
+	TrackingParams     *types.TrackingParamsConfig `yaml:"tracking_params,omitempty"`
+	BothitRecache      *types.BothitRecacheConfig  `yaml:"bothit_recache,omitempty"`
+	Hosts              HostsIncludeConfig          `yaml:"hosts"`
+	CacheSharding      *CacheShardingConfig        `yaml:"cache_sharding,omitempty"`
+	Headers            *types.HeadersConfig        `yaml:"headers,omitempty"`
+	ClientIP           *types.ClientIPConfig       `yaml:"client_ip,omitempty"`
+	EventLogging       *EventLoggingConfig         `yaml:"event_logging,omitempty"`
+	EgID               string                      `yaml:"eg_id,omitempty"`
+	Internal           InternalConfig              `yaml:"internal"`
 }
 
 // InternalConfig configures internal server for inter-EG and daemon communication
@@ -82,13 +84,11 @@ type CleanupConfig struct {
 }
 
 type GlobalRenderConfig struct {
-	Cache                types.RenderCacheConfig    `yaml:"cache"`
-	Events               types.RenderEvents         `yaml:"events,omitempty"`
-	UnmatchedDimension   string                     `yaml:"unmatched_dimension,omitempty"`
-	Dimensions           map[string]types.Dimension `yaml:"dimensions,omitempty"`
-	BlockedResourceTypes []string                   `yaml:"blocked_resource_types,omitempty"`
-	BlockedPatterns      []string                   `yaml:"blocked_patterns,omitempty"`
-	StripScripts         *bool                      `yaml:"strip_scripts,omitempty"`
+	Cache                types.RenderCacheConfig `yaml:"cache"`
+	Events               types.RenderEvents      `yaml:"events,omitempty"`
+	BlockedResourceTypes []string                `yaml:"blocked_resource_types,omitempty"`
+	BlockedPatterns      []string                `yaml:"blocked_patterns,omitempty"`
+	StripScripts         *bool                   `yaml:"strip_scripts,omitempty"`
 }
 
 type GlobalBypassConfig struct {

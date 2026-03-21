@@ -4,14 +4,14 @@ hosts:
     render_key: "key-123"
     render:
       timeout: 60s
-      dimensions:
-        mobile:
-          id: 2
-          width: 375
-          height: 667
-          render_ua: "Mozilla/5.0"
-          match_ua:
-            - "*iPhone*"
+    dimensions:
+      mobile:
+        id: 2
+        width: 375
+        height: 667
+        render_ua: "Mozilla/5.0"
+        match_ua:
+          - "*iPhone*"
     bothit_recache:
       enabled: true
       interval: 30m

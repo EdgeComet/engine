@@ -13,6 +13,27 @@ hosts:
         - "custom_ref"
         - "custom_source"
 
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua:
+          - "*Googlebot*"
+          - "*Chrome*"
+          - "*Safari*"
+          - "*Mozilla*"
+      mobile:
+        id: 2
+        width: 375
+        height: 812
+        render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        match_ua:
+          - "*iPhone*"
+          - "*Android*"
+          - "*Mobile*"
+
     render:
       timeout: 15s       # 15 seconds for testing (faster than production)
 
@@ -24,27 +45,6 @@ hosts:
 
       cache:
         ttl: 5m    # 5 minutes for faster testing
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          match_ua:
-            - "*Googlebot*"
-            - "*Chrome*"
-            - "*Safari*"
-            - "*Mozilla*"
-        mobile:
-          id: 2
-          width: 375
-          height: 812
-          render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-          match_ua:
-            - "*iPhone*"
-            - "*Android*"
-            - "*Mobile*"
 
       events:
         wait_for: "networkIdle"  # Wait for network to be idle
@@ -467,7 +467,7 @@ hosts:
         bypass:
           cache:
             enabled: true
-            ttl: 2s
+            ttl: 5s
             status_codes: [200]
 
       - match: "/bypass-test/disabled*"
@@ -530,18 +530,18 @@ hosts:
     render_key: "slow-test-key-67890"
     enabled: true
 
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
     render:
       timeout: 5s         # Very short timeout for testing failures
 
       cache:
         ttl: 1m     # Very short cache for timeout testing
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
       events:
         wait_for: "networkIdle"
@@ -552,18 +552,18 @@ hosts:
     render_key: "disabled-test-key-11111"
     enabled: false          # Disabled host for testing
 
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
     render:
       timeout: 10s
 
       cache:
         ttl: 5m
-
-      dimensions:
-        desktop:
-          id: 1
-          width: 1920
-          height: 1080
-          render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
       events:
         wait_for: "DOMContentLoaded"

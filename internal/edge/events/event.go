@@ -16,11 +16,12 @@ type RequestEvent struct {
 	URLHash   string `json:"url_hash"`
 
 	// Request metadata
-	EventType   string `json:"event_type"` // cache_hit, render, bypass, bypass_cache, precache, error
-	Dimension   string `json:"dimension"`
-	UserAgent   string `json:"user_agent"`
-	ClientIP    string `json:"client_ip"`
-	MatchedRule string `json:"matched_rule"`
+	EventType       string `json:"event_type"` // cache_hit, render, bypass, bypass_cache, precache, error
+	Dimension       string `json:"dimension"`
+	DimensionAction string `json:"dimension_action,omitempty"`
+	UserAgent       string `json:"user_agent"`
+	ClientIP        string `json:"client_ip"`
+	MatchedRule     string `json:"matched_rule"`
 
 	// Response
 	StatusCode int     `json:"status_code"`

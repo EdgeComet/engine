@@ -656,6 +656,66 @@ func TestBuildRequestEvent_RedirectTo(t *testing.T) {
 	})
 }
 
+func TestBuildRequestEvent_DimensionActionRender(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.DimensionAction = string(types.ActionRender)
+
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	assert.Equal(t, "render", event.DimensionAction)
+}
+
+func TestBuildRequestEvent_DimensionActionBypass(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.DimensionAction = string(types.ActionBypass)
+
+	result := &orchestrator.RenderResult{
+		Source:      orchestrator.ServedFromBypass,
+		StatusCode:  200,
+		BytesServed: 3000,
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 50*time.Millisecond, "eg-1")
+
+	assert.Equal(t, "bypass", event.DimensionAction)
+	assert.Equal(t, EventTypeBypass, event.EventType)
+}
+
+func TestBuildRequestEvent_DimensionActionReflectsConfiguredAction(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.DimensionAction = string(types.ActionBypass)
+
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	// DimensionAction reflects the dimension's configured action, not the final resolved action
+	assert.Equal(t, "bypass", event.DimensionAction)
+	assert.Equal(t, EventTypeRender, event.EventType)
+}
+
+func TestBuildRequestEvent_DimensionActionEmpty(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	// DimensionAction not set
+
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromCache,
+		StatusCode: 200,
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 50*time.Millisecond, "eg-1")
+
+	assert.Empty(t, event.DimensionAction)
+}
+
 // createTestRenderContext creates a minimal RenderContext for testing
 func createTestRenderContext() *edgectx.RenderContext {
 	// Create a mock fasthttp context

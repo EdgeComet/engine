@@ -30,13 +30,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 bothit_recache:
   enabled: true
   interval: 30m
@@ -92,13 +92,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
 		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
@@ -153,13 +153,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
 		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
@@ -219,13 +219,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 bothit_recache:
   enabled: true
   interval: 30m
@@ -279,13 +279,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
 		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
@@ -339,13 +339,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 `
 		globalConfigPath := filepath.Join(tmpDir, "edge-gateway.yaml")
 		err := os.WriteFile(globalConfigPath, []byte(globalYAML), 0644)
@@ -403,13 +403,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 bothit_recache:
   enabled: true
   interval: 30m
@@ -477,13 +477,13 @@ redis:
 storage:
   base_path: "cache/"
 render:
-  dimensions:
-    desktop:
-      id: 1
-      width: 1920
-      height: 1080
-      render_ua: "Mozilla/5.0"
-      match_ua: ["*"]
+dimensions:
+  desktop:
+    id: 1
+    width: 1920
+    height: 1080
+    render_ua: "Mozilla/5.0"
+    match_ua: ["*"]
 bothit_recache:
   enabled: true
   interval: 30m
