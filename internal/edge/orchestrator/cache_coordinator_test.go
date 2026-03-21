@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -376,6 +377,100 @@ func TestFilterSafeHeaders_RealWorldScenarios(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func Test_isCacheStaleServable(t *testing.T) {
+	ptrDuration := func(d time.Duration) *types.Duration {
+		td := types.Duration(d)
+		return &td
+	}
+
+	defaultStatusCodes := []int{200}
+	staleTTL := 2 * time.Hour
+
+	t.Run("fresh cache returns false", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(1 * time.Hour),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.False(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("delete strategy returns false", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(-10 * time.Minute),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyDelete,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.False(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("serve_stale with nil stale_ttl returns false", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(-10 * time.Minute),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: nil,
+		}
+		assert.False(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("expired within stale window returns true", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(-10 * time.Minute),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.True(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("expired beyond stale window returns false", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(-3 * time.Hour),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.False(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("status code not in cacheable list returns false", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 404,
+			ExpiresAt:  time.Now().UTC().Add(-10 * time.Minute),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.False(t, isCacheStaleServable(cached, expired, defaultStatusCodes))
+	})
+
+	t.Run("status code in cacheable list within stale window returns true", func(t *testing.T) {
+		cached := &cache.CacheMetadata{
+			StatusCode: 404,
+			ExpiresAt:  time.Now().UTC().Add(-10 * time.Minute),
+		}
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(staleTTL),
+		}
+		assert.True(t, isCacheStaleServable(cached, expired, []int{200, 404}))
+	})
 }
 
 func Test_getStaleTTL(t *testing.T) {

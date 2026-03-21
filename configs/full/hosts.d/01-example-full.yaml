@@ -132,6 +132,9 @@ hosts:
         enabled: true
         ttl: 1h
         status_codes: [200, 301]
+        expired:
+          strategy: "serve_stale"
+          stale_ttl: 2h
 
     # -------------------------------------------------------------------------
     # HOST-LEVEL TRACKING PARAMS
@@ -318,6 +321,9 @@ hosts:
             enabled: true
             ttl: 5m
             status_codes: [200]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 30m
 
       # Bypass for static assets
       - match:

@@ -1117,6 +1117,8 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	// Record bypass metrics
 	ro.metricsCollector.RecordBypass(renderCtx.Host.Domain, reason)
 
+	var staleBypassCache *cache.CacheMetadata
+
 	// Check if bypass caching is enabled
 	if renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
 		// 1. CHECK LOCAL CACHE FIRST for bypass entries
@@ -1147,6 +1149,10 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 							return result, nil
 						}
 					}
+				} else if ro.isBypassStaleServable(renderCtx, cached) {
+					staleBypassCache = cached
+					renderCtx.Logger.Debug("Stale bypass cache detected, will use as fallback if origin fails",
+						zap.Duration("stale_age", cached.StaleAge()))
 				}
 				// If expired, fall through to fetch from origin
 			}
@@ -1156,6 +1162,11 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	// 2. FETCH FROM ORIGIN (cache miss or caching disabled)
 	bypassResp, err := ro.bypassSvc.FetchContent(renderCtx.TargetURL, renderCtx.ClientHeaders, renderCtx.Logger)
 	if err != nil {
+		if staleBypassCache != nil {
+			if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_error"); staleErr == nil {
+				return result, nil
+			}
+		}
 		renderCtx.Logger.Error("Bypass request failed",
 			zap.String("target_url", renderCtx.TargetURL),
 			zap.Error(err))
@@ -1164,6 +1175,13 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 
 	// 2.5. EXTRACT SEO METADATA from HTML responses
 	pageSEO := ExtractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, renderCtx.TargetURL, renderCtx.Logger)
+
+	// 2.7. CHECK FOR 5xx - serve stale bypass if available
+	if bypassResp.StatusCode >= 500 && staleBypassCache != nil {
+		if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_5xx"); staleErr == nil {
+			return result, nil
+		}
+	}
 
 	// 3. SAVE TO CACHE if all preconditions are met
 	if canSave, reason := ro.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); canSave {
@@ -1242,78 +1260,102 @@ func (ro *RenderOrchestrator) ServeUnmatchedBypass(renderCtx *edgectx.RenderCont
 	return result, nil
 }
 
-// isStaleServable checks if stale cache can be served
-func (ro *RenderOrchestrator) isStaleServable(
-	renderCtx *edgectx.RenderContext,
-	cached *cache.CacheMetadata,
-) bool {
-	// Must have stale strategy configured
-	if renderCtx.ResolvedConfig.Cache.Expired.Strategy != types.ExpirationStrategyServeStale {
+func isCacheStaleServable(cached *cache.CacheMetadata, expired types.CacheExpiredConfig, statusCodes []int) bool {
+	if expired.Strategy != types.ExpirationStrategyServeStale {
 		return false
 	}
 
-	// Must have stale TTL configured
-	if renderCtx.ResolvedConfig.Cache.Expired.StaleTTL == nil {
+	if expired.StaleTTL == nil {
 		return false
 	}
 
-	// Must be in stale period (not fully expired)
-	staleTTL := time.Duration(*renderCtx.ResolvedConfig.Cache.Expired.StaleTTL)
+	staleTTL := time.Duration(*expired.StaleTTL)
 	if !cached.IsStale(staleTTL) {
 		return false
 	}
 
-	// Status code must be in current cacheable list
-	if !isStatusCodeCacheable(cached.StatusCode, renderCtx.ResolvedConfig.Cache.StatusCodes) {
+	if !isStatusCodeCacheable(cached.StatusCode, statusCodes) {
 		return false
 	}
 
 	return true
 }
 
-// serveStaleCache attempts to serve stale cache with fallback to bypass
-func (ro *RenderOrchestrator) serveStaleCache(
+func (ro *RenderOrchestrator) isStaleServable(renderCtx *edgectx.RenderContext, cached *cache.CacheMetadata) bool {
+	return isCacheStaleServable(cached, renderCtx.ResolvedConfig.Cache.Expired, renderCtx.ResolvedConfig.Cache.StatusCodes)
+}
+
+func (ro *RenderOrchestrator) isBypassStaleServable(renderCtx *edgectx.RenderContext, cached *cache.CacheMetadata) bool {
+	return isCacheStaleServable(cached, renderCtx.ResolvedConfig.Bypass.Cache.Expired, renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes)
+}
+
+func (ro *RenderOrchestrator) tryServeStaleFromCache(
 	renderCtx *edgectx.RenderContext,
 	staleCache *cache.CacheMetadata,
+	source string,
 	reason string,
 ) (*RenderResult, error) {
 	renderCtx.Logger.Info("Attempting to serve stale cache",
 		zap.String("reason", reason),
+		zap.String("source", source),
 		zap.Duration("cache_age", time.Since(staleCache.CreatedAt)),
 		zap.Duration("stale_age", staleCache.StaleAge()))
 
-	// For redirects, serve directly from metadata (no file on disk)
 	if isRedirectStatusCode(staleCache.StatusCode) {
 		result, err := ro.serveFromCache(renderCtx, staleCache)
 		if err == nil {
-			ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension)
+			ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension, source)
 			return result, nil
 		}
-		renderCtx.Logger.Warn("Stale redirect metadata unavailable, falling back to bypass",
-			zap.Error(err))
-		return ro.serveBypass(renderCtx, "stale_redirect_unavailable")
+		return nil, fmt.Errorf("stale redirect metadata unavailable: %w", err)
 	}
 
-	// Check if file is local
 	if ro.cacheCoord.IsFileLocal(staleCache) {
 		result, err := ro.serveFromCache(renderCtx, staleCache)
 		if err == nil {
-			ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension)
+			ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension, source)
 			return result, nil
 		}
 		renderCtx.Logger.Warn("Stale cache file not accessible locally, trying remote",
 			zap.Error(err))
 	}
 
-	// Try to pull stale cache from remote EG with smart storage decision
 	if result, pulled := ro.tryPullFromRemoteSmartly(renderCtx, staleCache, true); pulled {
-		ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension)
+		ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension, source)
 		return result, nil
 	}
 
-	// Final fallback: bypass
-	renderCtx.Logger.Warn("Failed to serve stale cache, falling back to bypass")
+	return nil, fmt.Errorf("stale cache unavailable from all sources")
+}
+
+func (ro *RenderOrchestrator) serveStaleCache(
+	renderCtx *edgectx.RenderContext,
+	staleCache *cache.CacheMetadata,
+	reason string,
+) (*RenderResult, error) {
+	result, err := ro.tryServeStaleFromCache(renderCtx, staleCache, "render", reason)
+	if err == nil {
+		return result, nil
+	}
+
+	renderCtx.Logger.Warn("Failed to serve stale cache, falling back to bypass",
+		zap.Error(err))
 	return ro.serveBypass(renderCtx, "stale_unavailable")
+}
+
+func (ro *RenderOrchestrator) serveStaleBypassCache(
+	renderCtx *edgectx.RenderContext,
+	staleCache *cache.CacheMetadata,
+	reason string,
+) (*RenderResult, error) {
+	result, err := ro.tryServeStaleFromCache(renderCtx, staleCache, "bypass", reason)
+	if err == nil {
+		return result, nil
+	}
+
+	renderCtx.Logger.Warn("Failed to serve stale bypass cache",
+		zap.Error(err))
+	return nil, fmt.Errorf("stale bypass cache unavailable: %w", err)
 }
 
 // RenderWithHAR performs a render request with HAR capture enabled

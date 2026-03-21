@@ -125,12 +125,13 @@ func (mc *MetricsCollector) ServeHTTP(ctx *fasthttp.RequestCtx) {
 }
 
 // RecordStaleServed records that a stale cache was served
-func (mc *MetricsCollector) RecordStaleServed(host, dimension string) {
-	mc.prometheus.RecordStaleServed(host, dimension)
+func (mc *MetricsCollector) RecordStaleServed(host, dimension, source string) {
+	mc.prometheus.RecordStaleServed(host, dimension, source)
 
 	mc.logger.Debug("Recorded stale cache served metric",
 		zap.String("host", host),
-		zap.String("dimension", dimension))
+		zap.String("dimension", dimension),
+		zap.String("source", source))
 }
 
 // RecordCompression records compression metrics (ratio and bytes saved)

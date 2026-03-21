@@ -518,6 +518,63 @@ func (ts *TestServer) Start() error {
 		}
 	})
 
+	// Bypass stale cache test handler - /bypass-stale-test/*
+	mux.HandleFunc("/bypass-stale-test/", func(w http.ResponseWriter, r *http.Request) {
+		// Check Redis for one-time status override
+		statusCode := 200
+		if ts.redisClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+
+			overrideKey := fmt.Sprintf("test:status:override:%s", r.URL.Path+"?"+r.URL.RawQuery)
+			if val, err := ts.redisClient.Get(ctx, overrideKey).Result(); err == nil {
+				if parsed, err := strconv.Atoi(val); err == nil && parsed >= 100 && parsed < 600 {
+					statusCode = parsed
+					// Delete the key after use (one-time override)
+					ts.redisClient.Del(context.Background(), overrideKey)
+				}
+			}
+		}
+
+		// Parse status code from query param (default 200, overridden by Redis if set)
+		if statusCode == 200 {
+			if code := r.URL.Query().Get("status"); code != "" {
+				if parsed, err := strconv.Atoi(code); err == nil && parsed >= 100 && parsed < 600 {
+					statusCode = parsed
+				}
+			}
+		}
+
+		// Handle redirects (3xx)
+		if statusCode >= 300 && statusCode < 400 {
+			location := r.URL.Query().Get("location")
+			if location == "" {
+				location = ts.baseURL + "/static/simple.html"
+			}
+			w.Header().Set("Location", location)
+		}
+
+		// Set standard headers
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache, no-store")
+		w.Header().Set("ETag", fmt.Sprintf(`"etag-%d"`, time.Now().UnixNano()))
+		w.Header().Set("Last-Modified", time.Now().Format(time.RFC1123))
+
+		w.WriteHeader(statusCode)
+
+		// Return JSON body (except for redirects)
+		if statusCode < 300 || statusCode >= 400 {
+			responseData := map[string]interface{}{
+				"path":      r.URL.Path,
+				"status":    statusCode,
+				"timestamp": time.Now().Unix(),
+				"message":   fmt.Sprintf("Bypass stale test endpoint - status %d", statusCode),
+				"query":     r.URL.RawQuery,
+			}
+			json.NewEncoder(w).Encode(responseData)
+		}
+	})
+
 	// Tracking parameters test handler - /tracking-params/*
 	mux.HandleFunc("/tracking-params/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

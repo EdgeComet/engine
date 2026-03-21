@@ -118,7 +118,7 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 			Name:      "stale_cache_served_total",
 			Help:      "Total number of stale cache entries served",
 		},
-		[]string{"host", "dimension"},
+		[]string{"host", "dimension", "source"},
 	)
 
 	// Service metrics
@@ -299,8 +299,8 @@ func (pm *PrometheusMetrics) RecordCacheMiss(host, dimension string) {
 }
 
 // RecordStaleServed records that a stale cache entry was served
-func (pm *PrometheusMetrics) RecordStaleServed(host, dimension string) {
-	pm.staleCacheServedTotal.WithLabelValues(host, dimension).Inc()
+func (pm *PrometheusMetrics) RecordStaleServed(host, dimension, source string) {
+	pm.staleCacheServedTotal.WithLabelValues(host, dimension, source).Inc()
 }
 
 // RecordRenderDuration records time taken by render service

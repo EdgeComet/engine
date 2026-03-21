@@ -103,6 +103,7 @@ func (cc *CacheCoordinator) SaveCache(
 	headers map[string][]string,
 	source string,
 	ttl time.Duration,
+	staleTTL time.Duration,
 	pushOnRender bool,
 	indexStatus types.IndexStatus,
 	title string,
@@ -212,9 +213,6 @@ func (cc *CacheCoordinator) SaveCache(
 	metaCtx, metaCancel := context.WithTimeout(context.Background(), redisCacheOperationTimeout)
 	defer metaCancel()
 
-	// Calculate stale TTL for Redis expiration extension
-	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
-
 	if err := cc.metadata.StoreMetadata(metaCtx, metadata, renderCtx.CacheKey, staleTTL); err != nil {
 		renderCtx.Logger.Error("Failed to create cache metadata",
 			zap.String("cache_key", renderCtx.CacheKey.String()),
@@ -290,6 +288,8 @@ func (cc *CacheCoordinator) SaveRenderCache(
 		indexStatus = renderResult.PageSEO.IndexStatus
 	}
 
+	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+
 	return cc.SaveCache(
 		renderCtx,
 		renderResult.HTML,
@@ -297,6 +297,7 @@ func (cc *CacheCoordinator) SaveRenderCache(
 		headers,
 		cache.SourceRender,
 		renderCtx.ResolvedConfig.Cache.TTL,
+		staleTTL,
 		renderCtx.ResolvedConfig.Sharding.PushOnRender,
 		indexStatus,
 		title,
@@ -332,7 +333,12 @@ func (cc *CacheCoordinator) pushCacheToCluster(renderCtx *edgectx.RenderContext,
 	metaCtx, metaCancel := context.WithTimeout(context.Background(), redisCacheOperationTimeout)
 	defer metaCancel()
 
-	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+	var staleTTL time.Duration
+	if metadata.Source == cache.SourceBypass {
+		staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+	} else {
+		staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+	}
 
 	if err := cc.metadata.StoreMetadata(metaCtx, metadata, renderCtx.CacheKey, staleTTL); err != nil {
 		renderCtx.Logger.Warn("Failed to update metadata with EG IDs",
@@ -385,6 +391,8 @@ func (cc *CacheCoordinator) SaveBypassCache(renderCtx *edgectx.RenderContext, by
 		indexStatus = pageSEO.IndexStatus
 	}
 
+	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+
 	return cc.SaveCache(
 		renderCtx,
 		bypassResp.Body,
@@ -392,6 +400,7 @@ func (cc *CacheCoordinator) SaveBypassCache(renderCtx *edgectx.RenderContext, by
 		headers,
 		cache.SourceBypass,
 		renderCtx.ResolvedConfig.Bypass.Cache.TTL,
+		staleTTL,
 		true, // bypass cache always attempts push (size threshold handled in SaveCache)
 		indexStatus,
 		title,
@@ -563,7 +572,12 @@ func (cc *CacheCoordinator) TryPullFromRemote(renderCtx *edgectx.RenderContext, 
 		metaCtx, metaCancel := context.WithTimeout(context.Background(), redisCacheOperationTimeout)
 		defer metaCancel()
 
-		staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+		var staleTTL time.Duration
+		if metadata.Source == cache.SourceBypass {
+			staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+		} else {
+			staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+		}
 
 		if err := cc.metadata.StoreMetadata(metaCtx, metadata, renderCtx.CacheKey, staleTTL); err != nil {
 			renderCtx.Logger.Warn("Failed to update metadata with self after pull",

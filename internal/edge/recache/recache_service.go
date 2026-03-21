@@ -345,6 +345,14 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		zap.String("url", url),
 		zap.String("cache_key", renderCtx.CacheKey.String()))
 
+	if !renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
+		return fmt.Errorf("bypass cache disabled, skipping recache")
+	}
+
+	if renderCtx.ResolvedConfig.Bypass.Cache.TTL == 0 {
+		return fmt.Errorf("bypass cache TTL is 0, skipping recache")
+	}
+
 	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Logger)
 	if err != nil {
 		return fmt.Errorf("bypass fetch failed: %w", err)

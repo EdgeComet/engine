@@ -12,6 +12,7 @@ import (
 	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // ResponseWriter handles all HTTP response writing operations
@@ -157,9 +158,9 @@ func (rw *ResponseWriter) WriteCacheResponse(renderCtx *edgectx.RenderContext, c
 	// Set cache-specific headers - check if stale
 	cacheStatus := "hit"
 	if cacheEntry.IsExpired() {
-		// Check if it's within stale TTL
-		if renderCtx.ResolvedConfig.Cache.Expired.StaleTTL != nil {
-			staleTTL := time.Duration(*renderCtx.ResolvedConfig.Cache.Expired.StaleTTL)
+		expiredConfig := getExpiredConfigForSource(renderCtx, cacheEntry.Source)
+		if expiredConfig.StaleTTL != nil {
+			staleTTL := time.Duration(*expiredConfig.StaleTTL)
 			if cacheEntry.IsStale(staleTTL) {
 				cacheStatus = "stale"
 			}
@@ -263,9 +264,9 @@ func (rw *ResponseWriter) WriteCachedRedirectResponse(renderCtx *edgectx.RenderC
 	// Set cache headers - check if stale
 	cacheStatus := "hit"
 	if cacheEntry.IsExpired() {
-		// Check if it's within stale TTL
-		if renderCtx.ResolvedConfig.Cache.Expired.StaleTTL != nil {
-			staleTTL := time.Duration(*renderCtx.ResolvedConfig.Cache.Expired.StaleTTL)
+		expiredConfig := getExpiredConfigForSource(renderCtx, cacheEntry.Source)
+		if expiredConfig.StaleTTL != nil {
+			staleTTL := time.Duration(*expiredConfig.StaleTTL)
 			if cacheEntry.IsStale(staleTTL) {
 				cacheStatus = "stale"
 			}
@@ -344,4 +345,11 @@ func (rw *ResponseWriter) WriteStatusResponse(renderCtx *edgectx.RenderContext, 
 	renderCtx.HTTPCtx.Response.SetConnectionClose()
 
 	return nil
+}
+
+func getExpiredConfigForSource(renderCtx *edgectx.RenderContext, source string) types.CacheExpiredConfig {
+	if source == cache.SourceBypass {
+		return renderCtx.ResolvedConfig.Bypass.Cache.Expired
+	}
+	return renderCtx.ResolvedConfig.Cache.Expired
 }

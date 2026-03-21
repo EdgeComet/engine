@@ -4235,3 +4235,472 @@ hosts:
 		})
 	}
 }
+
+func TestValidateConfiguration_BypassCacheExpired_Global(t *testing.T) {
+	tests := []struct {
+		name          string
+		bypassConfig  string
+		wantErr       bool
+		expectedError string
+	}{
+		{
+			name: "valid serve_stale with positive stale_ttl",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 10m`,
+			wantErr: false,
+		},
+		{
+			name: "valid delete strategy",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      strategy: "delete"`,
+			wantErr: false,
+		},
+		{
+			name: "invalid strategy value",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      strategy: "invalid"`,
+			wantErr:       true,
+			expectedError: "invalid expired.strategy 'invalid'",
+		},
+		{
+			name: "serve_stale without stale_ttl",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      strategy: "serve_stale"`,
+			wantErr:       true,
+			expectedError: "stale_ttl is required when strategy is 'serve_stale'",
+		},
+		{
+			name: "serve_stale with negative stale_ttl",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: -5m`,
+			wantErr:       true,
+			expectedError: "stale_ttl must be positive when strategy is 'serve_stale'",
+		},
+		{
+			name: "stale_ttl without strategy",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: true
+    status_codes: [200]
+    expired:
+      stale_ttl: 10m`,
+			wantErr:       true,
+			expectedError: "stale_ttl specified without strategy",
+		},
+		{
+			name: "serve_stale with enabled false",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: false
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 10m`,
+			wantErr:       true,
+			expectedError: "bypass.cache.expired.strategy is 'serve_stale' but bypass caching is disabled",
+		},
+		{
+			name: "serve_stale with enabled nil",
+			bypassConfig: `
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    expired:
+      strategy: "serve_stale"
+      stale_ttl: 10m`,
+			wantErr:       true,
+			expectedError: "bypass.cache.expired.strategy is 'serve_stale' but bypass caching is disabled",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
+			hostsDir := filepath.Join(tmpDir, "hosts.d")
+
+			configContent := fmt.Sprintf(`
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":8080"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+
+storage:
+  base_path: "cache/"
+
+render:
+  cache: {}
+
+%s
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"
+`, tt.bypassConfig)
+
+			hostsContent := `
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-key-123"
+    render:
+      timeout: 30s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+`
+
+			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			require.NoError(t, err)
+			err = os.MkdirAll(hostsDir, 0755)
+			require.NoError(t, err)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			require.NoError(t, err)
+
+			result, err := ValidateConfiguration(configPath)
+			require.NoError(t, err)
+
+			if tt.wantErr {
+				assert.False(t, result.Valid, "Expected configuration to be invalid for test: %s", tt.name)
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e.Message, tt.expectedError) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected error containing '%s', got errors: %v", tt.expectedError, result.Errors)
+			} else {
+				assert.True(t, result.Valid, "Expected configuration to be valid for test: %s, got errors: %v", tt.name, result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateConfiguration_BypassCacheExpired_Host(t *testing.T) {
+	tests := []struct {
+		name          string
+		bypassConfig  string
+		wantErr       bool
+		expectedError string
+	}{
+		{
+			name: "valid host-level expired config",
+			bypassConfig: `
+    bypass:
+      cache:
+        enabled: true
+        status_codes: [200]
+        expired:
+          strategy: "serve_stale"
+          stale_ttl: 10m`,
+			wantErr: false,
+		},
+		{
+			name: "invalid host-level expired strategy",
+			bypassConfig: `
+    bypass:
+      cache:
+        enabled: true
+        status_codes: [200]
+        expired:
+          strategy: "invalid"`,
+			wantErr:       true,
+			expectedError: "host[0] (example.com): bypass.cache: invalid expired.strategy 'invalid'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
+			hostsDir := filepath.Join(tmpDir, "hosts.d")
+
+			configContent := `
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":8080"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+
+storage:
+  base_path: "cache/"
+
+render:
+  cache: {}
+
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: false
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"
+`
+
+			hostsContent := fmt.Sprintf(`
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-key-123"
+    render:
+      timeout: 30s%s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+`, tt.bypassConfig)
+
+			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			require.NoError(t, err)
+			err = os.MkdirAll(hostsDir, 0755)
+			require.NoError(t, err)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			require.NoError(t, err)
+
+			result, err := ValidateConfiguration(configPath)
+			require.NoError(t, err)
+
+			if tt.wantErr {
+				assert.False(t, result.Valid, "Expected configuration to be invalid for test: %s", tt.name)
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e.Message, tt.expectedError) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected error containing '%s', got errors: %v", tt.expectedError, result.Errors)
+			} else {
+				assert.True(t, result.Valid, "Expected configuration to be valid for test: %s, got errors: %v", tt.name, result.Errors)
+			}
+		})
+	}
+}
+
+func TestValidateConfiguration_BypassCacheExpired_Pattern(t *testing.T) {
+	tests := []struct {
+		name          string
+		ruleConfig    string
+		wantErr       bool
+		expectedError string
+	}{
+		{
+			name: "valid pattern-level expired config",
+			ruleConfig: `
+    url_rules:
+      - match: "/api/*"
+        action: "bypass"
+        bypass:
+          cache:
+            ttl: 30m
+            status_codes: [200]
+            expired:
+              strategy: "delete"`,
+			wantErr: false,
+		},
+		{
+			name: "invalid pattern-level expired strategy",
+			ruleConfig: `
+    url_rules:
+      - match: "/api/*"
+        action: "bypass"
+        bypass:
+          cache:
+            ttl: 30m
+            status_codes: [200]
+            expired:
+              strategy: "invalid"`,
+			wantErr:       true,
+			expectedError: "url_rules[0]: bypass.cache: invalid expired.strategy 'invalid'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "edge-gateway.yaml")
+			hostsDir := filepath.Join(tmpDir, "hosts.d")
+
+			configContent := `
+internal:
+  listen: "0.0.0.0:10071"
+  auth_key: "test-auth-key-12345"
+
+server:
+  listen: ":8080"
+  timeout: 120s
+
+redis:
+  addr: "localhost:6379"
+  db: 0
+
+storage:
+  base_path: "cache/"
+
+render:
+  cache: {}
+
+bypass:
+  timeout: 30s
+  user_agent: "test"
+  cache:
+    enabled: false
+
+registry:
+  selection_strategy: "least_loaded"
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "console"
+  file:
+    enabled: false
+
+metrics:
+  enabled: true
+  listen: ":9090"
+  path: "/metrics"
+  namespace: "edgecomet"
+
+hosts:
+  include: "hosts.d/"
+`
+
+			hostsContent := fmt.Sprintf(`
+hosts:
+  - id: 1
+    domain: "example.com"
+    render_key: "test-key-123"
+    render:
+      timeout: 30s%s
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0"
+`, tt.ruleConfig)
+
+			err := os.WriteFile(configPath, []byte(configContent), 0644)
+			require.NoError(t, err)
+			err = os.MkdirAll(hostsDir, 0755)
+			require.NoError(t, err)
+			err = os.WriteFile(filepath.Join(hostsDir, "01-test.yaml"), []byte(hostsContent), 0644)
+			require.NoError(t, err)
+
+			result, err := ValidateConfiguration(configPath)
+			require.NoError(t, err)
+
+			if tt.wantErr {
+				assert.False(t, result.Valid, "Expected configuration to be invalid for test: %s", tt.name)
+				found := false
+				for _, e := range result.Errors {
+					if strings.Contains(e.Message, tt.expectedError) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected error containing '%s', got errors: %v", tt.expectedError, result.Errors)
+			} else {
+				assert.True(t, result.Valid, "Expected configuration to be valid for test: %s, got errors: %v", tt.name, result.Errors)
+			}
+		})
+	}
+}

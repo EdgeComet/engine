@@ -273,6 +273,18 @@ bypass:
     # Default: [200]
     status_codes: [200, 301, 302]
 
+    # Expired bypass cache handling strategy
+    expired:
+      # Strategy for handling expired bypass cache
+      # Options: "delete", "serve_stale"
+      # Default: "delete"
+      # "serve_stale" - try fresh origin first, serve stale on failure
+      strategy: "serve_stale"
+
+      # How long to keep stale bypass cache available after TTL expires
+      # Only used when strategy is "serve_stale"
+      stale_ttl: 1h
+
 # =============================================================================
 # REGISTRY CONFIGURATION
 # =============================================================================

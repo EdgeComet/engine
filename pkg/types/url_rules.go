@@ -124,6 +124,8 @@ type BypassCacheConfig struct {
 	// non-empty = override with specified codes
 	// Common: [200], [200, 404], [200, 301, 302, 404]
 	StatusCodes []int `yaml:"status_codes,omitempty" json:"status_codes,omitempty"`
+
+	Expired *CacheExpiredConfig `yaml:"expired,omitempty" json:"expired,omitempty"`
 }
 
 // BypassConfig defines bypass behavior configuration (can be global, host-level, or pattern-level)

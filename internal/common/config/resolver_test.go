@@ -1211,3 +1211,149 @@ func TestResolver_StripScriptsResolution(t *testing.T) {
 		assert.False(t, resolved.Render.StripScripts, "Should inherit from global when host is nil")
 	})
 }
+
+// TestResolver_BypassCacheExpiredMerge tests deep merge of bypass cache expiration config
+func TestResolver_BypassCacheExpiredMerge(t *testing.T) {
+	t.Run("default expired config when no expired section configured", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalBypass := buildTestGlobalBypass()
+		host := buildTestHost()
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/page")
+
+		assert.Equal(t, types.ExpirationStrategyDelete, resolved.Bypass.Cache.Expired.Strategy)
+		assert.Nil(t, resolved.Bypass.Cache.Expired.StaleTTL)
+	})
+
+	t.Run("global expired config propagates to resolved config", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalBypass := buildTestGlobalBypass()
+		globalBypass.Cache.Expired = &types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(2 * time.Hour),
+		}
+		host := buildTestHost()
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/page")
+
+		assert.Equal(t, types.ExpirationStrategyServeStale, resolved.Bypass.Cache.Expired.Strategy)
+		require.NotNil(t, resolved.Bypass.Cache.Expired.StaleTTL)
+		assert.Equal(t, 2*time.Hour, time.Duration(*resolved.Bypass.Cache.Expired.StaleTTL))
+	})
+
+	t.Run("host-level expired overrides global with atomic replacement", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalBypass := buildTestGlobalBypass()
+		globalBypass.Cache.Expired = &types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(2 * time.Hour),
+		}
+		host := buildTestHost()
+		host.Bypass = &types.BypassConfig{
+			Cache: &types.BypassCacheConfig{
+				Expired: &types.CacheExpiredConfig{
+					Strategy: types.ExpirationStrategyDelete,
+				},
+			},
+		}
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/page")
+
+		assert.Equal(t, types.ExpirationStrategyDelete, resolved.Bypass.Cache.Expired.Strategy)
+		assert.Nil(t, resolved.Bypass.Cache.Expired.StaleTTL, "StaleTTL should be nil (atomic replacement, not inherited from global)")
+	})
+
+	t.Run("pattern-level expired overrides host with atomic replacement", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalBypass := buildTestGlobalBypass()
+		host := buildTestHost()
+		host.Bypass = &types.BypassConfig{
+			Cache: &types.BypassCacheConfig{
+				Expired: &types.CacheExpiredConfig{
+					Strategy: types.ExpirationStrategyServeStale,
+					StaleTTL: ptrDuration(1 * time.Hour),
+				},
+			},
+		}
+		host.URLRules = []types.URLRule{
+			{
+				Match:  "/api/*",
+				Action: types.ActionBypass,
+				Bypass: &types.BypassRuleConfig{
+					Cache: &types.BypassCacheConfig{
+						Expired: &types.CacheExpiredConfig{
+							Strategy: types.ExpirationStrategyDelete,
+						},
+					},
+				},
+			},
+		}
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/api/data")
+
+		assert.Equal(t, types.ExpirationStrategyDelete, resolved.Bypass.Cache.Expired.Strategy)
+		assert.Nil(t, resolved.Bypass.Cache.Expired.StaleTTL, "StaleTTL should be nil (atomic replacement, not inherited from host)")
+	})
+
+	t.Run("three-level override chain: global serve_stale -> host delete -> pattern serve_stale", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalBypass := buildTestGlobalBypass()
+		globalBypass.Cache.Expired = &types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(1 * time.Hour),
+		}
+		host := buildTestHost()
+		host.Bypass = &types.BypassConfig{
+			Cache: &types.BypassCacheConfig{
+				Expired: &types.CacheExpiredConfig{
+					Strategy: types.ExpirationStrategyDelete,
+				},
+			},
+		}
+		host.URLRules = []types.URLRule{
+			{
+				Match:  "/content/*",
+				Action: types.ActionBypass,
+				Bypass: &types.BypassRuleConfig{
+					Cache: &types.BypassCacheConfig{
+						Expired: &types.CacheExpiredConfig{
+							Strategy: types.ExpirationStrategyServeStale,
+							StaleTTL: ptrDuration(30 * time.Minute),
+						},
+					},
+				},
+			},
+		}
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/content/page")
+
+		assert.Equal(t, types.ExpirationStrategyServeStale, resolved.Bypass.Cache.Expired.Strategy)
+		require.NotNil(t, resolved.Bypass.Cache.Expired.StaleTTL)
+		assert.Equal(t, 30*time.Minute, time.Duration(*resolved.Bypass.Cache.Expired.StaleTTL))
+	})
+
+	t.Run("bypass expired is independent of render expired", func(t *testing.T) {
+		globalRender := buildTestGlobalRender()
+		globalRender.Cache.Expired = &types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: ptrDuration(4 * time.Hour),
+		}
+		globalBypass := buildTestGlobalBypass()
+		host := buildTestHost()
+
+		resolver := NewConfigResolver(globalRender, globalBypass, nil, nil, nil, nil, types.CompressionSnappy, host)
+		resolved := resolver.ResolveForURL("https://example.com/page")
+
+		assert.Equal(t, types.ExpirationStrategyServeStale, resolved.Cache.Expired.Strategy)
+		require.NotNil(t, resolved.Cache.Expired.StaleTTL)
+		assert.Equal(t, 4*time.Hour, time.Duration(*resolved.Cache.Expired.StaleTTL))
+
+		assert.Equal(t, types.ExpirationStrategyDelete, resolved.Bypass.Cache.Expired.Strategy)
+		assert.Nil(t, resolved.Bypass.Cache.Expired.StaleTTL)
+	})
+}

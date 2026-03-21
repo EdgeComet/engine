@@ -129,7 +129,6 @@ func (w *FilesystemCleanupWorker) getMaxRetentionTime(host *types.Host) (time.Du
 	if globalConfig.Render.Cache.Expired != nil {
 		switch globalConfig.Render.Cache.Expired.Strategy {
 		case types.ExpirationStrategyServeStale:
-			// serve_stale: stale_ttl alone (additional time after expiration)
 			if globalConfig.Render.Cache.Expired.StaleTTL != nil {
 				retention := time.Duration(*globalConfig.Render.Cache.Expired.StaleTTL)
 				if retention > maxRetention {
@@ -138,8 +137,18 @@ func (w *FilesystemCleanupWorker) getMaxRetentionTime(host *types.Host) (time.Du
 				}
 			}
 		case types.ExpirationStrategyDelete:
-			// delete: no additional retention (path timestamp = expiration time)
 			source = "global(delete)"
+		}
+	}
+
+	if globalConfig.Bypass.Cache.Expired != nil {
+		if globalConfig.Bypass.Cache.Expired.Strategy == types.ExpirationStrategyServeStale &&
+			globalConfig.Bypass.Cache.Expired.StaleTTL != nil {
+			retention := time.Duration(*globalConfig.Bypass.Cache.Expired.StaleTTL)
+			if retention > maxRetention {
+				maxRetention = retention
+				source = "global_bypass(serve_stale)"
+			}
 		}
 	}
 
@@ -147,43 +156,54 @@ func (w *FilesystemCleanupWorker) getMaxRetentionTime(host *types.Host) (time.Du
 	if host.Render.Cache != nil && host.Render.Cache.Expired != nil {
 		switch host.Render.Cache.Expired.Strategy {
 		case types.ExpirationStrategyServeStale:
-			// serve_stale: stale_ttl alone (additional time after expiration)
 			if host.Render.Cache.Expired.StaleTTL != nil {
 				retention := time.Duration(*host.Render.Cache.Expired.StaleTTL)
-				// Host config replaces global (not max)
 				maxRetention = retention
 				source = "host(serve_stale)"
 			}
 		case types.ExpirationStrategyDelete:
-			// delete: no additional retention (path timestamp = expiration time)
-			// Only safety_margin will be added later
 			maxRetention = 0
 			source = "host(delete)"
 		}
-		// If host has cache but no expired section, keep global (inheritance)
 	}
 
-	// URL pattern overrides (only for render action)
+	if host.Bypass != nil && host.Bypass.Cache != nil && host.Bypass.Cache.Expired != nil {
+		if host.Bypass.Cache.Expired.Strategy == types.ExpirationStrategyServeStale &&
+			host.Bypass.Cache.Expired.StaleTTL != nil {
+			retention := time.Duration(*host.Bypass.Cache.Expired.StaleTTL)
+			if retention > maxRetention {
+				maxRetention = retention
+				source = "host_bypass(serve_stale)"
+			}
+		}
+	}
+
+	// URL pattern overrides
 	if host.URLRules != nil {
 		for i, rule := range host.URLRules {
-			// Only consider patterns with render action (bypass/status have no render cache)
-			if rule.Action != types.ActionRender {
-				continue
-			}
-
-			if rule.Render != nil && rule.Render.Cache != nil && rule.Render.Cache.Expired != nil {
+			if rule.Action == types.ActionRender && rule.Render != nil && rule.Render.Cache != nil && rule.Render.Cache.Expired != nil {
 				expired := rule.Render.Cache.Expired
 
 				if expired.Strategy == types.ExpirationStrategyServeStale && expired.StaleTTL != nil {
-					// serve_stale: stale_ttl alone (additional time after expiration)
 					retention := time.Duration(*expired.StaleTTL)
 					if retention > maxRetention {
 						maxRetention = retention
 						source = fmt.Sprintf("pattern[%d](serve_stale)", i)
 					}
 				} else if expired.Strategy == types.ExpirationStrategyDelete {
-					// delete: no additional retention (path timestamp = expiration time)
 					source = fmt.Sprintf("pattern[%d](delete)", i)
+				}
+			}
+
+			if rule.Action == types.ActionBypass && rule.Bypass != nil && rule.Bypass.Cache != nil && rule.Bypass.Cache.Expired != nil {
+				expired := rule.Bypass.Cache.Expired
+
+				if expired.Strategy == types.ExpirationStrategyServeStale && expired.StaleTTL != nil {
+					retention := time.Duration(*expired.StaleTTL)
+					if retention > maxRetention {
+						maxRetention = retention
+						source = fmt.Sprintf("pattern[%d]_bypass(serve_stale)", i)
+					}
 				}
 			}
 		}

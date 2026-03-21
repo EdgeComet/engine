@@ -459,6 +459,59 @@ hosts:
         status:
           reason: "Special case for priority testing"
 
+      # --- BYPASS STALE CACHE TESTS (for bypass_stale_cache_test.go) ---
+      # Test stale bypass cache serving behavior
+
+      # Default stale cache enabled with serve_stale strategy
+      - match: "/bypass-stale-test/default*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 10s
+
+      # Delete strategy (no stale serving)
+      - match: "/bypass-stale-test/delete-strategy*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200]
+            expired:
+              strategy: "delete"
+
+      # Multiple cacheable status codes with stale
+      - match: "/bypass-stale-test/multi-status*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200, 301, 302]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 10s
+
+      # Render action with bypass stale cache fallback
+      - match: "/bypass-stale-test/with-render-fallback*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2s
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 10s
+
       # --- BYPASS CACHE TESTS (for bypass_cache_test.go) ---
       # Test various bypass cache configurations
       - match: "/bypass-test/default*"

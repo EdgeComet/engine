@@ -812,6 +812,17 @@ func validateBypassConfig(cfg *configtypes.EgConfig, filename string, lt *LineTr
 			collector.Add(filename, 0, "bypass.cache.status_codes must not be empty when caching enabled")
 		}
 	}
+
+	// Validate expired configuration
+	if cfg.Bypass.Cache.Expired != nil {
+		validateCacheExpiredConfig(cfg.Bypass.Cache.Expired, "bypass.cache", filename, collector)
+
+		if cfg.Bypass.Cache.Expired.Strategy == types.ExpirationStrategyServeStale {
+			if cfg.Bypass.Cache.Enabled == nil || !*cfg.Bypass.Cache.Enabled {
+				collector.Add(filename, 0, "bypass.cache.expired.strategy is 'serve_stale' but bypass caching is disabled")
+			}
+		}
+	}
 }
 
 // validateRegistryConfig validates registry configuration
@@ -1963,6 +1974,12 @@ func validateBypassCacheOverride(hostIndex, ruleIndex int, domain string, cache 
 				hostIndex, domain, ruleIndex, code)
 		}
 	}
+
+	// Validate expired configuration
+	if cache.Expired != nil {
+		context := fmt.Sprintf("host[%d] (%s): url_rules[%d]: bypass.cache", hostIndex, domain, ruleIndex)
+		validateCacheExpiredConfig(cache.Expired, context, filename, collector)
+	}
 }
 
 // validateStatusConfig validates status action configuration
@@ -2016,6 +2033,18 @@ func validateHostBypassCache(hostIndex int, host *types.Host, filename string, h
 	for _, code := range cache.StatusCodes {
 		if code < 100 || code >= 600 {
 			collector.Add(filename, 0, "host[%d] (%s): invalid HTTP status code: %d", hostIndex, host.Domain, code)
+		}
+	}
+
+	// Validate expired configuration
+	if cache.Expired != nil {
+		context := fmt.Sprintf("host[%d] (%s): bypass.cache", hostIndex, host.Domain)
+		validateCacheExpiredConfig(cache.Expired, context, filename, collector)
+
+		if cache.Expired.Strategy == types.ExpirationStrategyServeStale {
+			if cache.Enabled == nil || !*cache.Enabled {
+				collector.Add(filename, 0, "host[%d] (%s): bypass.cache.expired.strategy is 'serve_stale' but bypass caching is disabled", hostIndex, host.Domain)
+			}
 		}
 	}
 }
@@ -2123,6 +2152,13 @@ func getMinStaleTTL(hosts *configtypes.HostsConfig) time.Duration {
 		if host.Render.Cache != nil && host.Render.Cache.Expired != nil &&
 			host.Render.Cache.Expired.StaleTTL != nil {
 			staleTTL := time.Duration(*host.Render.Cache.Expired.StaleTTL)
+			if minTTL == 0 || staleTTL < minTTL {
+				minTTL = staleTTL
+			}
+		}
+		if host.Bypass != nil && host.Bypass.Cache != nil && host.Bypass.Cache.Expired != nil &&
+			host.Bypass.Cache.Expired.StaleTTL != nil {
+			staleTTL := time.Duration(*host.Bypass.Cache.Expired.StaleTTL)
 			if minTTL == 0 || staleTTL < minTTL {
 				minTTL = staleTTL
 			}

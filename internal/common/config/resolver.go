@@ -62,6 +62,7 @@ type ResolvedBypassCacheConfig struct {
 	Enabled     bool
 	TTL         time.Duration
 	StatusCodes []int
+	Expired     types.CacheExpiredConfig
 }
 
 // ResolvedStatusConfig contains resolved status action configuration
@@ -353,6 +354,15 @@ func (r *ConfigResolver) resolveBypassConfig(resolved *ResolvedConfig, matchedRu
 		resolved.Bypass.Cache.StatusCodes = []int{200} // Default: [200]
 	}
 
+	if r.globalBypass.Cache.Expired != nil {
+		resolved.Bypass.Cache.Expired = *r.globalBypass.Cache.Expired
+	} else {
+		resolved.Bypass.Cache.Expired = types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyDelete,
+			StaleTTL: nil,
+		}
+	}
+
 	// Apply host-level overrides
 	if r.host.Bypass != nil {
 		if r.host.Bypass.Timeout != nil {
@@ -372,6 +382,9 @@ func (r *ConfigResolver) resolveBypassConfig(resolved *ResolvedConfig, matchedRu
 			}
 			if len(r.host.Bypass.Cache.StatusCodes) > 0 {
 				resolved.Bypass.Cache.StatusCodes = r.host.Bypass.Cache.StatusCodes
+			}
+			if r.host.Bypass.Cache.Expired != nil {
+				resolved.Bypass.Cache.Expired = *r.host.Bypass.Cache.Expired
 			}
 		}
 	}
@@ -395,6 +408,9 @@ func (r *ConfigResolver) resolveBypassConfig(resolved *ResolvedConfig, matchedRu
 			}
 			if len(matchedRule.Bypass.Cache.StatusCodes) > 0 {
 				resolved.Bypass.Cache.StatusCodes = matchedRule.Bypass.Cache.StatusCodes
+			}
+			if matchedRule.Bypass.Cache.Expired != nil {
+				resolved.Bypass.Cache.Expired = *matchedRule.Bypass.Cache.Expired
 			}
 		}
 	}
