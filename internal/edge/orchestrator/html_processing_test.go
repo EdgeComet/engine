@@ -220,6 +220,51 @@ func TestProcessContent_ContentProcessorOverride410(t *testing.T) {
 	require.NotNil(t, result.OriginalPageSEO)
 }
 
+func TestProcessContent_ContentProcessorModifiedFlag(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	html := sampleHTML("Old Title", "<p>Body</p>")
+
+	cp := &mockContentProcessorFn{
+		fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+			input.Doc.GoQueryDoc().Find("title").SetText("New Title")
+			return &ContentOutput{
+				Modified: true,
+				RuleIDs:  []uint32{5},
+			}, nil
+		},
+	}
+
+	result := ProcessContent(context.Background(), html, 200, "https://example.com/page", false, 1, cp, logger)
+
+	require.NotNil(t, result)
+	assert.Contains(t, string(result.HTML), "New Title")
+	assert.Equal(t, "New Title", result.PageSEO.Title)
+	require.NotNil(t, result.OriginalPageSEO)
+	assert.Equal(t, "Old Title", result.OriginalPageSEO.Title)
+	assert.Equal(t, []uint32{5}, result.RuleIDs)
+}
+
+func TestProcessContent_ContentProcessorModifiedNoChange(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	html := sampleHTML("Same Title", "<p>Body</p>")
+
+	cp := &mockContentProcessorFn{
+		fn: func(_ context.Context, _ *ContentInput) (*ContentOutput, error) {
+			return &ContentOutput{
+				Modified: true,
+			}, nil
+		},
+	}
+
+	result := ProcessContent(context.Background(), html, 200, "https://example.com/page", false, 1, cp, logger)
+
+	require.NotNil(t, result)
+	assert.Contains(t, string(result.HTML), "Same Title")
+	assert.Equal(t, "Same Title", result.PageSEO.Title)
+	require.NotNil(t, result.OriginalPageSEO)
+	assert.Equal(t, "Same Title", result.OriginalPageSEO.Title)
+}
+
 func TestProcessContent_PageSEOExtractedBeforeScriptStripping(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	html := []byte(`<!DOCTYPE html><html><head><title>Test</title><script type="application/ld+json">{"@type":"Article","name":"Test"}</script></head><body><p>Content</p></body></html>`)

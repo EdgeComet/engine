@@ -77,6 +77,13 @@ func ProcessContent(
 		return result
 	}
 
+	if output.Modified {
+		result.HTML = doc.HTML()
+		result.OriginalPageSEO = pageSEO
+		result.PageSEO = doc.ExtractPageSEO(statusCode, targetURL)
+		return result
+	}
+
 	if output.HTML != nil {
 		result.HTML = output.HTML
 		result.OriginalPageSEO = pageSEO

@@ -17,6 +17,14 @@ func (m *mockContentProcessor) ProcessContent(_ context.Context, _ *ContentInput
 	return m.output, m.err
 }
 
+type mockContentProcessorFn struct {
+	fn func(ctx context.Context, input *ContentInput) (*ContentOutput, error)
+}
+
+func (m *mockContentProcessorFn) ProcessContent(ctx context.Context, input *ContentInput) (*ContentOutput, error) {
+	return m.fn(ctx, input)
+}
+
 func TestContentProcessorInterfaceCompliance(t *testing.T) {
 	mock := &mockContentProcessor{
 		output: &ContentOutput{

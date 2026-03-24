@@ -26,6 +26,7 @@ type ContentOutput struct {
 	HTML     []byte
 	RuleIDs  []uint32
 	Override *ResponseOverride
+	Modified bool
 }
 
 type ResponseOverride struct {
