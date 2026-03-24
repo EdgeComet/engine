@@ -428,10 +428,14 @@ func (cc *CacheCoordinator) SaveOverrideCache(
 		headers = map[string][]string{"Location": {override.Location}}
 	}
 	staleTTL := getStaleTTL(expired)
+	indexStatus := types.IndexStatusIndexable
+	if override.StatusCode != 200 {
+		indexStatus = types.IndexStatusNon200
+	}
 	return cc.SaveCache(
 		renderCtx, nil, override.StatusCode, headers,
 		source, ttl, staleTTL,
-		false, types.IndexStatusIndexable, "",
+		false, indexStatus, "",
 	)
 }
 

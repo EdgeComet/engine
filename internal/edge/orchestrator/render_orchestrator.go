@@ -633,14 +633,31 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		if staleCache != nil {
 			return ro.serveStaleCache(renderCtx, staleCache, "render_5xx_error")
 		}
-		// No stale cache available - serve the 5xx response to client
-		renderCtx.Logger.Info("No stale cache available, serving 5xx response")
+		// No stale cache available - serve the 5xx response directly without content processing
+		// Skip ProcessContent to avoid running content processor on error page HTML
+		renderCtx.Logger.Info("No stale cache available, serving 5xx response directly")
+		startTime5xx := time.Now().UTC()
+		if err := ro.responseWriter.WriteRenderedResponse(renderCtx, renderResult.HTML, statusCode, redirectLocation, reservation.ServiceID, renderResult.Headers); err != nil {
+			return nil, err
+		}
+		return &RenderResult{
+			Source:       ServedFromRender,
+			ServiceID:    reservation.ServiceID,
+			Duration:     time.Since(startTime5xx),
+			BytesServed:  int64(len(renderResult.HTML)),
+			StatusCode:   statusCode,
+			ErrorType:    types.ErrorTypeOrigin5xx,
+			ErrorMessage: fmt.Sprintf("Origin returned %d", statusCode),
+		}, nil
 	}
 
 	// Content processing: script cleaning, SEO extraction, and optional content processor
+	procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
+	defer procCancel()
+
 	stripScripts := renderCtx.ResolvedConfig.Render.StripScripts
 	processed := ProcessContent(
-		reqCtx,
+		procCtx,
 		renderResult.HTML,
 		statusCode,
 		renderCtx.TargetURL,
@@ -1144,11 +1161,16 @@ func (ro *RenderOrchestrator) serveOverride(
 		}
 	}
 
+	indexStatus := types.IndexStatusIndexable
+	if override.StatusCode != 200 {
+		indexStatus = types.IndexStatusNon200
+	}
+
 	if params.cacheEnabled && params.cacheTTL > 0 {
 		if err := ro.cacheCoord.SaveCache(
 			renderCtx, nil, override.StatusCode, overrideHeaders,
 			params.cacheSource, params.cacheTTL, params.staleTTL,
-			false, types.IndexStatusIndexable, "",
+			false, indexStatus, "",
 		); err != nil {
 			renderCtx.Logger.Error("Failed to cache override", zap.Error(err))
 		}
@@ -1241,7 +1263,14 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 		return nil, fmt.Errorf("bypass request failed: %w", err)
 	}
 
-	// 2.5. EXTRACT SEO METADATA and run content processing on HTML responses
+	// 2.5. CHECK FOR 5xx - serve stale bypass if available (before content processing)
+	if bypassResp.StatusCode >= 500 && staleBypassCache != nil {
+		if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_5xx"); staleErr == nil {
+			return result, nil
+		}
+	}
+
+	// 2.7. EXTRACT SEO METADATA and run content processing on HTML responses
 	var pageSEO *types.PageSEO
 	var processed *ProcessedContent
 
@@ -1263,13 +1292,6 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 
 		if processed.OriginalPageSEO != nil {
 			bypassResp.Body = processed.HTML
-		}
-	}
-
-	// 2.7. CHECK FOR 5xx - serve stale bypass if available
-	if bypassResp.StatusCode >= 500 && staleBypassCache != nil {
-		if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_5xx"); staleErr == nil {
-			return result, nil
 		}
 	}
 
