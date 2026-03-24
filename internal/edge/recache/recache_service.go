@@ -294,6 +294,18 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		rs.contentProcessor,
 		rs.logger,
 	)
+	if processed.Override != nil {
+		return rs.saveOverrideToCache(ctx, renderCtx, processed, url, startTime, overrideParams{
+			cacheSource: cache.SourceRender,
+			cacheTTL:    renderCtx.ResolvedConfig.Cache.TTL,
+			expired:     renderCtx.ResolvedConfig.Cache.Expired,
+			eventSource: orchestrator.ServedFromRender,
+			serviceID:   reservation.ServiceID,
+			metrics:     &renderResult.Metrics,
+			renderTime:  renderResult.RenderTime,
+		})
+	}
+
 	renderResult.HTML = processed.HTML
 
 	totalDuration := time.Since(startTime)
@@ -359,6 +371,64 @@ func (rs *RecacheService) saveToCache(
 	return nil
 }
 
+type overrideParams struct {
+	cacheSource string
+	cacheTTL    time.Duration
+	expired     types.CacheExpiredConfig
+	eventSource orchestrator.ResponseSource
+	serviceID   string
+	metrics     *types.PageMetrics
+	renderTime  time.Duration
+}
+
+func (rs *RecacheService) saveOverrideToCache(
+	ctx context.Context,
+	renderCtx *edgectx.RenderContext,
+	processed *orchestrator.ProcessedContent,
+	url string,
+	startTime time.Time,
+	params overrideParams,
+) error {
+	if err := rs.cacheCoord.SaveOverrideCache(
+		renderCtx, processed.Override,
+		params.cacheSource, params.cacheTTL, params.expired,
+	); err != nil {
+		return fmt.Errorf("failed to cache override: %w", err)
+	}
+
+	if err := rs.metadataStore.ClearLastBotHit(ctx, renderCtx.CacheKey); err != nil {
+		rs.logger.Error("Failed to clear last_bot_hit",
+			zap.String("cache_key", renderCtx.CacheKey.String()),
+			zap.Error(err))
+	}
+
+	totalDuration := time.Since(startTime)
+	if rs.eventEmitter != nil {
+		result := &orchestrator.RenderResult{
+			Source:          params.eventSource,
+			ServiceID:       params.serviceID,
+			Duration:        totalDuration,
+			BytesServed:     0,
+			StatusCode:      processed.Override.StatusCode,
+			Metrics:         params.metrics,
+			RenderTime:      params.renderTime,
+			RedirectTo:      processed.Override.Location,
+			PageSEO:         processed.PageSEO,
+			RuleIDs:         processed.RuleIDs,
+			OriginalPageSEO: processed.OriginalPageSEO,
+		}
+		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
+		rs.eventEmitter.Emit(event)
+	}
+
+	rs.logger.Info("Recache override cached",
+		zap.String("url", url),
+		zap.Int("status_code", processed.Override.StatusCode),
+		zap.String("location", processed.Override.Location))
+
+	return nil
+}
+
 // processBypassRecache fetches content from origin via bypass and saves to bypass cache
 func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, renderCtx *edgectx.RenderContext, startTime time.Time) error {
 	rs.logger.Info("Processing bypass recache request",
@@ -391,6 +461,16 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		ctx, bypassResp.Body, bypassResp.StatusCode, url,
 		false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
 	)
+
+	if processed.Override != nil {
+		return rs.saveOverrideToCache(ctx, renderCtx, processed, url, startTime, overrideParams{
+			cacheSource: cache.SourceBypass,
+			cacheTTL:    renderCtx.ResolvedConfig.Bypass.Cache.TTL,
+			expired:     renderCtx.ResolvedConfig.Bypass.Cache.Expired,
+			eventSource: orchestrator.ServedFromBypass,
+		})
+	}
+
 	pageSEO := processed.PageSEO
 
 	if processed.OriginalPageSEO != nil {

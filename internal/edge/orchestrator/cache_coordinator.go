@@ -415,6 +415,26 @@ func (cc *CacheCoordinator) SaveBypassCache(renderCtx *edgectx.RenderContext, by
 	)
 }
 
+// SaveOverrideCache saves a content processor override as a metadata-only cache entry (no HTML on disk).
+func (cc *CacheCoordinator) SaveOverrideCache(
+	renderCtx *edgectx.RenderContext,
+	override *ResponseOverride,
+	source string,
+	ttl time.Duration,
+	expired types.CacheExpiredConfig,
+) error {
+	var headers map[string][]string
+	if override.Location != "" {
+		headers = map[string][]string{"Location": {override.Location}}
+	}
+	staleTTL := getStaleTTL(expired)
+	return cc.SaveCache(
+		renderCtx, nil, override.StatusCode, headers,
+		source, ttl, staleTTL,
+		false, types.IndexStatusIndexable, "",
+	)
+}
+
 // CanSaveBypassCache checks all preconditions for saving bypass cache.
 // Returns (true, "") if save is allowed, or (false, reason) if not.
 func (cc *CacheCoordinator) CanSaveBypassCache(renderCtx *edgectx.RenderContext, statusCode int) (bool, string) {

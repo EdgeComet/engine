@@ -4,10 +4,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/config"
+	customredis "github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/cache"
+	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -532,4 +538,111 @@ func Test_getStaleTTL(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func newOverrideCacheCoordinator(t *testing.T) (*CacheCoordinator, *miniredis.Miniredis) {
+	t.Helper()
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	t.Cleanup(mr.Close)
+
+	logger := zap.NewNop()
+	redisClient, err := customredis.NewClient(&config.RedisConfig{Addr: mr.Addr()}, logger)
+	require.NoError(t, err)
+
+	keyGen := customredis.NewKeyGenerator()
+	cacheDir := t.TempDir()
+	metadataStore := cache.NewMetadataStore(redisClient, keyGen, cacheDir, logger)
+	fsCache := cache.NewFilesystemCache(logger)
+	cacheService := cache.NewCacheService(metadataStore, fsCache, logger)
+
+	cc := NewCacheCoordinator(metadataStore, fsCache, cacheService, nil, nil, logger)
+	return cc, mr
+}
+
+func overrideRenderCtx(cacheKey *types.CacheKey) *edgectx.RenderContext {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetRequestURI("/test")
+	renderCtx := edgectx.NewRenderContext("test-req", ctx, zap.NewNop(), 120*time.Second)
+	renderCtx.TargetURL = "https://example.com/page"
+	renderCtx.URLHash = "abc123"
+	renderCtx.Host = &types.Host{ID: 1}
+	renderCtx.Dimension = "desktop"
+	renderCtx.CacheKey = cacheKey
+	renderCtx.ResolvedConfig = &config.ResolvedConfig{Compression: "none"}
+	return renderCtx
+}
+
+func TestSaveOverrideCache(t *testing.T) {
+	t.Run("301 redirect creates metadata-only entry with Location header", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "redirect301"}
+		renderCtx := overrideRenderCtx(cacheKey)
+
+		override := &ResponseOverride{StatusCode: 301, Location: "https://example.com/new-page"}
+		err := cc.SaveOverrideCache(renderCtx, override, cache.SourceRender, time.Hour, types.CacheExpiredConfig{})
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		assert.Equal(t, "301", mr.HGet(metaKey, "status_code"))
+		assert.Equal(t, "0", mr.HGet(metaKey, "size"))
+		assert.Equal(t, "0", mr.HGet(metaKey, "disk_size"))
+		assert.Contains(t, mr.HGet(metaKey, "headers"), "https://example.com/new-page")
+		assert.Equal(t, cache.SourceRender, mr.HGet(metaKey, "source"))
+	})
+
+	t.Run("404 override creates metadata-only entry without Location", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "status404"}
+		renderCtx := overrideRenderCtx(cacheKey)
+
+		override := &ResponseOverride{StatusCode: 404}
+		err := cc.SaveOverrideCache(renderCtx, override, cache.SourceRender, time.Hour, types.CacheExpiredConfig{})
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		assert.Equal(t, "404", mr.HGet(metaKey, "status_code"))
+		assert.Equal(t, "0", mr.HGet(metaKey, "size"))
+		assert.Empty(t, mr.HGet(metaKey, "headers"))
+	})
+
+	t.Run("bypass source stored correctly", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "bypass410"}
+		renderCtx := overrideRenderCtx(cacheKey)
+
+		override := &ResponseOverride{StatusCode: 410}
+		err := cc.SaveOverrideCache(renderCtx, override, cache.SourceBypass, time.Hour, types.CacheExpiredConfig{})
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		assert.Equal(t, cache.SourceBypass, mr.HGet(metaKey, "source"))
+		assert.Equal(t, "410", mr.HGet(metaKey, "status_code"))
+	})
+
+	t.Run("stale TTL extends Redis key expiration", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "stale301"}
+		renderCtx := overrideRenderCtx(cacheKey)
+
+		staleTTLValue := types.Duration(30 * time.Minute)
+		expired := types.CacheExpiredConfig{
+			Strategy: types.ExpirationStrategyServeStale,
+			StaleTTL: &staleTTLValue,
+		}
+		override := &ResponseOverride{StatusCode: 301, Location: "https://example.com/target"}
+		err := cc.SaveOverrideCache(renderCtx, override, cache.SourceRender, time.Hour, expired)
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		ttl := mr.TTL(metaKey)
+		// TTL should be base (1h) + stale (30m) = 90m
+		assert.Greater(t, ttl, 89*time.Minute)
+		assert.LessOrEqual(t, ttl, 91*time.Minute)
+	})
 }
