@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/html"
 )
 
 func TestTruncateRunes(t *testing.T) {
@@ -199,14 +199,13 @@ func TestTopNDomains(t *testing.T) {
 	}
 }
 
-// Helper to parse HTML and find head element
-func parseAndFindHead(t *testing.T, htmlStr string) *html.Node {
+func parseGoQueryDoc(t *testing.T, htmlStr string) *goquery.Document {
 	t.Helper()
-	doc, err := html.Parse(strings.NewReader(htmlStr))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
 		t.Fatalf("Failed to parse HTML: %v", err)
 	}
-	return findElement(doc, "head")
+	return doc
 }
 
 func TestExtractSEOTitle(t *testing.T) {
@@ -259,8 +258,8 @@ func TestExtractSEOTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			head := parseAndFindHead(t, tt.html)
-			result := extractSEOTitle(head)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractSEOTitle(doc)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -326,8 +325,8 @@ func TestExtractMetaDescription(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			head := parseAndFindHead(t, tt.html)
-			result := extractMetaDescription(head)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractMetaDescription(doc)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -393,8 +392,8 @@ func TestExtractMetaRobots(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			head := parseAndFindHead(t, tt.html)
-			result := extractMetaRobots(head)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractMetaRobots(doc)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -440,21 +439,11 @@ func TestExtractBaseHref(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			head := parseAndFindHead(t, tt.html)
-			result := extractBaseHref(head)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractBaseHref(doc)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-// Helper to parse HTML and find body element
-func parseAndFindBody(t *testing.T, htmlStr string) *html.Node {
-	t.Helper()
-	doc, err := html.Parse(strings.NewReader(htmlStr))
-	if err != nil {
-		t.Fatalf("Failed to parse HTML: %v", err)
-	}
-	return findElement(doc, "body")
 }
 
 func TestExtractHeadings(t *testing.T) {
@@ -553,15 +542,15 @@ func TestExtractHeadings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := parseAndFindBody(t, tt.html)
-			result := extractHeadings(body, tt.tag, tt.maxCount)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractHeadings(doc, tt.tag, tt.maxCount)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 
-	// Explicit nil body test
-	t.Run("nil body returns nil", func(t *testing.T) {
-		result := extractHeadings(nil, "h1", 5)
+	t.Run("no body returns nil", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head></head></html>`)
+		result := extractHeadings(doc, "h1", 5)
 		assert.Nil(t, result)
 	})
 }
@@ -756,9 +745,9 @@ func TestExtractLinkMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := parseAndFindBody(t, tt.html)
+			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractLinkMetrics(body, "", tt.pageURL, seo)
+			extractLinkMetrics(doc, "", tt.pageURL, seo)
 
 			assert.Equal(t, tt.expectTotal, seo.LinksTotal, "LinksTotal mismatch")
 			assert.Equal(t, tt.expectInternal, seo.LinksInternal, "LinksInternal mismatch")
@@ -834,9 +823,9 @@ func TestExtractImageMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := parseAndFindBody(t, tt.html)
+			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractImageMetrics(body, "", tt.pageURL, seo)
+			extractImageMetrics(doc, "", tt.pageURL, seo)
 
 			assert.Equal(t, tt.expectTotal, seo.ImagesTotal, "ImagesTotal mismatch")
 			assert.Equal(t, tt.expectInternal, seo.ImagesInternal, "ImagesInternal mismatch")
@@ -899,9 +888,9 @@ func TestExtractImageMetrics_AltText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := parseAndFindBody(t, tt.html)
+			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractImageMetrics(body, "", "https://example.com/", seo)
+			extractImageMetrics(doc, "", "https://example.com/", seo)
 
 			assert.Equal(t, tt.expectTotal, seo.ImagesTotal, "ImagesTotal mismatch")
 			assert.Equal(t, tt.expectWithAlt, seo.ImagesWithAlt, "ImagesWithAlt mismatch")
@@ -911,9 +900,9 @@ func TestExtractImageMetrics_AltText(t *testing.T) {
 
 	// Explicit invariant test for mixed case
 	t.Run("invariant holds", func(t *testing.T) {
-		body := parseAndFindBody(t, `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg"><img src="/d.jpg" alt=""></body></html>`)
+		doc := parseGoQueryDoc(t, `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg"><img src="/d.jpg" alt=""></body></html>`)
 		seo := &types.PageSEO{}
-		extractImageMetrics(body, "", "https://example.com/", seo)
+		extractImageMetrics(doc, "", "https://example.com/", seo)
 
 		assert.Equal(t, seo.ImagesTotal, seo.ImagesWithAlt+seo.ImagesWithoutAlt, "invariant: ImagesWithAlt + ImagesWithoutAlt == ImagesTotal")
 	})
@@ -974,38 +963,29 @@ func TestExtractBodyWords(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := parseAndFindBody(t, tt.html)
-			result := extractBodyWords(body)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractBodyWords(doc)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 
-	t.Run("nil body", func(t *testing.T) {
-		result := extractBodyWords(nil)
+	t.Run("no body", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head></head></html>`)
+		result := extractBodyWords(doc)
 		assert.Nil(t, result)
 	})
 }
 
 func TestLinkMetricsWithBaseTag(t *testing.T) {
-	html := `<html><body><a href="page.html">Relative Link</a></body></html>`
-	body := parseAndFindBody(t, html)
+	htmlStr := `<html><body><a href="page.html">Relative Link</a></body></html>`
+	doc := parseGoQueryDoc(t, htmlStr)
 	seo := &types.PageSEO{}
 
-	extractLinkMetrics(body, "https://cdn.example.com/base/", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://cdn.example.com/base/", "https://example.com/", seo)
 
 	// Link should resolve against base href, which is on cdn.example.com (internal via subdomain)
 	assert.Equal(t, 1, seo.LinksTotal)
 	assert.Equal(t, 1, seo.LinksInternal)
-}
-
-// Helper to parse full HTML document
-func parseDocument(t *testing.T, htmlStr string) *html.Node {
-	t.Helper()
-	doc, err := html.Parse(strings.NewReader(htmlStr))
-	if err != nil {
-		t.Fatalf("Failed to parse HTML: %v", err)
-	}
-	return doc
 }
 
 func TestExtractHreflang(t *testing.T) {
@@ -1083,8 +1063,8 @@ func TestExtractHreflang(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			head := parseAndFindHead(t, tt.html)
-			result := extractHreflang(head, tt.pageURL)
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractHreflang(doc, tt.pageURL)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1239,7 +1219,7 @@ func TestExtractStructuredDataTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseDocument(t, tt.html)
+			doc := parseGoQueryDoc(t, tt.html)
 			result := extractStructuredDataTypes(doc)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1388,4 +1368,270 @@ func TestExtractPageSEO_EmptyDocument(t *testing.T) {
 	assert.Nil(t, seo.H1s)
 	assert.Equal(t, 0, seo.LinksTotal)
 	assert.Equal(t, 0, seo.ImagesTotal)
+}
+
+func TestExtractSEOTitle_GoQuery(t *testing.T) {
+	t.Run("basic title", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><title>My SEO Title</title></head></html>`)
+		result := extractSEOTitle(doc)
+		assert.Equal(t, "My SEO Title", result)
+	})
+
+	t.Run("title exceeding 500 runes truncated", func(t *testing.T) {
+		longTitle := strings.Repeat("x", 600)
+		doc := parseGoQueryDoc(t, `<html><head><title>`+longTitle+`</title></head></html>`)
+		result := extractSEOTitle(doc)
+		assert.Equal(t, strings.Repeat("x", 500), result)
+	})
+
+	t.Run("no title returns empty", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head></head></html>`)
+		result := extractSEOTitle(doc)
+		assert.Equal(t, "", result)
+	})
+}
+
+func TestExtractMetaDescription_GoQuery(t *testing.T) {
+	t.Run("basic description", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><meta name="description" content="A description"></head></html>`)
+		result := extractMetaDescription(doc)
+		assert.Equal(t, "A description", result)
+	})
+
+	t.Run("empty content returns empty", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><meta name="description" content=""></head></html>`)
+		result := extractMetaDescription(doc)
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("content exceeding 1000 chars truncated", func(t *testing.T) {
+		longDesc := strings.Repeat("d", 1100)
+		doc := parseGoQueryDoc(t, `<html><head><meta name="description" content="`+longDesc+`"></head></html>`)
+		result := extractMetaDescription(doc)
+		assert.Equal(t, strings.Repeat("d", 1000), result)
+	})
+
+	t.Run("no description meta returns empty", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><meta name="keywords" content="test"></head></html>`)
+		result := extractMetaDescription(doc)
+		assert.Equal(t, "", result)
+	})
+}
+
+func TestExtractCanonicalURL_GoQuery(t *testing.T) {
+	t.Run("basic canonical", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><link rel="canonical" href="https://example.com/page"></head></html>`)
+		result := extractCanonicalURL(doc)
+		assert.Equal(t, "https://example.com/page", result)
+	})
+
+	t.Run("no canonical returns empty", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head></head></html>`)
+		result := extractCanonicalURL(doc)
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("whitespace in href trimmed", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><link rel="canonical" href="  https://example.com/page  "></head></html>`)
+		result := extractCanonicalURL(doc)
+		assert.Equal(t, "https://example.com/page", result)
+	})
+}
+
+func TestExtractHeadings_GoQuery(t *testing.T) {
+	t.Run("multiple h1s limited by maxCount", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><body><h1>One</h1><h1>Two</h1><h1>Three</h1><h1>Four</h1></body></html>`)
+		result := extractHeadings(doc, "h1", 2)
+		assert.Equal(t, []string{"One", "Two"}, result)
+	})
+
+	t.Run("empty heading skipped", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><body><h1>   </h1><h1>Real</h1></body></html>`)
+		result := extractHeadings(doc, "h1", 5)
+		assert.Equal(t, []string{"Real"}, result)
+	})
+
+	t.Run("no body returns nil", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head></head></html>`)
+		result := extractHeadings(doc, "h1", 5)
+		assert.Nil(t, result)
+	})
+}
+
+func TestExtractBodyWords_GoQuery(t *testing.T) {
+	t.Run("strips nav content", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><body><p>Hello World</p><nav>Skip This</nav></body></html>`)
+		result := extractBodyWords(doc)
+		assert.Contains(t, result, "hello")
+		assert.Contains(t, result, "world")
+		assert.NotContains(t, result, "skip")
+		assert.NotContains(t, result, "this")
+	})
+
+	t.Run("empty body returns nil", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><body></body></html>`)
+		result := extractBodyWords(doc)
+		assert.Nil(t, result)
+	})
+}
+
+func TestExtractMetaRobots_GoQuery(t *testing.T) {
+	t.Run("googlebot takes precedence over robots", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><meta name="robots" content="noindex"><meta name="googlebot" content="index, follow"></head></html>`)
+		result := extractMetaRobots(doc)
+		assert.Equal(t, []string{"index", "follow"}, result)
+	})
+
+	t.Run("robots used when no googlebot", func(t *testing.T) {
+		doc := parseGoQueryDoc(t, `<html><head><meta name="robots" content="noindex, nofollow"></head></html>`)
+		result := extractMetaRobots(doc)
+		assert.Equal(t, []string{"noindex", "nofollow"}, result)
+	})
+}
+
+func TestExtractLinkMetrics_GoQuery(t *testing.T) {
+	htmlStr := `<html><body>
+		<a href="/page1">Internal 1</a>
+		<a href="/page2">Internal 2</a>
+		<a href="https://other.com/a">External 1</a>
+		<a href="https://other.com/b">External 2</a>
+		<a href="https://spam.com" rel="nofollow">Spam</a>
+		<a href="javascript:void(0)">JS Link</a>
+	</body></html>`
+
+	doc := parseGoQueryDoc(t, htmlStr)
+	seo := &types.PageSEO{}
+	extractLinkMetrics(doc, "", "https://example.com/", seo)
+
+	assert.Equal(t, 5, seo.LinksTotal)
+	assert.Equal(t, 2, seo.LinksInternal)
+	assert.Equal(t, 3, seo.LinksExternal)
+	assert.Equal(t, 1, seo.LinksNofollow)
+	assert.Equal(t, 0, seo.LinksNofollowInternal)
+	assert.Equal(t, 1, seo.LinksNofollowExternal)
+	assert.Equal(t, map[string]int{"other.com": 2, "spam.com": 1}, seo.ExternalDomains)
+}
+
+func TestExtractImageMetrics_GoQuery(t *testing.T) {
+	htmlStr := `<html><body>
+		<img src="/img.png" alt="photo">
+		<img src="https://other-cdn.com/pic.jpg">
+		<img src="data:image/png;base64,abc">
+	</body></html>`
+
+	doc := parseGoQueryDoc(t, htmlStr)
+	seo := &types.PageSEO{}
+	extractImageMetrics(doc, "", "https://example.com/", seo)
+
+	assert.Equal(t, 2, seo.ImagesTotal)
+	assert.Equal(t, 1, seo.ImagesInternal)
+	assert.Equal(t, 1, seo.ImagesExternal)
+	assert.Equal(t, 1, seo.ImagesWithAlt)
+	assert.Equal(t, 1, seo.ImagesWithoutAlt)
+}
+
+func TestExtractHreflang_GoQuery(t *testing.T) {
+	htmlStr := `<html><head>
+		<link rel="alternate" hreflang="en" href="https://example.com/en">
+		<link rel="alternate" hreflang="fr" href="https://example.com/fr">
+		<link rel="alternate" href="https://example.com/rss">
+	</head></html>`
+
+	doc := parseGoQueryDoc(t, htmlStr)
+	result := extractHreflang(doc, "https://example.com/en")
+
+	assert.Len(t, result, 2)
+	assert.Equal(t, "en", result[0].Lang)
+	assert.Equal(t, "https://example.com/en", result[0].URL)
+	assert.Equal(t, "fr", result[1].Lang)
+	assert.Equal(t, "https://example.com/fr", result[1].URL)
+
+	selfLang := extractHreflangSelf(result, "https://example.com/en")
+	assert.Equal(t, "en", selfLang)
+}
+
+func TestExtractStructuredDataTypes_GoQuery(t *testing.T) {
+	htmlStr := `<html><head>
+		<script type="application/ld+json">{"@type":"Article","name":"Test"}</script>
+		<script type="application/ld+json">{"@graph":[{"@type":"WebPage"},{"@type":"Article"}]}</script>
+	</head></html>`
+
+	doc := parseGoQueryDoc(t, htmlStr)
+	result := extractStructuredDataTypes(doc)
+
+	assert.Equal(t, []string{"Article", "WebPage"}, result)
+}
+
+func TestExtractPageSEO_FullIntegration(t *testing.T) {
+	htmlContent := `<!DOCTYPE html>
+<html>
+<head>
+    <title>Integration Test Page</title>
+    <meta name="description" content="A full integration test page.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://example.com/">
+    <link rel="alternate" hreflang="en" href="https://example.com/">
+    <link rel="alternate" hreflang="es" href="https://example.com/es">
+    <script type="application/ld+json">{"@type":"WebPage","name":"Test"}</script>
+    <script type="application/ld+json">{"@type":"Organization","name":"Example"}</script>
+</head>
+<body>
+    <h1>Welcome to Integration Test</h1>
+    <h2>Section One</h2>
+    <h2>Section Two</h2>
+    <h3>Subsection A</h3>
+
+    <p>This is the main content area with some words for counting purposes in the test.</p>
+
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+    <a href="https://external.com/page">External Link</a>
+    <a href="https://partner.org/info" rel="nofollow">Partner</a>
+
+    <img src="/logo.png" alt="Logo">
+    <img src="https://cdn.example.com/banner.jpg" alt="Banner">
+    <img src="https://other-cdn.com/photo.png">
+</body>
+</html>`
+
+	doc, err := ParseWithDOM([]byte(htmlContent))
+	assert.NoError(t, err)
+
+	seo := doc.ExtractPageSEO(200, "https://example.com/")
+
+	assert.Equal(t, "Integration Test Page", seo.Title)
+	assert.Equal(t, types.IndexStatusIndexable, seo.IndexStatus)
+	assert.Equal(t, "A full integration test page.", seo.MetaDescription)
+	assert.Equal(t, []string{"index", "follow"}, seo.MetaRobots)
+	assert.Equal(t, "https://example.com/", seo.CanonicalURL)
+
+	assert.Equal(t, []string{"Welcome to Integration Test"}, seo.H1s)
+	assert.Equal(t, []string{"Section One", "Section Two"}, seo.H2s)
+	assert.Equal(t, []string{"Subsection A"}, seo.H3s)
+
+	assert.Equal(t, 4, seo.LinksTotal)
+	assert.Equal(t, 2, seo.LinksInternal)
+	assert.Equal(t, 2, seo.LinksExternal)
+	assert.Equal(t, 1, seo.LinksNofollow)
+	assert.Equal(t, 0, seo.LinksNofollowInternal)
+	assert.Equal(t, 1, seo.LinksNofollowExternal)
+	assert.Contains(t, seo.ExternalDomains, "external.com")
+	assert.Contains(t, seo.ExternalDomains, "partner.org")
+
+	assert.Equal(t, 3, seo.ImagesTotal)
+	assert.Equal(t, 2, seo.ImagesInternal)
+	assert.Equal(t, 1, seo.ImagesExternal)
+	assert.Equal(t, 2, seo.ImagesWithAlt)
+	assert.Equal(t, 1, seo.ImagesWithoutAlt)
+
+	assert.True(t, seo.WordCount > 0)
+
+	assert.Len(t, seo.Hreflang, 2)
+	assert.Equal(t, "en", seo.Hreflang[0].Lang)
+	assert.Equal(t, "https://example.com/", seo.Hreflang[0].URL)
+	assert.Equal(t, "es", seo.Hreflang[1].Lang)
+	assert.Equal(t, "https://example.com/es", seo.Hreflang[1].URL)
+	assert.Equal(t, "en", seo.HreflangSelf)
+
+	assert.Equal(t, []string{"Organization", "WebPage"}, seo.StructuredDataTypes)
 }

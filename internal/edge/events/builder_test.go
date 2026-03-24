@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -714,6 +715,115 @@ func TestBuildRequestEvent_DimensionActionEmpty(t *testing.T) {
 	event := BuildRequestEvent(renderCtx, result, 50*time.Millisecond, "eg-1")
 
 	assert.Empty(t, event.DimensionAction)
+}
+
+func TestBuildRequestEvent_RuleIDs(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+		RuleIDs:    []uint32{1, 2, 3},
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	assert.Equal(t, []uint32{1, 2, 3}, event.RuleIDs)
+}
+
+func TestBuildRequestEvent_OriginalPageSEO(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+		OriginalPageSEO: &types.PageSEO{
+			Title: "Original",
+		},
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	require.NotNil(t, event.PageSEOOriginal)
+	assert.Equal(t, "Original", event.PageSEOOriginal.Title)
+}
+
+func TestBuildRequestEvent_NoContentProcessor(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	assert.Nil(t, event.RuleIDs)
+	assert.Nil(t, event.PageSEOOriginal)
+}
+
+func TestBuildRequestEvent_BothPageSEOs(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+		PageSEO: &types.PageSEO{
+			Title: "Modified",
+		},
+		OriginalPageSEO: &types.PageSEO{
+			Title: "Original",
+		},
+	}
+
+	event := BuildRequestEvent(renderCtx, result, 100*time.Millisecond, "eg-1")
+
+	require.NotNil(t, event.PageSEO)
+	assert.Equal(t, "Modified", event.PageSEO.Title)
+	require.NotNil(t, event.PageSEOOriginal)
+	assert.Equal(t, "Original", event.PageSEOOriginal.Title)
+}
+
+func TestRequestEvent_JSONSerialization(t *testing.T) {
+	t.Run("fields present", func(t *testing.T) {
+		event := &RequestEvent{
+			RequestID: "req-1",
+			RuleIDs:   []uint32{10, 20},
+			PageSEOOriginal: &PageSEOEvent{
+				Title: "Original Title",
+			},
+		}
+
+		data, err := json.Marshal(event)
+		require.NoError(t, err)
+
+		var m map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &m))
+
+		assert.Contains(t, m, "rule_ids")
+		assert.Contains(t, m, "page_seo_original")
+
+		ruleIDs := m["rule_ids"].([]interface{})
+		assert.Len(t, ruleIDs, 2)
+		assert.Equal(t, float64(10), ruleIDs[0])
+		assert.Equal(t, float64(20), ruleIDs[1])
+
+		original := m["page_seo_original"].(map[string]interface{})
+		assert.Equal(t, "Original Title", original["title"])
+	})
+
+	t.Run("fields omitted when empty", func(t *testing.T) {
+		event := &RequestEvent{
+			RequestID: "req-2",
+		}
+
+		data, err := json.Marshal(event)
+		require.NoError(t, err)
+
+		var m map[string]interface{}
+		require.NoError(t, json.Unmarshal(data, &m))
+
+		_, hasRuleIDs := m["rule_ids"]
+		_, hasOriginal := m["page_seo_original"]
+		assert.False(t, hasRuleIDs)
+		assert.False(t, hasOriginal)
+	})
 }
 
 // createTestRenderContext creates a minimal RenderContext for testing

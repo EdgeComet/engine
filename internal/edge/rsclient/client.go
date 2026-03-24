@@ -157,6 +157,7 @@ func (rc *RSClient) CallRenderService(
 			Success:    metadata.Success,
 			HTML:       string(htmlBytes),
 			Error:      metadata.Error,
+			ErrorType:  metadata.ErrorType,
 			RenderTime: metadata.RenderTime,
 			HTMLSize:   metadata.HTMLSize,
 			Timestamp:  metadata.Timestamp,
@@ -164,7 +165,6 @@ func (rc *RSClient) CallRenderService(
 			Metrics:    metadata.Metrics,
 			Headers:    metadata.Headers,
 			HAR:        metadata.HAR,
-			PageSEO:    metadata.PageSEO,
 		}
 
 		rc.logger.Debug("Parsed binary response",

@@ -93,6 +93,13 @@ func BuildRequestEvent(
 		if result.PageSEO != nil {
 			event.PageSEO = convertPageSEO(result.PageSEO)
 		}
+
+		if len(result.RuleIDs) > 0 {
+			event.RuleIDs = result.RuleIDs
+		}
+		if result.OriginalPageSEO != nil {
+			event.PageSEOOriginal = convertPageSEO(result.OriginalPageSEO)
+		}
 	}
 
 	// Override EventType for precache requests

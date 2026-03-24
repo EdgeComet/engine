@@ -41,7 +41,6 @@ func writeBinaryResponse(ctx *fasthttp.RequestCtx, renderResp *types.RenderRespo
 		Metrics:    renderResp.Metrics,
 		Headers:    renderResp.Headers,
 		HAR:        renderResp.HAR,
-		PageSEO:    renderResp.PageSEO,
 	}
 
 	// Marshal metadata to JSON

@@ -23,7 +23,6 @@ import (
 	"github.com/chromedp/chromedp"
 	"go.uber.org/zap"
 
-	"github.com/edgecomet/engine/internal/common/htmlprocessor"
 	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/internal/render/har"
 	"github.com/edgecomet/engine/pkg/types"
@@ -162,41 +161,6 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 			zap.Int("instance_id", ci.ID),
 			zap.String("url", req.URL),
 			zap.Int("status_code", resp.Metrics.StatusCode))
-	}
-
-	// Parse HTML and extract SEO metadata
-	doc, err := htmlprocessor.ParseWithDOM([]byte(resp.HTML))
-	if err != nil {
-		ci.logger.Warn("Failed to parse HTML for SEO extraction",
-			zap.String("request_id", req.RequestID),
-			zap.Int("instance_id", ci.ID),
-			zap.String("url", req.URL),
-			zap.Error(err))
-		// Return minimal PageSEO with default IndexStatus
-		resp.PageSEO = &types.PageSEO{
-			IndexStatus: types.IndexStatusIndexable,
-		}
-	} else {
-		resp.PageSEO = doc.ExtractPageSEO(resp.Metrics.StatusCode, resp.Metrics.FinalURL)
-
-		if req.StripScripts {
-			if doc.CleanScripts() {
-				cleaned := doc.HTML()
-				if len(cleaned) > 0 {
-					resp.HTML = string(cleaned)
-					resp.HTMLSize = len(resp.HTML)
-					ci.logger.Debug("Scripts cleaned from HTML",
-						zap.String("request_id", req.RequestID),
-						zap.Int("instance_id", ci.ID),
-						zap.String("url", req.URL))
-				} else {
-					ci.logger.Warn("Failed to regenerate HTML after script cleaning",
-						zap.String("request_id", req.RequestID),
-						zap.Int("instance_id", ci.ID),
-						zap.String("url", req.URL))
-				}
-			}
-		}
 	}
 
 	// Build and attach HAR if collector exists

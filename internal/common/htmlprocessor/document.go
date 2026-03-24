@@ -1,6 +1,9 @@
 package htmlprocessor
 
-import "github.com/edgecomet/engine/pkg/types"
+import (
+	"github.com/PuerkitoBio/goquery"
+	"github.com/edgecomet/engine/pkg/types"
+)
 
 const maxTitleLength = 200
 
@@ -18,6 +21,9 @@ type Document interface {
 	// CleanScripts removes executable script elements.
 	// Returns true if any were removed.
 	CleanScripts() bool
+
+	// GoQueryDoc returns the underlying goquery Document for advanced queries.
+	GoQueryDoc() *goquery.Document
 
 	// HTML returns current HTML as bytes (re-serialized from DOM).
 	HTML() []byte

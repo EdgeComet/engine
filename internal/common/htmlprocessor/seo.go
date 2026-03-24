@@ -7,15 +7,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/pkg/types"
-	"golang.org/x/net/html"
 )
-
-var contentStripElements = map[string]bool{
-	"nav": true, "header": true, "footer": true, "aside": true,
-	"form": true, "script": true, "style": true, "noscript": true,
-}
 
 // truncateRunes truncates a string to maxLen runes (not bytes).
 // Returns the original string if it's already within the limit.
@@ -64,54 +59,34 @@ func topNDomains(counts map[string]int, n int) map[string]int {
 	return result
 }
 
-// extractSEOTitle extracts page title with SEO-specific 500-char limit.
-// Does NOT reuse Title() which has 200-char limit.
-func extractSEOTitle(head *html.Node) string {
-	if head == nil {
-		return ""
-	}
-	title := findElementInParent(head, "title")
-	if title == nil {
-		return ""
-	}
-	text := strings.TrimSpace(getTextContent(title))
+func extractSEOTitle(doc *goquery.Document) string {
+	text := strings.TrimSpace(doc.Find("head title").First().Text())
 	return truncateRunes(text, types.MaxSEOTitleLength)
 }
 
-// extractMetaDescription extracts the meta description content.
-// Searches only in <head>, returns first match, max 1000 chars.
-func extractMetaDescription(head *html.Node) string {
-	if head == nil {
-		return ""
-	}
-	metas := findAllElementsInParent(head, "meta")
-	for _, meta := range metas {
-		name := strings.ToLower(getAttr(meta, "name"))
+func extractMetaDescription(doc *goquery.Document) string {
+	var result string
+	doc.Find("head meta").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		name := strings.ToLower(getSelectionAttr(s, "name"))
 		if name == "description" {
-			content := strings.TrimSpace(getAttr(meta, "content"))
-			if content == "" {
-				return ""
+			content := strings.TrimSpace(getSelectionAttr(s, "content"))
+			if content != "" {
+				result = truncateRunes(content, types.MaxMetaDescriptionLength)
 			}
-			return truncateRunes(content, types.MaxMetaDescriptionLength)
+			return false
 		}
-	}
-	return ""
+		return true
+	})
+	return result
 }
 
-// extractMetaRobots extracts parsed robots directives as lowercased, trimmed strings.
-// Priority: If any googlebot tag has non-empty content, use googlebot; otherwise use robots.
-func extractMetaRobots(head *html.Node) []string {
-	if head == nil {
-		return nil
-	}
-	metas := findAllElementsInParent(head, "meta")
-
+func extractMetaRobots(doc *goquery.Document) []string {
 	var googlebotContent string
 	var robotsContent string
 
-	for _, meta := range metas {
-		name := strings.ToLower(getAttr(meta, "name"))
-		content := strings.TrimSpace(getAttr(meta, "content"))
+	doc.Find("head meta").Each(func(_ int, s *goquery.Selection) {
+		name := strings.ToLower(getSelectionAttr(s, "name"))
+		content := strings.TrimSpace(getSelectionAttr(s, "content"))
 
 		switch name {
 		case "googlebot":
@@ -123,7 +98,7 @@ func extractMetaRobots(head *html.Node) []string {
 				robotsContent = content
 			}
 		}
-	}
+	})
 
 	raw := googlebotContent
 	if raw == "" {
@@ -147,45 +122,28 @@ func extractMetaRobots(head *html.Node) []string {
 	return directives
 }
 
-// extractBaseHref extracts the base href URL for relative URL resolution.
-func extractBaseHref(head *html.Node) string {
-	if head == nil {
-		return ""
-	}
-	base := findElementInParent(head, "base")
-	if base == nil {
-		return ""
-	}
-	return strings.TrimSpace(getAttr(base, "href"))
+func extractCanonicalURL(doc *goquery.Document) string {
+	href, _ := doc.Find("head link[rel='canonical']").First().Attr("href")
+	return strings.TrimSpace(href)
 }
 
-// extractHeadings extracts heading text content from body.
-// Returns first maxCount non-empty headings, with whitespace collapsed and text truncated.
-func extractHeadings(body *html.Node, tag string, maxCount int) []string {
-	if body == nil {
-		return nil
-	}
+func extractBaseHref(doc *goquery.Document) string {
+	href, _ := doc.Find("head base").First().Attr("href")
+	return strings.TrimSpace(href)
+}
 
-	elements := findAllElementsInParent(body, tag)
-	if len(elements) == 0 {
-		return nil
-	}
-
+func extractHeadings(doc *goquery.Document, tag string, maxCount int) []string {
 	var results []string
-	for _, elem := range elements {
+	doc.Find("body " + tag).EachWithBreak(func(_ int, s *goquery.Selection) bool {
 		if len(results) >= maxCount {
-			break
+			return false
 		}
-
-		text := collapseWhitespace(getTextContent(elem))
-		if text == "" {
-			continue
+		text := collapseWhitespace(s.Text())
+		if text != "" {
+			results = append(results, truncateRunes(text, types.MaxHeadingLength))
 		}
-
-		text = truncateRunes(text, types.MaxHeadingLength)
-		results = append(results, text)
-	}
-
+		return true
+	})
 	if len(results) == 0 {
 		return nil
 	}
@@ -243,49 +201,43 @@ func resolveURL(href, baseURL string) string {
 
 // extractLinkMetrics populates link metrics in the PageSEO struct.
 // Extracts from body only, handles base tag, classifies internal/external.
-func extractLinkMetrics(body *html.Node, baseHref, pageURL string, seo *types.PageSEO) {
-	if body == nil || seo == nil {
+func extractLinkMetrics(doc *goquery.Document, baseHref, pageURL string, seo *types.PageSEO) {
+	if seo == nil {
 		return
 	}
 
-	// Determine effective base URL for resolution
 	effectiveBase := pageURL
 	if baseHref != "" {
-		// Resolve base href against page URL first
 		effectiveBase = resolveURL(baseHref, pageURL)
 	}
 
-	// Parse page URL to get origin for comparison
 	pageOrigin := ""
 	if parsed, err := url.Parse(pageURL); err == nil {
 		pageOrigin = parsed.Host
 	}
 
-	links := findAllElementsInParent(body, "a")
 	externalDomains := make(map[string]int)
 
-	for _, link := range links {
-		href := getAttr(link, "href")
+	doc.Find("body a").Each(func(_ int, s *goquery.Selection) {
+		href := getSelectionAttr(s, "href")
 		if shouldSkipLink(href) {
-			continue
+			return
 		}
 
 		seo.LinksTotal++
 
-		rel := strings.ToLower(getAttr(link, "rel"))
+		rel := strings.ToLower(getSelectionAttr(s, "rel"))
 		isNofollow := strings.Contains(rel, "nofollow")
 
-		// Resolve the URL
 		resolved := resolveURL(href, effectiveBase)
 		parsed, err := url.Parse(resolved)
 		if err != nil {
-			// Can't parse, count as external
 			seo.LinksExternal++
 			if isNofollow {
 				seo.LinksNofollow++
 				seo.LinksNofollowExternal++
 			}
-			continue
+			return
 		}
 
 		linkHost := parsed.Host
@@ -309,17 +261,16 @@ func extractLinkMetrics(body *html.Node, baseHref, pageURL string, seo *types.Pa
 				seo.LinksNofollowExternal++
 			}
 		}
-	}
+	})
 
-	// Limit external domains to top N
 	if len(externalDomains) > 0 {
 		seo.ExternalDomains = topNDomains(externalDomains, types.MaxExternalDomains)
 	}
 }
 
 // extractImageMetrics populates image metrics in the PageSEO struct.
-func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.PageSEO) {
-	if body == nil || seo == nil {
+func extractImageMetrics(doc *goquery.Document, baseHref, pageURL string, seo *types.PageSEO) {
+	if seo == nil {
 		return
 	}
 
@@ -333,17 +284,15 @@ func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.P
 		pageOrigin = parsed.Host
 	}
 
-	images := findAllElementsInParent(body, "img")
-
-	for _, img := range images {
-		src := getAttr(img, "src")
+	doc.Find("body img").Each(func(_ int, s *goquery.Selection) {
+		src := getSelectionAttr(s, "src")
 		if shouldSkipImageSrc(src) {
-			continue
+			return
 		}
 
 		seo.ImagesTotal++
 
-		alt := getAttr(img, "alt")
+		alt := getSelectionAttr(s, "alt")
 		if alt != "" {
 			seo.ImagesWithAlt++
 		} else {
@@ -354,13 +303,13 @@ func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.P
 		parsed, err := url.Parse(resolved)
 		if err != nil {
 			seo.ImagesExternal++
-			continue
+			return
 		}
 
 		imgHost := parsed.Host
 		if imgHost == "" {
 			seo.ImagesInternal++
-			continue
+			return
 		}
 
 		if urlutil.IsSameOrigin(pageOrigin, imgHost) {
@@ -368,31 +317,17 @@ func extractImageMetrics(body *html.Node, baseHref, pageURL string, seo *types.P
 		} else {
 			seo.ImagesExternal++
 		}
-	}
+	})
 }
 
-func extractBodyWords(body *html.Node) []string {
-	if body == nil {
+func extractBodyWords(doc *goquery.Document) []string {
+	body := doc.Find("body")
+	if body.Length() == 0 {
 		return nil
 	}
-
-	var sb strings.Builder
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && contentStripElements[n.Data] {
-			return
-		}
-		if n.Type == html.TextNode {
-			sb.WriteString(n.Data)
-			sb.WriteByte(' ')
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(body)
-
-	raw := sb.String()
+	clone := body.Clone()
+	clone.Find("nav, header, footer, aside, form, script, style, noscript").Remove()
+	raw := clone.Text()
 	fields := strings.Fields(raw)
 	if len(fields) == 0 {
 		return nil
@@ -404,43 +339,24 @@ func extractBodyWords(body *html.Node) []string {
 }
 
 // extractHreflang extracts hreflang alternate links from head.
-func extractHreflang(head *html.Node, pageURL string) []types.HreflangEntry {
-	if head == nil {
-		return nil
-	}
-
-	links := findAllElementsInParent(head, "link")
+func extractHreflang(doc *goquery.Document, pageURL string) []types.HreflangEntry {
 	var entries []types.HreflangEntry
-
-	for _, link := range links {
-		rel := strings.ToLower(getAttr(link, "rel"))
-		if rel != "alternate" {
-			continue
-		}
-
-		hreflang := strings.TrimSpace(getAttr(link, "hreflang"))
+	doc.Find("head link[rel='alternate']").Each(func(_ int, s *goquery.Selection) {
+		hreflang := strings.TrimSpace(getSelectionAttr(s, "hreflang"))
 		if hreflang == "" {
-			continue
+			return
 		}
-
-		href := strings.TrimSpace(getAttr(link, "href"))
+		href := strings.TrimSpace(getSelectionAttr(s, "href"))
 		if href == "" {
-			continue
+			return
 		}
-
-		// Resolve URL and truncate
 		resolved := resolveCanonicalURL(href, pageURL)
 		if resolved == "" {
 			resolved = href
 		}
 		resolved = truncateRunes(resolved, types.MaxHreflangURLLength)
-
-		entries = append(entries, types.HreflangEntry{
-			Lang: hreflang,
-			URL:  resolved,
-		})
-	}
-
+		entries = append(entries, types.HreflangEntry{Lang: hreflang, URL: resolved})
+	})
 	if len(entries) == 0 {
 		return nil
 	}
@@ -461,34 +377,18 @@ func extractHreflangSelf(entries []types.HreflangEntry, pageURL string) string {
 }
 
 // extractStructuredDataTypes extracts @type values from JSON-LD scripts.
-func extractStructuredDataTypes(root *html.Node) []string {
-	if root == nil {
-		return nil
-	}
-
-	scripts := findAllElementsInParent(root, "script")
+func extractStructuredDataTypes(doc *goquery.Document) []string {
 	typeSet := make(map[string]struct{})
-
-	for _, script := range scripts {
-		scriptType := strings.ToLower(strings.TrimSpace(getAttr(script, "type")))
-		if scriptType != "application/ld+json" {
-			continue
-		}
-
-		content := getTextContent(script)
+	doc.Find("script[type='application/ld+json']").Each(func(_ int, s *goquery.Selection) {
+		content := s.Text()
 		if len(content) > types.MaxJSONLDSize {
-			// Skip oversized JSON-LD blocks
-			continue
+			return
 		}
-
 		extractTypesFromJSON([]byte(content), typeSet, 0)
-	}
-
+	})
 	if len(typeSet) == 0 {
 		return nil
 	}
-
-	// Convert set to sorted slice for deterministic output
 	result := make([]string, 0, len(typeSet))
 	for t := range typeSet {
 		result = append(result, t)
@@ -554,51 +454,36 @@ func addType(v interface{}, typeSet map[string]struct{}) {
 	}
 }
 
-// ExtractPageSEO extracts comprehensive SEO metadata from the document.
 func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.PageSEO {
 	seo := &types.PageSEO{}
 
-	head := findElement(d.root, "head")
-	body := findElement(d.root, "body")
-
-	// Basic metadata
-	seo.Title = extractSEOTitle(head)
+	seo.Title = extractSEOTitle(d.doc)
 	seo.IndexStatus = d.IndexationStatus(statusCode, pageURL)
+	seo.MetaDescription = extractMetaDescription(d.doc)
+	seo.MetaRobots = extractMetaRobots(d.doc)
 
-	// Meta tags
-	seo.MetaDescription = extractMetaDescription(head)
-	seo.MetaRobots = extractMetaRobots(head)
-
-	// Canonical URL - reuse existing extraction and resolution
-	canonicalRaw := extractCanonicalURL(head)
+	canonicalRaw := extractCanonicalURL(d.doc)
 	if canonicalRaw != "" {
 		resolved := resolveCanonicalURL(canonicalRaw, pageURL)
 		seo.CanonicalURL = truncateRunes(resolved, types.MaxCanonicalURLLength)
 	}
 
-	// Headings
-	seo.H1s = extractHeadings(body, "h1", types.MaxHeadingsPerLevel)
-	seo.H2s = extractHeadings(body, "h2", types.MaxHeadingsPerLevel)
-	seo.H3s = extractHeadings(body, "h3", types.MaxHeadingsPerLevel)
+	seo.H1s = extractHeadings(d.doc, "h1", types.MaxHeadingsPerLevel)
+	seo.H2s = extractHeadings(d.doc, "h2", types.MaxHeadingsPerLevel)
+	seo.H3s = extractHeadings(d.doc, "h3", types.MaxHeadingsPerLevel)
 
-	// Get base href for URL resolution
-	baseHref := extractBaseHref(head)
+	baseHref := extractBaseHref(d.doc)
+	extractLinkMetrics(d.doc, baseHref, pageURL, seo)
+	extractImageMetrics(d.doc, baseHref, pageURL, seo)
 
-	// Links and images
-	extractLinkMetrics(body, baseHref, pageURL, seo)
-	extractImageMetrics(body, baseHref, pageURL, seo)
-
-	words := extractBodyWords(body)
+	words := extractBodyWords(d.doc)
 	if len(words) > 0 {
 		seo.WordCount = len(words)
 	}
 
-	// International SEO
-	seo.Hreflang = extractHreflang(head, pageURL)
+	seo.Hreflang = extractHreflang(d.doc, pageURL)
 	seo.HreflangSelf = extractHreflangSelf(seo.Hreflang, pageURL)
-
-	// Structured data
-	seo.StructuredDataTypes = extractStructuredDataTypes(d.root)
+	seo.StructuredDataTypes = extractStructuredDataTypes(d.doc)
 
 	return seo
 }

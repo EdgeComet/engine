@@ -9,8 +9,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/configtypes"
-	"github.com/edgecomet/engine/internal/common/htmlprocessor"
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
@@ -38,6 +38,9 @@ const (
 	redisTabOperationTimeout   = 2 * time.Second // Tab reservation/release
 	redisLockOperationTimeout  = 3 * time.Second // Lock acquisition
 	redisCacheOperationTimeout = 5 * time.Second // Cache metadata storage
+
+	// Content processing timeout for bypass path
+	contentProcessingTimeout = 5 * time.Second
 
 	// Sharding operation timeouts
 	defaultInterEgTimeout = 3 * time.Second // Default timeout for inter-EG operations (push/pull)
@@ -178,15 +181,17 @@ type RenderResult struct {
 	BytesServed int64          // Response size in bytes
 
 	// Extended fields for event logging
-	StatusCode   int                // HTTP status code
-	PageSEO      *types.PageSEO     // Full SEO metadata (nil for cache hits; populated for renders and bypass HTML)
-	Metrics      *types.PageMetrics // Page metrics (nil for cache hits)
-	CacheAge     time.Duration      // Cache age (for cache hits)
-	ChromeID     string             // Chrome instance ID (for renders)
-	RenderTime   time.Duration      // Render duration (for renders)
-	ErrorType    string             // Structured error category (e.g., "soft_timeout", "origin_4xx")
-	ErrorMessage string             // Detailed error description
-	RedirectTo   string             // Redirect target URL (Location header value for 3xx)
+	StatusCode      int                // HTTP status code
+	PageSEO         *types.PageSEO     // Full SEO metadata (nil for cache hits; populated for renders and bypass HTML)
+	Metrics         *types.PageMetrics // Page metrics (nil for cache hits)
+	CacheAge        time.Duration      // Cache age (for cache hits)
+	ChromeID        string             // Chrome instance ID (for renders)
+	RenderTime      time.Duration      // Render duration (for renders)
+	ErrorType       string             // Structured error category (e.g., "soft_timeout", "origin_4xx")
+	ErrorMessage    string             // Detailed error description
+	RedirectTo      string             // Redirect target URL (Location header value for 3xx)
+	RuleIDs         []uint32           // Content processor rule IDs
+	OriginalPageSEO *types.PageSEO     // PageSEO before content processing (nil when unmodified)
 }
 
 // RenderOrchestrator coordinates rendering requests, service selection, and fallback handling
@@ -204,6 +209,13 @@ type RenderOrchestrator struct {
 	redis            *redis.Client
 	logger           *zap.Logger
 	configManager    configtypes.EGConfigManager
+
+	contentProcessor ContentProcessor // optional, nil = no-op
+}
+
+// SetContentProcessor sets an optional content processor for post-render transformations.
+func (ro *RenderOrchestrator) SetContentProcessor(cp ContentProcessor) {
+	ro.contentProcessor = cp
 }
 
 // TabReservation contains service and tab info from Lua script
@@ -225,7 +237,6 @@ type RenderServiceResult struct {
 	Metrics          types.PageMetrics   // Complete page metrics (lifecycle, errors, etc.)
 	Headers          map[string][]string // HTTP response headers from rendered page
 	HAR              []byte              // HAR data for debugging (JSON bytes)
-	PageSEO          *types.PageSEO      // Comprehensive SEO metadata extracted from HTML
 	ErrorType        string              // Structured error category from render service
 	ErrorMessage     string              // Detailed error description from render service
 }
@@ -296,11 +307,11 @@ func (ro *RenderOrchestrator) ProcessRenderRequest(renderCtx *edgectx.RenderCont
 	if cached, exists := ro.cacheCoord.LookupCache(renderCtx); exists {
 		// Check if cache is fresh or stale
 		if cached.IsFresh() {
-			// Redirects are metadata-only and accessible via Redis on all EGs
+			// Metadata-only entries (redirects, status overrides) are accessible via Redis on all EGs
 			// Regular content requires file ownership check
-			isRedirect := isRedirectStatusCode(cached.StatusCode)
+			isMetadataOnly := cached.DiskSize == 0
 
-			if isRedirect || ro.cacheCoord.IsFileLocal(cached) {
+			if isMetadataOnly || ro.cacheCoord.IsFileLocal(cached) {
 				result, err := ro.serveFromCache(renderCtx, cached)
 				if err == nil {
 					renderCtx.Logger.Info("Early cache hit, served without locking")
@@ -602,7 +613,6 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 	}
 
 	// Extract values for clarity
-	html := renderResult.HTML
 	statusCode := renderResult.StatusCode
 	redirectLocation := renderResult.RedirectLocation
 
@@ -627,13 +637,42 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		renderCtx.Logger.Info("No stale cache available, serving 5xx response")
 	}
 
+	// Content processing: script cleaning, SEO extraction, and optional content processor
+	stripScripts := renderCtx.ResolvedConfig.Render.StripScripts
+	processed := ProcessContent(
+		reqCtx,
+		renderResult.HTML,
+		statusCode,
+		renderCtx.TargetURL,
+		stripScripts,
+		renderCtx.Host.ID,
+		ro.contentProcessor,
+		renderCtx.Logger,
+	)
+	html := processed.HTML
+
+	// Handle content processor override (e.g., redirect or status change)
+	if processed.Override != nil {
+		return ro.serveOverride(renderCtx, processed, overrideParams{
+			source:       ServedFromRender,
+			cacheSource:  cache.SourceRender,
+			cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
+			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
+			cacheEnabled: true, // render cache has no separate Enabled flag
+			startTime:    renderStart,
+			serviceID:    reservation.ServiceID,
+		})
+	}
+
 	// Check if status code is cacheable (configurable)
 	cacheableStatusCodes := renderCtx.ResolvedConfig.Cache.StatusCodes
 	shouldCache := renderCtx.ResolvedConfig.Cache.TTL > 0 &&
 		isStatusCodeCacheable(statusCode, cacheableStatusCodes)
 
 	if shouldCache {
-		if err := ro.cacheCoord.SaveRenderCache(renderCtx, renderResult); err != nil {
+		// Use processed HTML (scripts stripped) for cache, not raw RS HTML
+		renderResult.HTML = html
+		if err := ro.cacheCoord.SaveRenderCache(renderCtx, renderResult, processed.PageSEO); err != nil {
 			renderCtx.Logger.Error("Failed to save render to cache", zap.Error(err))
 			// Continue - we can still serve the response to client
 		}
@@ -688,18 +727,20 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 	}
 
 	result := &RenderResult{
-		Source:       ServedFromRender,
-		ServiceID:    reservation.ServiceID,
-		Duration:     duration,
-		BytesServed:  int64(len(html)),
-		StatusCode:   renderResult.StatusCode,
-		PageSEO:      renderResult.PageSEO,
-		Metrics:      &renderResult.Metrics,
-		ChromeID:     renderResult.ChromeID,
-		RenderTime:   renderResult.RenderTime,
-		ErrorType:    errorType,
-		ErrorMessage: errorMessage,
-		RedirectTo:   redirectTo,
+		Source:          ServedFromRender,
+		ServiceID:       reservation.ServiceID,
+		Duration:        duration,
+		BytesServed:     int64(len(html)),
+		StatusCode:      renderResult.StatusCode,
+		PageSEO:         processed.PageSEO,
+		Metrics:         &renderResult.Metrics,
+		ChromeID:        renderResult.ChromeID,
+		RenderTime:      renderResult.RenderTime,
+		ErrorType:       errorType,
+		ErrorMessage:    errorMessage,
+		RedirectTo:      redirectTo,
+		RuleIDs:         processed.RuleIDs,
+		OriginalPageSEO: processed.OriginalPageSEO,
 	}
 
 	// Lock and tab will be released by defer AFTER cache write and serving complete
@@ -782,7 +823,6 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 		Metrics:          resp.Metrics,
 		Headers:          resp.Headers,
 		HAR:              resp.HAR,
-		PageSEO:          resp.PageSEO,
 		ErrorType:        resp.ErrorType,
 		ErrorMessage:     resp.Error,
 	}, nil
@@ -799,31 +839,19 @@ func (ro *RenderOrchestrator) serveFromCache(renderCtx *edgectx.RenderContext, c
 		source = ServedFromBypassCache
 	}
 
-	isRedirect := isRedirectStatusCode(cacheEntry.StatusCode)
-
-	if isRedirect {
-		// Serve redirect from metadata only (no file read)
-		location := ""
-		if locations, ok := getHeaderCaseInsensitive(cacheEntry.Headers, "Location"); ok && len(locations) > 0 {
-			location = locations[0]
-		}
-		renderCtx.Logger.Debug("Serving redirect from cache metadata",
-			zap.Int("status_code", cacheEntry.StatusCode),
-			zap.String("location", location),
-			zap.String("source", cacheEntry.Source))
-
-		if err := ro.responseWriter.WriteCachedRedirectResponse(renderCtx, cacheEntry); err != nil {
+	// Metadata-only entries: redirects (3xx) and status overrides (404/410)
+	if cacheEntry.DiskSize == 0 {
+		if err := ro.responseWriter.WriteCachedMetadataResponse(renderCtx, cacheEntry); err != nil {
 			return nil, err
 		}
-
 		return &RenderResult{
 			Source:      source,
 			Duration:    time.Since(startTime),
-			BytesServed: 0, // No body content
+			BytesServed: 0,
 			StatusCode:  cacheEntry.StatusCode,
 			CacheAge:    time.Since(cacheEntry.CreatedAt),
 			PageSEO:     pageSEOFromCacheMetadata(cacheEntry),
-			RedirectTo:  location,
+			RedirectTo:  redirectLocationFromMetadata(cacheEntry),
 		}, nil
 	}
 
@@ -926,13 +954,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 
 		cacheResp := ro.cacheCoord.GetCacheResponseFromMemory(metadata, content)
 
-		// Use appropriate response writer based on cache source
-		var err error
-		if isBypassCache {
-			err = ro.responseWriter.WriteBypassCacheResponse(renderCtx, metadata, cacheResp)
-		} else {
-			err = ro.responseWriter.WriteCacheResponse(renderCtx, metadata, cacheResp)
-		}
+		err := ro.responseWriter.WriteCacheResponse(renderCtx, metadata, cacheResp)
 
 		if err != nil {
 			renderCtx.Logger.Error("Failed to serve pulled cache from memory", zap.Error(err))
@@ -1006,13 +1028,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 
 		cacheResp := ro.cacheCoord.GetCacheResponseFromMemory(metadata, content)
 
-		// Use appropriate response writer based on cache source
-		var err error
-		if isBypassCache {
-			err = ro.responseWriter.WriteBypassCacheResponse(renderCtx, metadata, cacheResp)
-		} else {
-			err = ro.responseWriter.WriteCacheResponse(renderCtx, metadata, cacheResp)
-		}
+		err := ro.responseWriter.WriteCacheResponse(renderCtx, metadata, cacheResp)
 
 		if err != nil {
 			renderCtx.Logger.Error("Failed to serve pulled cache from memory", zap.Error(err))
@@ -1060,8 +1076,9 @@ func (ro *RenderOrchestrator) handleCacheAvailableAfterWait(
 		return ro.serveBypass(renderCtx, "cache_stale_after_wait")
 	}
 
-	// Try local cache first (fast path) - only if current EG owns the file
-	if ro.cacheCoord.IsFileLocal(cached) {
+	// Metadata-only entries (redirects, status overrides) don't need file check
+	// Regular content requires file ownership check
+	if cached.DiskSize == 0 || ro.cacheCoord.IsFileLocal(cached) {
 		result, err := ro.serveFromCache(renderCtx, cached)
 		if err == nil {
 			renderCtx.Logger.Info("Served from local cache after lock wait")
@@ -1086,22 +1103,73 @@ func (ro *RenderOrchestrator) handleCacheAvailableAfterWait(
 	return ro.serveBypass(renderCtx, "remote_pull_failed_after_wait")
 }
 
-// ExtractBypassSEO parses HTML bypass response and extracts SEO metadata.
-// Returns nil for non-HTML content types or on parse failure.
-func ExtractBypassSEO(body []byte, contentType string, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
-	if !strings.Contains(contentType, contentTypeHTML) {
+func processedRuleIDs(p *ProcessedContent) []uint32 {
+	if p == nil {
 		return nil
 	}
+	return p.RuleIDs
+}
 
-	doc, err := htmlprocessor.ParseWithDOM(body)
-	if err != nil {
-		logger.Warn("Failed to parse bypass HTML for SEO extraction",
-			zap.String("url", targetURL),
-			zap.Error(err))
+func processedOriginalPageSEO(p *ProcessedContent) *types.PageSEO {
+	if p == nil {
 		return nil
 	}
+	return p.OriginalPageSEO
+}
 
-	return doc.ExtractPageSEO(statusCode, targetURL)
+// overrideParams captures the differences between render and bypass override handling.
+type overrideParams struct {
+	source       ResponseSource
+	cacheSource  string
+	cacheTTL     time.Duration
+	staleTTL     time.Duration
+	cacheEnabled bool
+	startTime    time.Time
+	serviceID    string
+}
+
+// serveOverride handles a content processor response override (redirect or status code).
+// Caches the override as a metadata-only entry and serves the status response.
+func (ro *RenderOrchestrator) serveOverride(
+	renderCtx *edgectx.RenderContext,
+	processed *ProcessedContent,
+	params overrideParams,
+) (*RenderResult, error) {
+	override := processed.Override
+
+	var overrideHeaders map[string][]string
+	if override.Location != "" {
+		overrideHeaders = map[string][]string{
+			"Location": {override.Location},
+		}
+	}
+
+	if params.cacheEnabled && params.cacheTTL > 0 {
+		if err := ro.cacheCoord.SaveCache(
+			renderCtx, nil, override.StatusCode, overrideHeaders,
+			params.cacheSource, params.cacheTTL, params.staleTTL,
+			false, types.IndexStatusIndexable, "",
+		); err != nil {
+			renderCtx.Logger.Error("Failed to cache override", zap.Error(err))
+		}
+	}
+
+	ro.responseWriter.WriteStatusResponse(renderCtx, config.ResolvedStatusConfig{
+		Code:    override.StatusCode,
+		Headers: singleValueHeaders(overrideHeaders),
+	})
+
+	return &RenderResult{
+		Source:          params.source,
+		ServiceID:       params.serviceID,
+		Duration:        time.Since(params.startTime),
+		BytesServed:     0,
+		StatusCode:      override.StatusCode,
+		RedirectTo:      override.Location,
+		PageSEO:         processed.PageSEO,
+		RuleIDs:         processed.RuleIDs,
+		OriginalPageSEO: processed.OriginalPageSEO,
+	}, nil
 }
 
 // serveBypass proxies the request to origin and returns render result
@@ -1127,11 +1195,11 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 			if cached.Source == cache.SourceBypass {
 				// Check if cache is fresh
 				if cached.IsFresh() {
-					// Redirects are metadata-only and accessible via Redis on all EGs
+					// Metadata-only entries (redirects, status overrides) are accessible via Redis on all EGs
 					// Regular content requires file ownership check
-					isRedirect := isRedirectStatusCode(cached.StatusCode)
+					isMetadataOnly := cached.DiskSize == 0
 
-					if isRedirect || ro.cacheCoord.IsFileLocal(cached) {
+					if isMetadataOnly || ro.cacheCoord.IsFileLocal(cached) {
 						result, err := ro.serveFromCache(renderCtx, cached)
 						if err == nil {
 							renderCtx.Logger.Info("Bypass cache hit (local), served from cache")
@@ -1173,14 +1241,48 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 		return nil, fmt.Errorf("bypass request failed: %w", err)
 	}
 
-	// 2.5. EXTRACT SEO METADATA from HTML responses
-	pageSEO := ExtractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, renderCtx.TargetURL, renderCtx.Logger)
+	// 2.5. EXTRACT SEO METADATA and run content processing on HTML responses
+	var pageSEO *types.PageSEO
+	var processed *ProcessedContent
+
+	if strings.Contains(bypassResp.ContentType, contentTypeHTML) {
+		procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
+		defer procCancel()
+
+		processed = ProcessContent(
+			procCtx,
+			bypassResp.Body,
+			bypassResp.StatusCode,
+			renderCtx.TargetURL,
+			false,
+			renderCtx.Host.ID,
+			ro.contentProcessor,
+			renderCtx.Logger,
+		)
+		pageSEO = processed.PageSEO
+
+		if processed.OriginalPageSEO != nil {
+			bypassResp.Body = processed.HTML
+		}
+	}
 
 	// 2.7. CHECK FOR 5xx - serve stale bypass if available
 	if bypassResp.StatusCode >= 500 && staleBypassCache != nil {
 		if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_5xx"); staleErr == nil {
 			return result, nil
 		}
+	}
+
+	// Handle content processor override
+	if processed != nil && processed.Override != nil {
+		return ro.serveOverride(renderCtx, processed, overrideParams{
+			source:       ServedFromBypass,
+			cacheSource:  cache.SourceBypass,
+			cacheTTL:     renderCtx.ResolvedConfig.Bypass.Cache.TTL,
+			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired),
+			cacheEnabled: renderCtx.ResolvedConfig.Bypass.Cache.Enabled,
+			startTime:    startTime,
+		})
 	}
 
 	// 3. SAVE TO CACHE if all preconditions are met
@@ -1208,12 +1310,14 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	return &RenderResult{
-		Source:      ServedFromBypass,
-		Duration:    duration,
-		BytesServed: int64(len(bypassResp.Body)),
-		StatusCode:  bypassResp.StatusCode,
-		PageSEO:     pageSEO,
-		RedirectTo:  redirectTo,
+		Source:          ServedFromBypass,
+		Duration:        duration,
+		BytesServed:     int64(len(bypassResp.Body)),
+		StatusCode:      bypassResp.StatusCode,
+		PageSEO:         pageSEO,
+		RedirectTo:      redirectTo,
+		RuleIDs:         processedRuleIDs(processed),
+		OriginalPageSEO: processedOriginalPageSEO(processed),
 	}, nil
 }
 
@@ -1301,13 +1405,14 @@ func (ro *RenderOrchestrator) tryServeStaleFromCache(
 		zap.Duration("cache_age", time.Since(staleCache.CreatedAt)),
 		zap.Duration("stale_age", staleCache.StaleAge()))
 
-	if isRedirectStatusCode(staleCache.StatusCode) {
+	// Metadata-only entries (redirects, status overrides) don't need file check
+	if staleCache.DiskSize == 0 {
 		result, err := ro.serveFromCache(renderCtx, staleCache)
 		if err == nil {
 			ro.metricsCollector.RecordStaleServed(renderCtx.Host.Domain, renderCtx.Dimension, source)
 			return result, nil
 		}
-		return nil, fmt.Errorf("stale redirect metadata unavailable: %w", err)
+		return nil, fmt.Errorf("stale metadata-only entry unavailable: %w", err)
 	}
 
 	if ro.cacheCoord.IsFileLocal(staleCache) {
@@ -1385,7 +1490,6 @@ func (ro *RenderOrchestrator) RenderWithHAR(ctx context.Context, req *types.Rend
 	}
 	req.BlockedPatterns = host.Render.BlockedPatterns
 	req.BlockedResourceTypes = host.Render.BlockedResourceTypes
-	req.StripScripts = host.Render.StripScripts == nil || *host.Render.StripScripts
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)

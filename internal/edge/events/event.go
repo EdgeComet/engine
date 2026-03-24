@@ -49,6 +49,10 @@ type RequestEvent struct {
 	// SEO metadata (nil for cache hits, bypass)
 	PageSEO *PageSEOEvent `json:"page_seo,omitempty"`
 
+	// Content processor fields
+	RuleIDs         []uint32      `json:"rule_ids,omitempty"`
+	PageSEOOriginal *PageSEOEvent `json:"page_seo_original,omitempty"`
+
 	// Timestamps
 	CreatedAt    time.Time `json:"created_at"`
 	EGInstanceID string    `json:"eg_instance_id"`

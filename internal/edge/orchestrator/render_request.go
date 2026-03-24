@@ -27,6 +27,5 @@ func BuildRenderRequest(url, requestID string, tabID int, resolvedRender *config
 		ExtraWait:            extraWait,
 		BlockedPatterns:      resolvedRender.BlockedPatterns,
 		BlockedResourceTypes: resolvedRender.BlockedResourceTypes,
-		StripScripts:         resolvedRender.StripScripts,
 	}
 }

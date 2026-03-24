@@ -357,8 +357,6 @@ type RenderRequest struct {
 	// Client request headers forwarding (same-origin only)
 	Headers map[string][]string `json:"headers,omitempty"` // Client request headers to forward to origin
 
-	// HTML processing
-	StripScripts bool `json:"strip_scripts"` // Remove executable scripts from rendered HTML
 }
 
 // Error type constants - Infrastructure errors
@@ -405,7 +403,6 @@ type RenderResponse struct {
 	Metrics    PageMetrics         `json:"metrics,omitempty"` // Page rendering metrics
 	Headers    map[string][]string `json:"headers,omitempty"` // HTTP response headers from rendered page
 	HAR        json.RawMessage     `json:"har,omitempty"`     // HAR data for debugging (JSON bytes)
-	PageSEO    *PageSEO            `json:"page_seo,omitempty"`
 }
 
 // RenderResponseMetadata contains render metadata without HTML content
@@ -422,7 +419,6 @@ type RenderResponseMetadata struct {
 	Metrics    PageMetrics         `json:"metrics,omitempty"` // Page rendering metrics
 	Headers    map[string][]string `json:"headers,omitempty"` // HTTP response headers from rendered page
 	HAR        json.RawMessage     `json:"har,omitempty"`     // HAR data for debugging (JSON bytes)
-	PageSEO    *PageSEO            `json:"page_seo,omitempty"`
 }
 
 // LifecycleEvent represents a single page lifecycle event

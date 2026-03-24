@@ -120,13 +120,14 @@ func (cc *CacheCoordinator) SaveCache(
 	}
 
 	isRedirect := isRedirectStatusCode(statusCode)
+	isMetadataOnly := len(content) == 0
 
 	// Track content to write and disk size (may differ from original due to compression)
 	contentToWrite := content
 	diskSize := int64(len(content))
 
-	// STEP 2: Write content to filesystem ONLY for non-redirects
-	if !isRedirect {
+	// STEP 2: Write content to filesystem ONLY for non-redirects with content
+	if !isRedirect && !isMetadataOnly {
 		// Compress content based on config
 		compression := renderCtx.ResolvedConfig.Compression
 		compressedContent, ext, err := cache.Compress(content, compression)
@@ -170,7 +171,7 @@ func (cc *CacheCoordinator) SaveCache(
 		if cc.metrics != nil {
 			cc.metrics.AddCacheSize(diskSize)
 		}
-	} else {
+	} else if isRedirect {
 		location := ""
 		if locations, ok := getHeaderCaseInsensitive(headers, "Location"); ok && len(locations) > 0 {
 			location = locations[0]
@@ -178,6 +179,10 @@ func (cc *CacheCoordinator) SaveCache(
 		renderCtx.Logger.Debug("Skipping disk write for redirect (metadata-only cache)",
 			zap.Int("status_code", statusCode),
 			zap.String("location", location),
+			zap.String("source", source))
+	} else if isMetadataOnly {
+		renderCtx.Logger.Debug("Skipping disk write for metadata-only entry (no content)",
+			zap.Int("status_code", statusCode),
 			zap.String("source", source))
 	}
 
@@ -201,12 +206,12 @@ func (cc *CacheCoordinator) SaveCache(
 		Title:       title,
 	}
 
-	// Initialize eg_ids with current EG (only for non-redirects that have files on disk)
-	// Redirects are metadata-only and have no file to share with other EGs
-	if !isRedirect {
+	// Initialize eg_ids with current EG (only for entries that have files on disk)
+	// Redirects and metadata-only entries have no file to share with other EGs
+	if !isRedirect && !isMetadataOnly {
 		metadata.SetEgIDs([]string{cc.shardingManager.GetEgID()})
 	} else {
-		metadata.SetEgIDs([]string{}) // Empty eg_ids for redirects
+		metadata.SetEgIDs([]string{})
 	}
 
 	// Use independent timeout to prevent race condition from request cancellation
@@ -232,7 +237,8 @@ func (cc *CacheCoordinator) SaveCache(
 	shouldPushToCluster := cc.shardingManager != nil &&
 		cc.shardingManager.IsEnabled() &&
 		pushOnRender &&
-		!isRedirect
+		!isRedirect &&
+		!isMetadataOnly
 
 	// Additional threshold for bypass cache: only push if content size is substantial
 	if source == cache.SourceBypass && len(content) <= minBypassBodySizeForReplication {
@@ -248,9 +254,11 @@ func (cc *CacheCoordinator) SaveCache(
 				zap.String("source", source),
 				zap.Error(err))
 		}
-	} else if isRedirect {
-		renderCtx.Logger.Debug("Skipping cluster push for redirect (metadata-only cache)",
+	} else if isRedirect || isMetadataOnly {
+		renderCtx.Logger.Debug("Skipping cluster push for metadata-only cache",
 			zap.Int("status_code", statusCode),
+			zap.Bool("is_redirect", isRedirect),
+			zap.Bool("is_metadata_only", isMetadataOnly),
 			zap.String("source", source))
 	}
 
@@ -261,6 +269,7 @@ func (cc *CacheCoordinator) SaveCache(
 func (cc *CacheCoordinator) SaveRenderCache(
 	renderCtx *edgectx.RenderContext,
 	renderResult *RenderServiceResult,
+	pageSEO *types.PageSEO,
 ) error {
 	// Ensure Location is in headers for redirects (render service provides it separately)
 	headersWithLocation := renderResult.Headers
@@ -280,12 +289,11 @@ func (cc *CacheCoordinator) SaveRenderCache(
 	// Filter headers using safe_response_headers configuration (forCache=true: block Set-Cookie)
 	headers := FilterHeaders(headersWithLocation, renderCtx.ResolvedConfig.SafeResponseHeaders, renderResult.StatusCode, true)
 
-	// Extract Title and IndexStatus from PageSEO for cache metadata
 	var title string
 	var indexStatus types.IndexStatus
-	if renderResult.PageSEO != nil {
-		title = renderResult.PageSEO.Title
-		indexStatus = renderResult.PageSEO.IndexStatus
+	if pageSEO != nil {
+		title = pageSEO.Title
+		indexStatus = pageSEO.IndexStatus
 	}
 
 	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)

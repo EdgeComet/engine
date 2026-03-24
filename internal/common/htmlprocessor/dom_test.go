@@ -6,18 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/html"
 )
-
-func parseHTML(t *testing.T, htmlStr string) *html.Node {
-	t.Helper()
-	doc, err := html.Parse(strings.NewReader(htmlStr))
-	require.NoError(t, err)
-	return doc
-}
 
 func loadFixture(t *testing.T, name string) []byte {
 	t.Helper()
@@ -27,138 +20,103 @@ func loadFixture(t *testing.T, name string) []byte {
 	return data
 }
 
-func TestFindElement(t *testing.T) {
+func TestGoQueryFind(t *testing.T) {
 	tests := []struct {
-		name     string
-		html     string
-		tag      string
-		wantNil  bool
-		wantData string
+		name      string
+		html      string
+		selector  string
+		wantCount int
 	}{
 		{
-			name:     "finds nested element",
-			html:     `<html><body><div><span id="target">text</span></div></body></html>`,
-			tag:      "span",
-			wantData: "span",
+			name:      "finds nested element",
+			html:      `<html><body><div><span id="target">text</span></div></body></html>`,
+			selector:  "span",
+			wantCount: 1,
 		},
 		{
-			name:    "returns nil for missing element",
-			html:    `<html><body><div>text</div></body></html>`,
-			tag:     "span",
-			wantNil: true,
+			name:      "returns zero for missing element",
+			html:      `<html><body><div>text</div></body></html>`,
+			selector:  "span",
+			wantCount: 0,
 		},
 		{
-			name:     "case insensitive search",
-			html:     `<html><body><DIV>text</DIV></body></html>`,
-			tag:      "div",
-			wantData: "div",
+			name:      "finds first match among multiple",
+			html:      `<html><body><div id="first"></div><div id="second"></div></body></html>`,
+			selector:  "div",
+			wantCount: 2,
 		},
 		{
-			name:     "finds first match",
-			html:     `<html><body><div id="first"></div><div id="second"></div></body></html>`,
-			tag:      "div",
-			wantData: "div",
-		},
-		{
-			name:     "finds deeply nested element",
-			html:     `<html><body><div><section><article><p>text</p></article></section></div></body></html>`,
-			tag:      "p",
-			wantData: "p",
+			name:      "finds deeply nested element",
+			html:      `<html><body><div><section><article><p>text</p></article></section></div></body></html>`,
+			selector:  "p",
+			wantCount: 1,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			result := findElement(doc, tt.tag)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			if tt.wantNil {
-				assert.Nil(t, result)
-			} else {
-				require.NotNil(t, result)
-				assert.Equal(t, tt.wantData, result.Data)
-			}
+			result := doc.GoQueryDoc().Find(tt.selector)
+			assert.Equal(t, tt.wantCount, result.Length())
 		})
 	}
 }
 
-func TestFindElement_NilNode(t *testing.T) {
-	result := findElement(nil, "div")
-	assert.Nil(t, result)
-}
-
-func TestFindElementInParent(t *testing.T) {
+func TestGoQueryFindInParent(t *testing.T) {
 	htmlStr := `<html><head><title>Test</title></head><body><title>Body Title</title></body></html>`
-	doc := parseHTML(t, htmlStr)
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
 
-	head := findElement(doc, "head")
-	require.NotNil(t, head)
-
-	title := findElementInParent(head, "title")
-	require.NotNil(t, title)
-	assert.Equal(t, "Test", getTextContent(title))
+	headTitle := doc.GoQueryDoc().Find("head title").First().Text()
+	assert.Equal(t, "Test", headTitle)
 }
 
-func TestFindElementInParent_NilParent(t *testing.T) {
-	result := findElementInParent(nil, "div")
-	assert.Nil(t, result)
-}
-
-func TestFindAllElementsInParent(t *testing.T) {
+func TestGoQueryFindAllInParent(t *testing.T) {
 	htmlStr := `<html><head><meta name="robots"><meta name="googlebot"><meta name="description"></head><body></body></html>`
-	doc := parseHTML(t, htmlStr)
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
 
-	head := findElement(doc, "head")
-	require.NotNil(t, head)
-
-	metas := findAllElementsInParent(head, "meta")
-	assert.Len(t, metas, 3)
+	metas := doc.GoQueryDoc().Find("head meta")
+	assert.Equal(t, 3, metas.Length())
 }
 
-func TestFindAllElementsInParent_NilParent(t *testing.T) {
-	result := findAllElementsInParent(nil, "div")
-	assert.Nil(t, result)
-}
-
-func TestFindAllElementsInParent_NoMatch(t *testing.T) {
+func TestGoQueryFindAllInParent_NoMatch(t *testing.T) {
 	htmlStr := `<html><head><title>Test</title></head></html>`
-	doc := parseHTML(t, htmlStr)
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
 
-	head := findElement(doc, "head")
-	require.NotNil(t, head)
-
-	result := findAllElementsInParent(head, "meta")
-	assert.Empty(t, result)
+	result := doc.GoQueryDoc().Find("head meta")
+	assert.Equal(t, 0, result.Length())
 }
 
-func TestGetAttr(t *testing.T) {
+func TestGoQueryAttr(t *testing.T) {
 	tests := []struct {
 		name     string
 		html     string
+		selector string
 		attrName string
 		want     string
 	}{
 		{
 			name:     "gets attribute value",
 			html:     `<html><body><div id="test-id">text</div></body></html>`,
-			attrName: "id",
-			want:     "test-id",
-		},
-		{
-			name:     "case insensitive attribute name",
-			html:     `<html><body><div ID="test-id">text</div></body></html>`,
+			selector: "div",
 			attrName: "id",
 			want:     "test-id",
 		},
 		{
 			name:     "returns empty for missing attribute",
 			html:     `<html><body><div>text</div></body></html>`,
+			selector: "div",
 			attrName: "id",
 			want:     "",
 		},
 		{
-			name:     "handles content attribute",
+			name:     "handles content attribute on meta",
 			html:     `<html><head><meta name="robots" content="noindex"></head></html>`,
+			selector: "meta",
 			attrName: "content",
 			want:     "noindex",
 		},
@@ -166,80 +124,63 @@ func TestGetAttr(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			var target *html.Node
-			if tt.attrName == "content" {
-				target = findElement(doc, "meta")
-			} else {
-				target = findElement(doc, "div")
-			}
-			require.NotNil(t, target)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			result := getAttr(target, tt.attrName)
+			result := getSelectionAttr(doc.GoQueryDoc().Find(tt.selector).First(), tt.attrName)
 			assert.Equal(t, tt.want, result)
 		})
 	}
 }
 
-func TestGetAttr_NilNode(t *testing.T) {
-	result := getAttr(nil, "id")
-	assert.Equal(t, "", result)
-}
-
-func TestGetTextContent(t *testing.T) {
+func TestGoQueryText(t *testing.T) {
 	tests := []struct {
-		name string
-		html string
-		tag  string
-		want string
+		name     string
+		html     string
+		selector string
+		want     string
 	}{
 		{
-			name: "extracts simple text",
-			html: `<html><body><p>Hello World</p></body></html>`,
-			tag:  "p",
-			want: "Hello World",
+			name:     "extracts simple text",
+			html:     `<html><body><p>Hello World</p></body></html>`,
+			selector: "p",
+			want:     "Hello World",
 		},
 		{
-			name: "extracts text from nested tags",
-			html: `<html><body><p>Hello <span>World</span></p></body></html>`,
-			tag:  "p",
-			want: "Hello World",
+			name:     "extracts text from nested tags",
+			html:     `<html><body><p>Hello <span>World</span></p></body></html>`,
+			selector: "p",
+			want:     "Hello World",
 		},
 		{
-			name: "extracts text from deeply nested tags",
-			html: `<html><body><div>A<span>B<em>C</em>D</span>E</div></body></html>`,
-			tag:  "div",
-			want: "ABCDE",
+			name:     "extracts text from deeply nested tags",
+			html:     `<html><body><div>A<span>B<em>C</em>D</span>E</div></body></html>`,
+			selector: "div",
+			want:     "ABCDE",
 		},
 		{
-			name: "extracts text from title",
-			html: `<html><head><title>Hello World Test</title></head></html>`,
-			tag:  "title",
-			want: "Hello World Test",
+			name:     "extracts text from title",
+			html:     `<html><head><title>Hello World Test</title></head></html>`,
+			selector: "title",
+			want:     "Hello World Test",
 		},
 		{
-			name: "returns empty for empty element",
-			html: `<html><body><p></p></body></html>`,
-			tag:  "p",
-			want: "",
+			name:     "returns empty for empty element",
+			html:     `<html><body><p></p></body></html>`,
+			selector: "p",
+			want:     "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			target := findElement(doc, tt.tag)
-			require.NotNil(t, target)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			result := getTextContent(target)
+			result := doc.GoQueryDoc().Find(tt.selector).First().Text()
 			assert.Equal(t, tt.want, result)
 		})
 	}
-}
-
-func TestGetTextContent_NilNode(t *testing.T) {
-	result := getTextContent(nil)
-	assert.Equal(t, "", result)
 }
 
 func TestContainsBlockingDirective(t *testing.T) {
@@ -270,102 +211,95 @@ func TestContainsBlockingDirective(t *testing.T) {
 	}
 }
 
-func TestIsBlockedByMeta(t *testing.T) {
+func TestIndexationStatus_BlockedByMeta(t *testing.T) {
 	tests := []struct {
 		name string
 		html string
-		want bool
+		want types.IndexStatus
 	}{
 		{
 			name: "no meta robots not blocked",
 			html: `<html><head><title>Test</title></head></html>`,
-			want: false,
+			want: types.IndexStatusIndexable,
 		},
 		{
 			name: "robots index follow not blocked",
 			html: `<html><head><meta name="robots" content="index, follow"></head></html>`,
-			want: false,
+			want: types.IndexStatusIndexable,
 		},
 		{
 			name: "robots noindex blocked",
 			html: `<html><head><meta name="robots" content="noindex"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "robots none blocked",
 			html: `<html><head><meta name="robots" content="none"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "googlebot index overrides robots noindex",
 			html: `<html><head><meta name="googlebot" content="index"><meta name="robots" content="noindex"></head></html>`,
-			want: false,
+			want: types.IndexStatusIndexable,
 		},
 		{
 			name: "googlebot noindex blocked",
 			html: `<html><head><meta name="googlebot" content="noindex"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "empty googlebot falls back to robots noindex",
 			html: `<html><head><meta name="googlebot" content=""><meta name="robots" content="noindex"></head></html>`,
-			want: true,
-		},
-		{
-			name: "case insensitive name ROBOTS blocked",
-			html: `<html><head><meta name="ROBOTS" content="noindex"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "case insensitive content NOINDEX blocked",
 			html: `<html><head><meta name="robots" content="NOINDEX"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "noindex with extra spaces blocked",
 			html: `<html><head><meta name="robots" content="noindex , nofollow"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "whitespace only googlebot falls back to robots",
 			html: `<html><head><meta name="googlebot" content="   "><meta name="robots" content="noindex"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 		{
 			name: "googlebot all overrides robots noindex",
 			html: `<html><head><meta name="googlebot" content="all"><meta name="robots" content="noindex"></head></html>`,
-			want: false,
+			want: types.IndexStatusIndexable,
 		},
 		{
 			name: "multiple googlebot tags first noindex blocks",
 			html: `<html><head><meta name="googlebot" content="noindex"><meta name="googlebot" content="index"></head></html>`,
-			want: true,
+			want: types.IndexStatusBlockedByMeta,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			head := findElement(doc, "head")
-			require.NotNil(t, head)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			result := isBlockedByMeta(head)
+			result := doc.IndexationStatus(200, "https://example.com/page")
 			assert.Equal(t, tt.want, result)
 		})
 	}
 }
 
-func TestIsBlockedByMeta_MetaOutsideHead(t *testing.T) {
+func TestIndexationStatus_MetaOutsideHead(t *testing.T) {
 	htmlStr := `<html><head><title>Test</title></head><body><meta name="robots" content="noindex"></body></html>`
-	doc := parseHTML(t, htmlStr)
-	head := findElement(doc, "head")
-	require.NotNil(t, head)
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
 
-	result := isBlockedByMeta(head)
-	assert.False(t, result, "meta outside head should be ignored")
+	result := doc.IndexationStatus(200, "https://example.com/page")
+	assert.Equal(t, types.IndexStatusIndexable, result, "meta outside head should be ignored")
 }
 
-func TestExtractCanonicalURL(t *testing.T) {
+func TestCanonicalURLExtraction_GoQuery(t *testing.T) {
 	tests := []struct {
 		name string
 		html string
@@ -380,11 +314,6 @@ func TestExtractCanonicalURL(t *testing.T) {
 			name: "no canonical tag returns empty",
 			html: `<html><head><title>Test</title></head></html>`,
 			want: "",
-		},
-		{
-			name: "case insensitive rel attribute",
-			html: `<html><head><link REL="CANONICAL" href="https://example.com/page"></head></html>`,
-			want: "https://example.com/page",
 		},
 		{
 			name: "first canonical used when multiple exist",
@@ -410,11 +339,10 @@ func TestExtractCanonicalURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			head := findElement(doc, "head")
-			require.NotNil(t, head)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			result := extractCanonicalURL(head)
+			result := strings.TrimSpace(getSelectionAttr(doc.GoQueryDoc().Find("head link[rel='canonical']").First(), "href"))
 			assert.Equal(t, tt.want, result)
 		})
 	}
@@ -479,252 +407,78 @@ func TestResolveCanonicalURL(t *testing.T) {
 	}
 }
 
-func TestIsCanonical(t *testing.T) {
+func TestIndexationStatus_Canonical(t *testing.T) {
 	tests := []struct {
 		name     string
 		html     string
 		finalURL string
-		want     bool
+		want     types.IndexStatus
 	}{
 		{
 			name:     "no canonical tag passes",
 			html:     `<html><head><title>Test</title></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     true,
+			want:     types.IndexStatusIndexable,
 		},
 		{
 			name:     "canonical matches exactly passes",
 			html:     `<html><head><link rel="canonical" href="https://example.com/page"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     true,
+			want:     types.IndexStatusIndexable,
 		},
 		{
 			name:     "canonical differs fails",
 			html:     `<html><head><link rel="canonical" href="https://example.com/other"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     false,
+			want:     types.IndexStatusNonCanonical,
 		},
 		{
 			name:     "relative canonical resolved and matches",
 			html:     `<html><head><link rel="canonical" href="/page"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     true,
+			want:     types.IndexStatusIndexable,
 		},
 		{
 			name:     "relative canonical resolved and differs",
 			html:     `<html><head><link rel="canonical" href="/other"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     false,
+			want:     types.IndexStatusNonCanonical,
 		},
 		{
 			name:     "empty href passes",
 			html:     `<html><head><link rel="canonical" href=""></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     true,
+			want:     types.IndexStatusIndexable,
 		},
 		{
 			name:     "canonical with trailing slash differs from without",
 			html:     `<html><head><link rel="canonical" href="https://example.com/page/"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     false,
+			want:     types.IndexStatusNonCanonical,
 		},
 		{
 			name:     "protocol-relative canonical resolved",
 			html:     `<html><head><link rel="canonical" href="//example.com/page"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     true,
+			want:     types.IndexStatusIndexable,
 		},
 		{
 			name:     "canonical with different protocol fails",
 			html:     `<html><head><link rel="canonical" href="http://example.com/page"></head></html>`,
 			finalURL: "https://example.com/page",
-			want:     false,
+			want:     types.IndexStatusNonCanonical,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			head := findElement(doc, "head")
-			require.NotNil(t, head)
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
 
-			result := isCanonical(head, tt.finalURL)
+			result := doc.IndexationStatus(200, tt.finalURL)
 			assert.Equal(t, tt.want, result)
 		})
 	}
-}
-
-func TestIsExecutableScript(t *testing.T) {
-	tests := []struct {
-		name string
-		html string
-		want bool
-	}{
-		{
-			name: "no type attribute is executable",
-			html: `<html><head><script>code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "text/javascript is executable",
-			html: `<html><head><script type="text/javascript">code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "module is executable",
-			html: `<html><head><script type="module">code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "application/javascript is executable",
-			html: `<html><head><script type="application/javascript">code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "application/ld+json is NOT executable",
-			html: `<html><head><script type="application/ld+json">{}</script></head></html>`,
-			want: false,
-		},
-		{
-			name: "application/json is NOT executable",
-			html: `<html><head><script type="application/json">{}</script></head></html>`,
-			want: false,
-		},
-		{
-			name: "text/template is NOT executable",
-			html: `<html><head><script type="text/template"><div></div></script></head></html>`,
-			want: false,
-		},
-		{
-			name: "text/x-template is NOT executable",
-			html: `<html><head><script type="text/x-template"><div></div></script></head></html>`,
-			want: false,
-		},
-		{
-			name: "importmap is NOT executable",
-			html: `<html><head><script type="importmap">{}</script></head></html>`,
-			want: false,
-		},
-		{
-			name: "empty string type is executable",
-			html: `<html><head><script type="">code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "whitespace only type is executable",
-			html: `<html><head><script type="  ">code</script></head></html>`,
-			want: true,
-		},
-		{
-			name: "text/x-custom is NOT executable",
-			html: `<html><head><script type="text/x-custom">code</script></head></html>`,
-			want: false,
-		},
-		{
-			name: "uppercase TEXT/JAVASCRIPT is executable",
-			html: `<html><head><script type="TEXT/JAVASCRIPT">code</script></head></html>`,
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			script := findElement(doc, "script")
-			require.NotNil(t, script)
-
-			result := isExecutableScript(script)
-			assert.Equal(t, tt.want, result)
-		})
-	}
-}
-
-func TestIsExecutableScript_NilNode(t *testing.T) {
-	result := isExecutableScript(nil)
-	assert.False(t, result)
-}
-
-func TestIsExecutableScript_NonScriptElement(t *testing.T) {
-	doc := parseHTML(t, `<html><head><div>text</div></head></html>`)
-	div := findElement(doc, "div")
-	require.NotNil(t, div)
-
-	result := isExecutableScript(div)
-	assert.False(t, result)
-}
-
-func TestIsScriptRelatedLink(t *testing.T) {
-	tests := []struct {
-		name string
-		html string
-		want bool
-	}{
-		{
-			name: "rel=import is related",
-			html: `<html><head><link rel="import" href="/component.html"></head></html>`,
-			want: true,
-		},
-		{
-			name: "rel=modulepreload is related",
-			html: `<html><head><link rel="modulepreload" href="/module.js"></head></html>`,
-			want: true,
-		},
-		{
-			name: "rel=preload as=script is related",
-			html: `<html><head><link rel="preload" as="script" href="/app.js"></head></html>`,
-			want: true,
-		},
-		{
-			name: "rel=preload as=style is NOT related",
-			html: `<html><head><link rel="preload" as="style" href="/app.css"></head></html>`,
-			want: false,
-		},
-		{
-			name: "rel=stylesheet is NOT related",
-			html: `<html><head><link rel="stylesheet" href="/app.css"></head></html>`,
-			want: false,
-		},
-		{
-			name: "rel=canonical is NOT related",
-			html: `<html><head><link rel="canonical" href="https://example.com"></head></html>`,
-			want: false,
-		},
-		{
-			name: "rel=preload as=SCRIPT uppercase is related",
-			html: `<html><head><link rel="preload" as="SCRIPT" href="/app.js"></head></html>`,
-			want: true,
-		},
-		{
-			name: "rel=IMPORT uppercase is related",
-			html: `<html><head><link rel="IMPORT" href="/component.html"></head></html>`,
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			doc := parseHTML(t, tt.html)
-			link := findElement(doc, "link")
-			require.NotNil(t, link)
-
-			result := isScriptRelatedLink(link)
-			assert.Equal(t, tt.want, result)
-		})
-	}
-}
-
-func TestIsScriptRelatedLink_NilNode(t *testing.T) {
-	result := isScriptRelatedLink(nil)
-	assert.False(t, result)
-}
-
-func TestIsScriptRelatedLink_NonLinkElement(t *testing.T) {
-	doc := parseHTML(t, `<html><head><div>text</div></head></html>`)
-	div := findElement(doc, "div")
-	require.NotNil(t, div)
-
-	result := isScriptRelatedLink(div)
-	assert.False(t, result)
 }
 
 func TestCleanScripts(t *testing.T) {
@@ -740,11 +494,9 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		// Verify JSON-LD is preserved by checking we can still find it
-		domDoc := doc.(*domDocument)
-		scripts := findAllElementsInParent(domDoc.root, "script")
-		assert.Len(t, scripts, 1)
-		assert.Equal(t, "application/ld+json", getAttr(scripts[0], "type"))
+		scripts := doc.GoQueryDoc().Find("script")
+		assert.Equal(t, 1, scripts.Length())
+		assert.Equal(t, "application/ld+json", getSelectionAttr(scripts.First(), "type"))
 	})
 
 	t.Run("returns false when no scripts", func(t *testing.T) {
@@ -781,11 +533,9 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		// Verify only stylesheet link remains
-		domDoc := doc.(*domDocument)
-		links := findAllElementsInParent(domDoc.root, "link")
-		assert.Len(t, links, 1)
-		assert.Equal(t, "stylesheet", getAttr(links[0], "rel"))
+		links := doc.GoQueryDoc().Find("link")
+		assert.Equal(t, 1, links.Length())
+		assert.Equal(t, "stylesheet", getSelectionAttr(links.First(), "rel"))
 	})
 
 	t.Run("removes modulepreload links", func(t *testing.T) {
@@ -799,9 +549,8 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		domDoc := doc.(*domDocument)
-		links := findAllElementsInParent(domDoc.root, "link")
-		assert.Len(t, links, 0)
+		links := doc.GoQueryDoc().Find("link")
+		assert.Equal(t, 0, links.Length())
 	})
 
 	t.Run("removes preload as=script links", func(t *testing.T) {
@@ -816,11 +565,9 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		// Verify only style preload remains
-		domDoc := doc.(*domDocument)
-		links := findAllElementsInParent(domDoc.root, "link")
-		assert.Len(t, links, 1)
-		assert.Equal(t, "style", getAttr(links[0], "as"))
+		links := doc.GoQueryDoc().Find("link")
+		assert.Equal(t, 1, links.Length())
+		assert.Equal(t, "style", getSelectionAttr(links.First(), "as"))
 	})
 
 	t.Run("preserves template scripts", func(t *testing.T) {
@@ -835,9 +582,8 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.False(t, removed)
 
-		domDoc := doc.(*domDocument)
-		scripts := findAllElementsInParent(domDoc.root, "script")
-		assert.Len(t, scripts, 2)
+		scripts := doc.GoQueryDoc().Find("script")
+		assert.Equal(t, 2, scripts.Length())
 	})
 
 	t.Run("mixed scripts some removed some preserved", func(t *testing.T) {
@@ -856,20 +602,18 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		// Verify: JSON-LD and template preserved, executable and modulepreload removed
-		domDoc := doc.(*domDocument)
-		scripts := findAllElementsInParent(domDoc.root, "script")
-		assert.Len(t, scripts, 2, "should have JSON-LD and template scripts")
+		scripts := doc.GoQueryDoc().Find("script")
+		assert.Equal(t, 2, scripts.Length(), "should have JSON-LD and template scripts")
 
-		types := make([]string, 0, len(scripts))
-		for _, s := range scripts {
-			types = append(types, getAttr(s, "type"))
-		}
-		assert.Contains(t, types, "application/ld+json")
-		assert.Contains(t, types, "text/template")
+		var scriptTypes []string
+		scripts.Each(func(_ int, s *goquery.Selection) {
+			scriptTypes = append(scriptTypes, getSelectionAttr(s, "type"))
+		})
+		assert.Contains(t, scriptTypes, "application/ld+json")
+		assert.Contains(t, scriptTypes, "text/template")
 
-		links := findAllElementsInParent(domDoc.root, "link")
-		assert.Len(t, links, 0, "modulepreload link should be removed")
+		links := doc.GoQueryDoc().Find("link")
+		assert.Equal(t, 0, links.Length(), "modulepreload link should be removed")
 	})
 
 	t.Run("removes executable scripts from body", func(t *testing.T) {
@@ -886,13 +630,11 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		domDoc := doc.(*domDocument)
-		scripts := findAllElementsInParent(domDoc.root, "script")
-		assert.Len(t, scripts, 0, "all executable scripts in body should be removed")
+		scripts := doc.GoQueryDoc().Find("script")
+		assert.Equal(t, 0, scripts.Length(), "all executable scripts in body should be removed")
 
-		// Verify content paragraphs are preserved
-		paragraphs := findAllElementsInParent(domDoc.root, "p")
-		assert.Len(t, paragraphs, 2)
+		paragraphs := doc.GoQueryDoc().Find("p")
+		assert.Equal(t, 2, paragraphs.Length())
 	})
 
 	t.Run("removes external scripts", func(t *testing.T) {
@@ -908,10 +650,115 @@ func TestCleanScripts(t *testing.T) {
 		removed := doc.CleanScripts()
 		assert.True(t, removed)
 
-		domDoc := doc.(*domDocument)
-		scripts := findAllElementsInParent(domDoc.root, "script")
-		assert.Len(t, scripts, 0, "all external scripts should be removed")
+		scripts := doc.GoQueryDoc().Find("script")
+		assert.Equal(t, 0, scripts.Length(), "all external scripts should be removed")
 	})
+}
+
+func TestCleanScripts_AllExecutableTypes(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><head>
+		<script>console.log('no type')</script>
+		<script type="text/javascript">console.log('js')</script>
+		<script type="module">import './a.js'</script>
+		<script type="application/javascript">console.log('app-js')</script>
+		<script type="">console.log('empty')</script>
+		<script type="  ">console.log('whitespace')</script>
+		<script type="TEXT/JAVASCRIPT">console.log('uppercase')</script>
+	</head><body></body></html>`
+
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	removed := doc.CleanScripts()
+	assert.True(t, removed)
+	assert.Equal(t, 0, doc.GoQueryDoc().Find("script").Length())
+}
+
+func TestCleanScripts_PreservesNonExecutable(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><head>
+		<script type="application/ld+json">{"@type":"Article"}</script>
+		<script type="application/json">{}</script>
+		<script type="text/template"><div></div></script>
+		<script type="text/x-template"><div></div></script>
+		<script type="text/x-custom">code</script>
+		<script type="importmap">{}</script>
+	</head><body></body></html>`
+
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	removed := doc.CleanScripts()
+	assert.False(t, removed)
+	assert.Equal(t, 6, doc.GoQueryDoc().Find("script").Length())
+}
+
+func TestCleanScripts_ScriptRelatedLinks(t *testing.T) {
+	tests := []struct {
+		name      string
+		html      string
+		removed   bool
+		remaining int
+	}{
+		{
+			name:      "rel=import is removed",
+			html:      `<!DOCTYPE html><html><head><link rel="import" href="/component.html"></head><body></body></html>`,
+			removed:   true,
+			remaining: 0,
+		},
+		{
+			name:      "rel=modulepreload is removed",
+			html:      `<!DOCTYPE html><html><head><link rel="modulepreload" href="/module.js"></head><body></body></html>`,
+			removed:   true,
+			remaining: 0,
+		},
+		{
+			name:      "rel=preload as=script is removed",
+			html:      `<!DOCTYPE html><html><head><link rel="preload" as="script" href="/app.js"></head><body></body></html>`,
+			removed:   true,
+			remaining: 0,
+		},
+		{
+			name:      "rel=preload as=style is NOT removed",
+			html:      `<!DOCTYPE html><html><head><link rel="preload" as="style" href="/app.css"></head><body></body></html>`,
+			removed:   false,
+			remaining: 1,
+		},
+		{
+			name:      "rel=stylesheet is NOT removed",
+			html:      `<!DOCTYPE html><html><head><link rel="stylesheet" href="/app.css"></head><body></body></html>`,
+			removed:   false,
+			remaining: 1,
+		},
+		{
+			name:      "rel=canonical is NOT removed",
+			html:      `<!DOCTYPE html><html><head><link rel="canonical" href="https://example.com"></head><body></body></html>`,
+			removed:   false,
+			remaining: 1,
+		},
+		{
+			name:      "rel=IMPORT uppercase is removed",
+			html:      `<!DOCTYPE html><html><head><link rel="IMPORT" href="/component.html"></head><body></body></html>`,
+			removed:   true,
+			remaining: 0,
+		},
+		{
+			name:      "rel=preload as=SCRIPT uppercase is removed",
+			html:      `<!DOCTYPE html><html><head><link rel="preload" as="SCRIPT" href="/app.js"></head><body></body></html>`,
+			removed:   true,
+			remaining: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
+
+			result := doc.CleanScripts()
+			assert.Equal(t, tt.removed, result)
+			assert.Equal(t, tt.remaining, doc.GoQueryDoc().Find("link").Length())
+		})
+	}
 }
 
 func TestHTML(t *testing.T) {
@@ -924,7 +771,6 @@ func TestHTML(t *testing.T) {
 		result := doc.HTML()
 		require.NotNil(t, result)
 
-		// Result should contain key elements
 		resultStr := string(result)
 		assert.Contains(t, resultStr, "<title>Test</title>")
 		assert.Contains(t, resultStr, "<p>Content</p>")
@@ -957,7 +803,6 @@ func TestHTML(t *testing.T) {
 		result := doc.HTML()
 		require.NotNil(t, result)
 
-		// Re-parse the result
 		doc2, err := ParseWithDOM(result)
 		require.NoError(t, err)
 		assert.Equal(t, "Original", doc2.Title())
@@ -976,50 +821,36 @@ func TestCleanScriptsAndHTML_Integration(t *testing.T) {
 		<script type="text/template"><div>Template</div></script>
 	</body></html>`
 
-	// Step 1: Parse
 	doc, err := ParseWithDOM([]byte(htmlStr))
 	require.NoError(t, err)
 
-	// Step 2: CleanScripts
 	removed := doc.CleanScripts()
 	assert.True(t, removed)
 
-	// Step 3: Get HTML
 	result := doc.HTML()
 	require.NotNil(t, result)
 
-	// Step 4: Re-parse
 	doc2, err := ParseWithDOM(result)
 	require.NoError(t, err)
 
-	// Step 5: Verify no executable scripts
-	domDoc2 := doc2.(*domDocument)
-	scripts := findAllElementsInParent(domDoc2.root, "script")
-
-	// Should have exactly 2 scripts: JSON-LD and template
-	assert.Len(t, scripts, 2)
+	scripts := doc2.GoQueryDoc().Find("script")
+	assert.Equal(t, 2, scripts.Length())
 
 	scriptTypes := make(map[string]bool)
-	for _, s := range scripts {
-		scriptTypes[getAttr(s, "type")] = true
-	}
+	scripts.Each(func(_ int, s *goquery.Selection) {
+		scriptTypes[getSelectionAttr(s, "type")] = true
+	})
 
-	// Step 6: Verify JSON-LD preserved
 	assert.True(t, scriptTypes["application/ld+json"], "JSON-LD should be preserved")
 	assert.True(t, scriptTypes["text/template"], "template should be preserved")
-
-	// Verify no executable types
 	assert.False(t, scriptTypes[""], "no typeless scripts")
 	assert.False(t, scriptTypes["module"], "no module scripts")
 	assert.False(t, scriptTypes["text/javascript"], "no text/javascript scripts")
 
-	// Verify modulepreload link removed
-	links := findAllElementsInParent(domDoc2.root, "link")
-	for _, link := range links {
-		assert.NotEqual(t, "modulepreload", getAttr(link, "rel"))
-	}
+	doc2.GoQueryDoc().Find("link").Each(func(_ int, s *goquery.Selection) {
+		assert.NotEqual(t, "modulepreload", getSelectionAttr(s, "rel"))
+	})
 
-	// Verify title preserved
 	assert.Equal(t, "Integration Test", doc2.Title())
 }
 
@@ -1081,20 +912,16 @@ func TestFixtures(t *testing.T) {
 		result := doc.HTML()
 		require.NotNil(t, result)
 
-		// Re-parse and verify
 		doc2, err := ParseWithDOM(result)
 		require.NoError(t, err)
 
-		domDoc2 := doc2.(*domDocument)
-		scripts := findAllElementsInParent(domDoc2.root, "script")
-
-		// Should have JSON-LD and template preserved
-		assert.Len(t, scripts, 2)
+		scripts := doc2.GoQueryDoc().Find("script")
+		assert.Equal(t, 2, scripts.Length())
 
 		scriptTypes := make(map[string]bool)
-		for _, s := range scripts {
-			scriptTypes[getAttr(s, "type")] = true
-		}
+		scripts.Each(func(_ int, s *goquery.Selection) {
+			scriptTypes[getSelectionAttr(s, "type")] = true
+		})
 		assert.True(t, scriptTypes["application/ld+json"])
 		assert.True(t, scriptTypes["text/template"])
 	})
@@ -1120,5 +947,147 @@ func TestFixtures(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "", doc.Title())
 		assert.Equal(t, types.IndexStatusIndexable, doc.IndexationStatus(200, "https://example.com"))
+	})
+}
+
+func TestGoQueryDoc_NotNil(t *testing.T) {
+	doc, err := ParseWithDOM([]byte(`<html><head><title>Hello</title></head><body></body></html>`))
+	require.NoError(t, err)
+	assert.NotNil(t, doc.GoQueryDoc())
+}
+
+func TestGoQueryDoc_SameDOM(t *testing.T) {
+	doc, err := ParseWithDOM([]byte(`<html><head><title>Test</title></head><body></body></html>`))
+	require.NoError(t, err)
+
+	gqDoc := doc.GoQueryDoc()
+	require.NotNil(t, gqDoc)
+	assert.Equal(t, "Test", gqDoc.Find("title").Text())
+}
+
+func TestGoQueryDoc_MutationVisible(t *testing.T) {
+	htmlStr := `<html><head><script>alert(1)</script><script type="application/ld+json">{"@type":"Article"}</script></head><body></body></html>`
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	doc.CleanScripts()
+
+	gqDoc := doc.GoQueryDoc()
+	require.NotNil(t, gqDoc)
+	assert.Equal(t, 0, gqDoc.Find("script:not([type])").Length())
+	assert.Equal(t, 1, gqDoc.Find("script[type='application/ld+json']").Length())
+}
+
+func TestHTML_RoundTrip(t *testing.T) {
+	htmlStr := `<html><head><title>RoundTrip</title></head><body><p>Hello</p></body></html>`
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	rendered := doc.HTML()
+	require.NotNil(t, rendered)
+
+	doc2, err := ParseWithDOM(rendered)
+	require.NoError(t, err)
+	assert.Equal(t, "RoundTrip", doc2.Title())
+}
+
+func TestCleanScripts_GoQuery_PreservesNonExecutable(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><head>
+		<script type="application/ld+json">{"@type":"Article"}</script>
+		<script type="text/template"><div></div></script>
+	</head><body></body></html>`
+
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	removed := doc.CleanScripts()
+	assert.False(t, removed)
+	assert.Equal(t, 2, doc.GoQueryDoc().Find("script").Length())
+}
+
+func TestCleanScripts_GoQuery_RemovesAllExecutableTypes(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><head>
+		<script>console.log('no type')</script>
+		<script type="text/javascript">console.log('js')</script>
+		<script type="module">import './a.js'</script>
+		<script type="application/javascript">console.log('app-js')</script>
+		<script type="">console.log('empty')</script>
+	</head><body></body></html>`
+
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	removed := doc.CleanScripts()
+	assert.True(t, removed)
+	assert.Equal(t, 0, doc.GoQueryDoc().Find("script").Length())
+}
+
+func TestCleanScripts_GoQuery_RemovesScriptLinks(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><head>
+		<link rel="import" href="x">
+		<link rel="modulepreload" href="y">
+		<link rel="preload" as="script" href="z">
+		<link rel="stylesheet" href="w">
+	</head><body></body></html>`
+
+	doc, err := ParseWithDOM([]byte(htmlStr))
+	require.NoError(t, err)
+
+	removed := doc.CleanScripts()
+	assert.True(t, removed)
+	assert.Equal(t, 1, doc.GoQueryDoc().Find("link").Length())
+}
+
+func TestIndexationStatus_GoQuery_MetaPriority(t *testing.T) {
+	t.Run("non-200 returns IndexStatusNon200", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head></head><body></body></html>`
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusNon200, doc.IndexationStatus(404, "https://example.com/"))
+	})
+
+	t.Run("robots noindex returns IndexStatusBlockedByMeta", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head><meta name="robots" content="noindex"></head><body></body></html>`
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusBlockedByMeta, doc.IndexationStatus(200, "https://example.com/"))
+	})
+
+	t.Run("non-canonical returns IndexStatusNonCanonical", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head><link rel="canonical" href="https://other.com/"></head><body></body></html>`
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusNonCanonical, doc.IndexationStatus(200, "https://example.com/"))
+	})
+
+	t.Run("all checks pass returns IndexStatusIndexable", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head><link rel="canonical" href="https://example.com/"></head><body></body></html>`
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusIndexable, doc.IndexationStatus(200, "https://example.com/"))
+	})
+}
+
+func TestIndexationStatus_GoQuery_GooglebotPrecedence(t *testing.T) {
+	t.Run("googlebot allows overrides robots noindex", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head>
+			<meta name="robots" content="noindex">
+			<meta name="googlebot" content="index, follow">
+		</head><body></body></html>`
+
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusIndexable, doc.IndexationStatus(200, "https://example.com/"))
+	})
+
+	t.Run("googlebot noindex overrides robots index", func(t *testing.T) {
+		htmlStr := `<!DOCTYPE html><html><head>
+			<meta name="robots" content="index, follow">
+			<meta name="googlebot" content="noindex">
+		</head><body></body></html>`
+
+		doc, err := ParseWithDOM([]byte(htmlStr))
+		require.NoError(t, err)
+		assert.Equal(t, types.IndexStatusBlockedByMeta, doc.IndexationStatus(200, "https://example.com/"))
 	})
 }

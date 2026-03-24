@@ -21,7 +21,6 @@ func TestBuildRenderRequest(t *testing.T) {
 		},
 		BlockedPatterns:      []string{"*.analytics.com"},
 		BlockedResourceTypes: []string{"Image", "Font"},
-		StripScripts:         true,
 	}
 
 	dimension := &types.Dimension{
@@ -43,7 +42,6 @@ func TestBuildRenderRequest(t *testing.T) {
 	assert.Equal(t, 500*time.Millisecond, req.ExtraWait)
 	assert.Equal(t, []string{"*.analytics.com"}, req.BlockedPatterns)
 	assert.Equal(t, []string{"Image", "Font"}, req.BlockedResourceTypes)
-	assert.True(t, req.StripScripts)
 	assert.False(t, req.IncludeHAR)
 	assert.Nil(t, req.Headers)
 }
@@ -54,7 +52,6 @@ func TestBuildRenderRequest_NilAdditionalWait(t *testing.T) {
 		Events: types.RenderEvents{
 			WaitFor: "load",
 		},
-		StripScripts: false,
 	}
 
 	dimension := &types.Dimension{
@@ -68,7 +65,6 @@ func TestBuildRenderRequest_NilAdditionalWait(t *testing.T) {
 	assert.Equal(t, time.Duration(0), req.ExtraWait)
 	assert.Equal(t, "load", req.WaitFor)
 	assert.Equal(t, 15*time.Second, req.Timeout)
-	assert.False(t, req.StripScripts)
 	assert.Equal(t, 375, req.ViewportWidth)
 	assert.Equal(t, 812, req.ViewportHeight)
 	assert.Equal(t, "MobileBot/1.0", req.UserAgent)

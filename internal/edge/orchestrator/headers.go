@@ -100,3 +100,16 @@ func FilterHeaders(headers map[string][]string, safeHeaders []string, statusCode
 	}
 	return filtered
 }
+
+func singleValueHeaders(headers map[string][]string) map[string]string {
+	if headers == nil {
+		return nil
+	}
+	result := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if len(v) > 0 {
+			result[k] = v[0]
+		}
+	}
+	return result
+}

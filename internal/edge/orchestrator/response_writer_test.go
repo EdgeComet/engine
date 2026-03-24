@@ -148,7 +148,7 @@ func TestWriteCacheResponse_StaleDetection(t *testing.T) {
 	})
 }
 
-func TestWriteCachedRedirectResponse_StaleDetection(t *testing.T) {
+func TestWriteCachedMetadataResponse_StaleDetection(t *testing.T) {
 	rw := NewResponseWriter()
 
 	t.Run("render redirect uses render stale TTL", func(t *testing.T) {
@@ -170,7 +170,7 @@ func TestWriteCachedRedirectResponse_StaleDetection(t *testing.T) {
 			},
 		}
 
-		err := rw.WriteCachedRedirectResponse(renderCtx, entry)
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
 	})
@@ -201,7 +201,7 @@ func TestWriteCachedRedirectResponse_StaleDetection(t *testing.T) {
 			},
 		}
 
-		err := rw.WriteCachedRedirectResponse(renderCtx, entry)
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
 	})
@@ -232,8 +232,90 @@ func TestWriteCachedRedirectResponse_StaleDetection(t *testing.T) {
 			},
 		}
 
-		err := rw.WriteCachedRedirectResponse(renderCtx, entry)
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+	})
+}
+
+func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
+	rw := NewResponseWriter()
+
+	t.Run("404 override from render cache has correct headers", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 404,
+			DiskSize:   0,
+			CreatedAt:  time.Now().UTC().Add(-5 * time.Minute),
+			ExpiresAt:  time.Now().UTC().Add(55 * time.Minute),
+		}
+
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
+		assert.NoError(t, err)
+		assert.Equal(t, 404, renderCtx.HTTPCtx.Response.StatusCode())
+		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
+		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.NotEmpty(t, string(renderCtx.HTTPCtx.Response.Header.Peek("X-Cache-Age")))
+		assert.Contains(t, string(renderCtx.HTTPCtx.Response.Body()), "Not Found")
+		assert.Equal(t, "text/plain; charset=utf-8", string(renderCtx.HTTPCtx.Response.Header.Peek("Content-Type")))
+		assert.Empty(t, string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Action")))
+	})
+
+	t.Run("410 override from render cache", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 410,
+			DiskSize:   0,
+			CreatedAt:  time.Now().UTC().Add(-5 * time.Minute),
+			ExpiresAt:  time.Now().UTC().Add(55 * time.Minute),
+		}
+
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
+		assert.NoError(t, err)
+		assert.Equal(t, 410, renderCtx.HTTPCtx.Response.StatusCode())
+		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
+		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Contains(t, string(renderCtx.HTTPCtx.Response.Body()), "Gone")
+	})
+
+	t.Run("404 override from bypass cache", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceBypass,
+			StatusCode: 404,
+			DiskSize:   0,
+			CreatedAt:  time.Now().UTC().Add(-5 * time.Minute),
+			ExpiresAt:  time.Now().UTC().Add(55 * time.Minute),
+		}
+
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
+		assert.NoError(t, err)
+		assert.Equal(t, 404, renderCtx.HTTPCtx.Response.StatusCode())
+		assert.Equal(t, "bypass_cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
+		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+	})
+
+	t.Run("301 redirect still has Location and empty body", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 301,
+			DiskSize:   0,
+			CreatedAt:  time.Now().UTC().Add(-5 * time.Minute),
+			ExpiresAt:  time.Now().UTC().Add(55 * time.Minute),
+			Headers: map[string][]string{
+				"Location": {"https://example.com/new"},
+			},
+		}
+
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
+		assert.NoError(t, err)
+		assert.Equal(t, 301, renderCtx.HTTPCtx.Response.StatusCode())
+		assert.Equal(t, "https://example.com/new", string(renderCtx.HTTPCtx.Response.Header.Peek("Location")))
+		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
+		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Empty(t, string(renderCtx.HTTPCtx.Response.Body()))
 	})
 }

@@ -140,15 +140,16 @@ type TabReservation struct {
 
 // RecacheService handles background cache recaching operations
 type RecacheService struct {
-	configManager configtypes.EGConfigManager
-	cacheCoord    *orchestrator.CacheCoordinator
-	bypassSvc     *bypass.BypassService
-	redis         *redis.Client
-	rsClient      *rsclient.RSClient
-	metadataStore *cache.MetadataStore
-	eventEmitter  events.EventEmitter
-	instanceID    string
-	logger        *zap.Logger
+	configManager    configtypes.EGConfigManager
+	cacheCoord       *orchestrator.CacheCoordinator
+	bypassSvc        *bypass.BypassService
+	redis            *redis.Client
+	rsClient         *rsclient.RSClient
+	metadataStore    *cache.MetadataStore
+	eventEmitter     events.EventEmitter
+	contentProcessor orchestrator.ContentProcessor
+	instanceID       string
+	logger           *zap.Logger
 }
 
 // NewRecacheService creates a new RecacheService instance
@@ -281,8 +282,22 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 
 	// Convert response to RenderServiceResult and save to cache
 	renderResult := rs.buildRenderResult(renderResp)
+
+	stripScripts := renderCtx.ResolvedConfig.Render.StripScripts
+	processed := orchestrator.ProcessContent(
+		ctx,
+		renderResult.HTML,
+		renderResult.StatusCode,
+		url,
+		stripScripts,
+		renderCtx.Host.ID,
+		rs.contentProcessor,
+		rs.logger,
+	)
+	renderResult.HTML = processed.HTML
+
 	totalDuration := time.Since(startTime)
-	if err := rs.saveToCache(ctx, renderCtx, renderResult, reservation.ServiceID, totalDuration); err != nil {
+	if err := rs.saveToCache(ctx, renderCtx, renderResult, processed.PageSEO, processed.RuleIDs, processed.OriginalPageSEO, reservation.ServiceID, totalDuration); err != nil {
 		return fmt.Errorf("failed to save to cache: %w", err)
 	}
 
@@ -299,11 +314,14 @@ func (rs *RecacheService) saveToCache(
 	ctx context.Context,
 	renderCtx *edgectx.RenderContext,
 	renderResult *orchestrator.RenderServiceResult,
+	pageSEO *types.PageSEO,
+	ruleIDs []uint32,
+	originalPageSEO *types.PageSEO,
 	serviceID string,
 	totalDuration time.Duration,
 ) error {
 	// Save to cache using cache coordinator (handles sharding)
-	if err := rs.cacheCoord.SaveRenderCache(renderCtx, renderResult); err != nil {
+	if err := rs.cacheCoord.SaveRenderCache(renderCtx, renderResult, pageSEO); err != nil {
 		return fmt.Errorf("failed to save cache: %w", err)
 	}
 
@@ -318,14 +336,16 @@ func (rs *RecacheService) saveToCache(
 	// Emit precache event for access logging
 	if rs.eventEmitter != nil {
 		result := &orchestrator.RenderResult{
-			Source:      orchestrator.ServedFromRender,
-			ServiceID:   serviceID,
-			Duration:    totalDuration,
-			BytesServed: int64(len(renderResult.HTML)),
-			StatusCode:  renderResult.StatusCode,
-			Metrics:     &renderResult.Metrics,
-			RenderTime:  renderResult.RenderTime,
-			PageSEO:     renderResult.PageSEO,
+			Source:          orchestrator.ServedFromRender,
+			ServiceID:       serviceID,
+			Duration:        totalDuration,
+			BytesServed:     int64(len(renderResult.HTML)),
+			StatusCode:      renderResult.StatusCode,
+			Metrics:         &renderResult.Metrics,
+			RenderTime:      renderResult.RenderTime,
+			PageSEO:         pageSEO,
+			RuleIDs:         ruleIDs,
+			OriginalPageSEO: originalPageSEO,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)
@@ -367,7 +387,15 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("bypass cache save skipped: %s", reason)
 	}
 
-	pageSEO := orchestrator.ExtractBypassSEO(bypassResp.Body, bypassResp.ContentType, bypassResp.StatusCode, url, renderCtx.Logger)
+	processed := orchestrator.ProcessContent(
+		ctx, bypassResp.Body, bypassResp.StatusCode, url,
+		false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
+	)
+	pageSEO := processed.PageSEO
+
+	if processed.OriginalPageSEO != nil {
+		bypassResp.Body = processed.HTML
+	}
 
 	if err := rs.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
 		return fmt.Errorf("failed to save bypass cache: %w", err)
@@ -385,11 +413,13 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	// Emit recache event for access logging
 	if rs.eventEmitter != nil {
 		result := &orchestrator.RenderResult{
-			Source:      orchestrator.ServedFromBypass,
-			Duration:    totalDuration,
-			BytesServed: int64(len(bypassResp.Body)),
-			StatusCode:  bypassResp.StatusCode,
-			PageSEO:     pageSEO,
+			Source:          orchestrator.ServedFromBypass,
+			Duration:        totalDuration,
+			BytesServed:     int64(len(bypassResp.Body)),
+			StatusCode:      bypassResp.StatusCode,
+			PageSEO:         pageSEO,
+			RuleIDs:         processed.RuleIDs,
+			OriginalPageSEO: processed.OriginalPageSEO,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)
@@ -467,7 +497,6 @@ func (rs *RecacheService) buildRenderResult(renderResp *types.RenderResponse) *o
 		ChromeID:         "recache",
 		Metrics:          renderResp.Metrics,
 		Headers:          renderResp.Headers,
-		PageSEO:          renderResp.PageSEO,
 	}
 }
 
@@ -579,6 +608,10 @@ func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation
 	rs.logger.Debug("Released tab reservation",
 		zap.String("service_id", reservation.ServiceID),
 		zap.Int("tab_id", reservation.TabID))
+}
+
+func (rs *RecacheService) SetContentProcessor(cp orchestrator.ContentProcessor) {
+	rs.contentProcessor = cp
 }
 
 // hostHasDomain checks if the given hostname matches any of the host's configured domains
