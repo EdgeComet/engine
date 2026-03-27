@@ -89,6 +89,7 @@ type GlobalRenderConfig struct {
 	BlockedResourceTypes []string                `yaml:"blocked_resource_types,omitempty"`
 	BlockedPatterns      []string                `yaml:"blocked_patterns,omitempty"`
 	StripScripts         *bool                   `yaml:"strip_scripts,omitempty"`
+	AjaxBypass           *bool                   `yaml:"ajax_bypass,omitempty"`
 }
 
 type GlobalBypassConfig struct {

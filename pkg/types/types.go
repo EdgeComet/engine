@@ -221,6 +221,7 @@ type RenderConfig struct {
 	BlockedResourceTypes []string           `yaml:"blocked_resource_types,omitempty" json:"blocked_resource_types,omitempty"` // Resource types to block during rendering
 	BlockedPatterns      []string           `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // URL patterns to block (domains/paths)
 	StripScripts         *bool              `yaml:"strip_scripts,omitempty" json:"strip_scripts,omitempty"`
+	AjaxBypass           *bool              `yaml:"ajax_bypass,omitempty" json:"ajax_bypass,omitempty"`
 }
 
 // Dimension defines viewport configuration
