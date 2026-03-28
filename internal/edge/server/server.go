@@ -13,7 +13,6 @@ import (
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/common/requestid"
-	"github.com/edgecomet/engine/internal/edge/ajax"
 	"github.com/edgecomet/engine/internal/edge/auth"
 	"github.com/edgecomet/engine/internal/edge/bot"
 	"github.com/edgecomet/engine/internal/edge/cache"
@@ -281,31 +280,6 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	}
 
 	renderCtx.DimensionAction = string(dimConfig.EffectiveAction())
-
-	// AJAX request auto-bypass: detect non-HTML requests and bypass instead of rendering
-	if resolved.Action == types.ActionRender {
-		ajaxBypassEnabled := true
-		if cfg.Render.AjaxBypass != nil {
-			ajaxBypassEnabled = *cfg.Render.AjaxBypass
-		}
-		if host.Render.AjaxBypass != nil {
-			ajaxBypassEnabled = *host.Render.AjaxBypass
-		}
-		if ajaxBypassEnabled {
-			acceptHeader := string(ctx.Request.Header.Peek("X-Original-Accept"))
-			if acceptHeader == "" {
-				acceptHeader = string(ctx.Request.Header.Peek("Accept"))
-			}
-			xRequestedWith := string(ctx.Request.Header.Peek("X-Requested-With"))
-			if ajax.IsAjaxRequest(acceptHeader, xRequestedWith) {
-				resolved.Action = types.ActionBypass
-				renderCtx.Logger.Info("AJAX request detected, auto-bypassing",
-					zap.String("accept", acceptHeader),
-					zap.String("x_requested_with", xRequestedWith))
-				ctx.Response.Header.Set("X-Bypass-Reason", "ajax")
-			}
-		}
-	}
 
 	renderCtx.Logger.Debug("Configuration resolved for URL",
 		zap.String("url", targetURL),

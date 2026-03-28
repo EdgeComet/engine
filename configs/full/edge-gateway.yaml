@@ -170,12 +170,6 @@ render:
     - "*.hotjar.com/*"
     - "~.*\\.(png|jpg|jpeg|gif|webp|svg|ico)$"
 
-  # Auto-bypass AJAX requests from bots instead of rendering them.
-  # Detects Accept: application/json (or xml) without text/html,
-  # and X-Requested-With: XMLHttpRequest headers.
-  # Default: true (enabled)
-  # ajax_bypass: true
-
 # =============================================================================
 # GLOBAL BYPASS CONFIGURATION
 # =============================================================================
