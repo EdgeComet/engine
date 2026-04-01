@@ -1,6 +1,7 @@
 package sharding
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -39,7 +40,10 @@ func (m *Manager) handlePull(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata, err := m.cacheService.GetCacheMetadata(ctx, cacheKey)
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer redisCancel()
+
+	metadata, err := m.cacheService.GetCacheMetadata(redisCtx, cacheKey)
 	if err != nil {
 		m.logger.Error("Failed to get cache metadata",
 			zap.String("cache_key", cacheKey.String()),
@@ -187,7 +191,10 @@ func (m *Manager) handlePush(ctx *fasthttp.RequestCtx) {
 
 // handleStatus handles status information requests
 func (m *Manager) handleStatus(ctx *fasthttp.RequestCtx) {
-	healthyEGs, err := m.registry.GetHealthyEGs(ctx)
+	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer redisCancel()
+
+	healthyEGs, err := m.registry.GetHealthyEGs(redisCtx)
 	if err != nil {
 		m.logger.Warn("Failed to get healthy EGs for status",
 			zap.Error(err))
