@@ -2,6 +2,7 @@ package cachedaemon
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -246,6 +247,50 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Contains(t, result.Items[0].URL, "old")
 	})
 
+	t.Run("cache_age between filter excludes both too young and too old", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		// Very recent (age ~60s) - should be excluded by min
+		populateMetadataHash(mr, 1, 1, "recent60", map[string]string{
+			"url":        "https://example.com/very-recent",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-60),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		// Medium age (~3600s) - should be included
+		populateMetadataHash(mr, 1, 1, "medium3600", map[string]string{
+			"url":        "https://example.com/medium-age",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		// Very old (age ~86400s) - should be excluded by max
+		populateMetadataHash(mr, 1, 1, "old86400", map[string]string{
+			"url":        "https://example.com/very-old",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-86400),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:      1,
+			Cursor:      "0",
+			Limit:       100,
+			CacheAgeMin: 1800,
+			CacheAgeMax: 7200,
+			StaleTTL:    600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "medium-age")
+	})
+
 	t.Run("status_code filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
@@ -478,6 +523,316 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Equal(t, 0, result.Items[0].IndexStatus)
 	})
 
+	t.Run("title contains filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tprod1", map[string]string{
+			"url":        "https://example.com/page1",
+			"title":      "Product Guide",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tman1", map[string]string{
+			"url":        "https://example.com/page2",
+			"title":      "User Manual",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tfaq1", map[string]string{
+			"url":        "https://example.com/page3",
+			"title":      "Product FAQ",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:   1,
+			Cursor:   "0",
+			Limit:    100,
+			Title:    "product",
+			StaleTTL: 600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.Contains(t, strings.ToLower(item.Title), "product")
+		}
+	})
+
+	t.Run("title contains is case insensitive", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tupper1", map[string]string{
+			"url":        "https://example.com/upper",
+			"title":      "UPPERCASE TITLE",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:   1,
+			Cursor:   "0",
+			Limit:    100,
+			Title:    "uppercase",
+			StaleTTL: 600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Equal(t, "UPPERCASE TITLE", result.Items[0].Title)
+	})
+
+	t.Run("created_at range filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "c1hour", map[string]string{
+			"url":        "https://example.com/one-hour",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "c2hour", map[string]string{
+			"url":        "https://example.com/two-hours",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-7200),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "crecent", map[string]string{
+			"url":        "https://example.com/recent",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:       1,
+			Cursor:       "0",
+			Limit:        100,
+			CreatedAtMin: now - 8000,
+			CreatedAtMax: now - 1000,
+			StaleTTL:     600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.GreaterOrEqual(t, item.CreatedAt, now-8000)
+			assert.LessOrEqual(t, item.CreatedAt, now-1000)
+		}
+	})
+
+	t.Run("expires_at range filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "esoon", map[string]string{
+			"url":        "https://example.com/exp-soon",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+1800),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "elater", map[string]string{
+			"url":        "https://example.com/exp-later",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+7200),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "efar", map[string]string{
+			"url":        "https://example.com/exp-far",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+86400),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:       1,
+			Cursor:       "0",
+			Limit:        100,
+			ExpiresAtMin: now + 3600,
+			ExpiresAtMax: now + 50000,
+			StaleTTL:     600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "exp-later")
+	})
+
+	t.Run("last_access range filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "larecent", map[string]string{
+			"url":         "https://example.com/la-recent",
+			"dimension":   "mobile",
+			"size":        "500",
+			"created_at":  fmt.Sprintf("%d", now-3600),
+			"expires_at":  fmt.Sprintf("%d", now+3600),
+			"last_access": fmt.Sprintf("%d", now-60),
+			"source":      "render",
+		})
+		populateMetadataHash(mr, 1, 1, "laold", map[string]string{
+			"url":         "https://example.com/la-old",
+			"dimension":   "mobile",
+			"size":        "500",
+			"created_at":  fmt.Sprintf("%d", now-3600),
+			"expires_at":  fmt.Sprintf("%d", now+3600),
+			"last_access": fmt.Sprintf("%d", now-7200),
+			"source":      "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			LastAccessMin: now - 600,
+			LastAccessMax: now,
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "la-recent")
+	})
+
+	t.Run("last_bot_hit range filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "lbhrecent", map[string]string{
+			"url":          "https://example.com/lbh-recent",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-3600),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-100),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhold", map[string]string{
+			"url":          "https://example.com/lbh-old",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-3600),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-7200),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhnone", map[string]string{
+			"url":        "https://example.com/lbh-none",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			LastBotHitMin: now - 3600,
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "lbh-recent")
+	})
+
+	t.Run("last_bot_hit range excludes entries without last_bot_hit", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "lbhwith", map[string]string{
+			"url":          "https://example.com/with-lbh",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-3600),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-100),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhwithout", map[string]string{
+			"url":        "https://example.com/without-lbh",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			LastBotHitMax: now + 9999,
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "with-lbh")
+	})
+
+	t.Run("title and timestamp combined", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "combo1", map[string]string{
+			"url":        "https://example.com/combo1",
+			"title":      "Product Page",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "combo2", map[string]string{
+			"url":        "https://example.com/combo2",
+			"title":      "Product Page",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "combo3", map[string]string{
+			"url":        "https://example.com/combo3",
+			"title":      "About Us",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-3600),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:       1,
+			Cursor:       "0",
+			Limit:        100,
+			Title:        "product",
+			CreatedAtMin: now - 5000,
+			CreatedAtMax: now - 1000,
+			StaleTTL:     600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "combo1")
+	})
+
 	t.Run("stale_ttl = 0 means no stale entries", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
@@ -522,6 +877,483 @@ func TestCacheReader_ListURLs(t *testing.T) {
 				assert.Equal(t, "expired", item.Status)
 			}
 		}
+	})
+
+	t.Run("url starts_with filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "swprod1", map[string]string{
+			"url":        "https://example.com/products/shoes",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "swabout1", map[string]string{
+			"url":        "https://example.com/about",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			URLStartsWith: "https://example.com/prod",
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "products/shoes")
+	})
+
+	t.Run("url ends_with filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "ewpdf1", map[string]string{
+			"url":        "https://example.com/page.pdf",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "ewhtml1", map[string]string{
+			"url":        "https://example.com/page.html",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:      1,
+			Cursor:      "0",
+			Limit:       100,
+			URLEndsWith: ".pdf",
+			StaleTTL:    600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "page.pdf")
+	})
+
+	t.Run("url neq filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "neq1", map[string]string{
+			"url":        "https://example.com/page1",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "neq2", map[string]string{
+			"url":        "https://example.com/page2",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "neq3", map[string]string{
+			"url":        "https://example.com/page3",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:   1,
+			Cursor:   "0",
+			Limit:    100,
+			URLNeq:   "https://example.com/page2",
+			StaleTTL: 600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.NotEqual(t, "https://example.com/page2", item.URL)
+		}
+	})
+
+	t.Run("url not_contains filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "ncadmin1", map[string]string{
+			"url":        "https://example.com/admin/settings",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "ncprod1", map[string]string{
+			"url":        "https://example.com/products/shoes",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "ncadmin2", map[string]string{
+			"url":        "https://example.com/admin/users",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:         1,
+			Cursor:         "0",
+			Limit:          100,
+			URLNotContains: "admin",
+			StaleTTL:       600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "products")
+	})
+
+	t.Run("title starts_with filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tsw1", map[string]string{
+			"url":        "https://example.com/p1",
+			"title":      "Getting Started Guide",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tsw2", map[string]string{
+			"url":        "https://example.com/p2",
+			"title":      "API Reference",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tsw3", map[string]string{
+			"url":        "https://example.com/p3",
+			"title":      "Getting Help",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:          1,
+			Cursor:          "0",
+			Limit:           100,
+			TitleStartsWith: "getting",
+			StaleTTL:        600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.True(t, strings.HasPrefix(strings.ToLower(item.Title), "getting"))
+		}
+	})
+
+	t.Run("title ends_with filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tew1", map[string]string{
+			"url":        "https://example.com/p1",
+			"title":      "User Guide",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tew2", map[string]string{
+			"url":        "https://example.com/p2",
+			"title":      "Admin Guide",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tew3", map[string]string{
+			"url":        "https://example.com/p3",
+			"title":      "Quick Start",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			TitleEndsWith: "guide",
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.True(t, strings.HasSuffix(strings.ToLower(item.Title), "guide"))
+		}
+	})
+
+	t.Run("title neq filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tneq1", map[string]string{
+			"url":        "https://example.com/p1",
+			"title":      "Home",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tneq2", map[string]string{
+			"url":        "https://example.com/p2",
+			"title":      "About",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tneq3", map[string]string{
+			"url":        "https://example.com/p3",
+			"title":      "Contact",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:   1,
+			Cursor:   "0",
+			Limit:    100,
+			TitleNeq: "about",
+			StaleTTL: 600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.NotEqual(t, "About", item.Title)
+		}
+	})
+
+	t.Run("title not_contains filter", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "tnc1", map[string]string{
+			"url":        "https://example.com/p1",
+			"title":      "Product A Review",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tnc2", map[string]string{
+			"url":        "https://example.com/p2",
+			"title":      "Product B Info",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "tnc3", map[string]string{
+			"url":        "https://example.com/p3",
+			"title":      "Company News",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:           1,
+			Cursor:           "0",
+			Limit:            100,
+			TitleNotContains: "product",
+			StaleTTL:         600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Equal(t, "Company News", result.Items[0].Title)
+	})
+
+	t.Run("last_bot_hit_exists true", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "lbhe1", map[string]string{
+			"url":          "https://example.com/hit1",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-100),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-500),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhe2", map[string]string{
+			"url":          "https://example.com/hit2",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-100),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-200),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhe3", map[string]string{
+			"url":        "https://example.com/nohit",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:           1,
+			Cursor:           "0",
+			Limit:            100,
+			LastBotHitExists: "true",
+			StaleTTL:         600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		for _, item := range result.Items {
+			assert.NotNil(t, item.LastBotHit)
+		}
+	})
+
+	t.Run("last_bot_hit_exists false", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "lbhef1", map[string]string{
+			"url":          "https://example.com/hit1",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-100),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-500),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhef2", map[string]string{
+			"url":          "https://example.com/hit2",
+			"dimension":    "mobile",
+			"size":         "500",
+			"created_at":   fmt.Sprintf("%d", now-100),
+			"expires_at":   fmt.Sprintf("%d", now+3600),
+			"last_bot_hit": fmt.Sprintf("%d", now-200),
+			"source":       "render",
+		})
+		populateMetadataHash(mr, 1, 1, "lbhef3", map[string]string{
+			"url":        "https://example.com/nohit",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:           1,
+			Cursor:           "0",
+			Limit:            100,
+			LastBotHitExists: "false",
+			StaleTTL:         600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Nil(t, result.Items[0].LastBotHit)
+	})
+
+	t.Run("string ops are case insensitive", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "cicase1", map[string]string{
+			"url":        "https://Example.COM/Products/Shoes",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:        1,
+			Cursor:        "0",
+			Limit:         100,
+			URLStartsWith: "https://example.com/products",
+			StaleTTL:      600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+	})
+
+	t.Run("combined string ops", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, "cso1", map[string]string{
+			"url":        "https://example.com/products/shoes",
+			"title":      "Running Shoes",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "cso2", map[string]string{
+			"url":        "https://example.com/products/hats",
+			"title":      "Summer Hats",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+		populateMetadataHash(mr, 1, 1, "cso3", map[string]string{
+			"url":        "https://example.com/about",
+			"title":      "About Running",
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		})
+
+		result, err := cr.ListURLs(CacheListParams{
+			HostID:           1,
+			Cursor:           "0",
+			Limit:            100,
+			URLStartsWith:    "https://example.com/products",
+			TitleNotContains: "running",
+			StaleTTL:         600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 1)
+		assert.Contains(t, result.Items[0].URL, "hats")
 	})
 }
 

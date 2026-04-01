@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/redis"
+	pkgtypes "github.com/edgecomet/engine/pkg/types"
 )
 
 const (
@@ -34,6 +35,25 @@ local cache_age_max = tonumber(ARGV[12])
 local status_code_filter = ARGV[13]
 local source_filter = ARGV[14]
 local index_status_filter = ARGV[15]
+local title_filter = ARGV[16]
+local title_filter_lower = string.lower(title_filter)
+local created_at_min = tonumber(ARGV[17])
+local created_at_max = tonumber(ARGV[18])
+local expires_at_min = tonumber(ARGV[19])
+local expires_at_max = tonumber(ARGV[20])
+local last_access_min = tonumber(ARGV[21])
+local last_access_max = tonumber(ARGV[22])
+local last_bot_hit_min = tonumber(ARGV[23])
+local last_bot_hit_max = tonumber(ARGV[24])
+local url_starts_with = string.lower(ARGV[25])
+local url_ends_with = string.lower(ARGV[26])
+local url_neq = string.lower(ARGV[27])
+local url_not_contains = string.lower(ARGV[28])
+local title_starts_with = string.lower(ARGV[29])
+local title_ends_with = string.lower(ARGV[30])
+local title_neq = string.lower(ARGV[31])
+local title_not_contains = string.lower(ARGV[32])
+local last_bot_hit_exists = ARGV[33]
 
 local max_scan_iterations = 200
 local scan_iterations = 0
@@ -111,6 +131,99 @@ repeat
             local is = hash["index_status"] or "0"
             if not string.find("," .. index_status_filter .. ",", "," .. is .. ",", 1, true) then
                 pass = false
+            end
+        end
+
+        if pass and title_filter ~= "" then
+            if not string.find(string.lower(hash["title"] or ""), title_filter_lower, 1, true) then
+                pass = false
+            end
+        end
+
+        if pass then
+            local created = tonumber(hash["created_at"] or "0")
+            if created_at_min > 0 and created < created_at_min then pass = false end
+            if pass and created_at_max > 0 and created > created_at_max then pass = false end
+        end
+
+        if pass then
+            local exp = tonumber(hash["expires_at"] or "0")
+            if expires_at_min > 0 and exp < expires_at_min then pass = false end
+            if pass and expires_at_max > 0 and exp > expires_at_max then pass = false end
+        end
+
+        if pass then
+            local la = tonumber(hash["last_access"] or "0")
+            if last_access_min > 0 and la < last_access_min then pass = false end
+            if pass and last_access_max > 0 and la > last_access_max then pass = false end
+        end
+
+        if pass then
+            local lbh = tonumber(hash["last_bot_hit"] or "0")
+            if last_bot_hit_min > 0 then
+                if lbh == 0 then pass = false
+                elseif lbh < last_bot_hit_min then pass = false end
+            end
+            if pass and last_bot_hit_max > 0 then
+                if lbh == 0 then pass = false
+                elseif lbh > last_bot_hit_max then pass = false end
+            end
+        end
+
+        if pass then
+            local lower_url = string.lower(hash["url"] or "")
+            if url_starts_with ~= "" then
+                if string.sub(lower_url, 1, #url_starts_with) ~= url_starts_with then
+                    pass = false
+                end
+            end
+            if pass and url_ends_with ~= "" then
+                if string.sub(lower_url, -#url_ends_with) ~= url_ends_with then
+                    pass = false
+                end
+            end
+            if pass and url_neq ~= "" then
+                if lower_url == url_neq then
+                    pass = false
+                end
+            end
+            if pass and url_not_contains ~= "" then
+                if string.find(lower_url, url_not_contains, 1, true) then
+                    pass = false
+                end
+            end
+        end
+
+        if pass then
+            local lower_title = string.lower(hash["title"] or "")
+            if title_starts_with ~= "" then
+                if string.sub(lower_title, 1, #title_starts_with) ~= title_starts_with then
+                    pass = false
+                end
+            end
+            if pass and title_ends_with ~= "" then
+                if string.sub(lower_title, -#title_ends_with) ~= title_ends_with then
+                    pass = false
+                end
+            end
+            if pass and title_neq ~= "" then
+                if lower_title == title_neq then
+                    pass = false
+                end
+            end
+            if pass and title_not_contains ~= "" then
+                if string.find(lower_title, title_not_contains, 1, true) then
+                    pass = false
+                end
+            end
+        end
+
+        if pass and last_bot_hit_exists ~= "" then
+            local lbh = tonumber(hash["last_bot_hit"] or "0")
+            if last_bot_hit_exists == "true" then
+                if lbh == 0 then pass = false end
+            elseif last_bot_hit_exists == "false" then
+                if lbh ~= 0 then pass = false end
             end
         end
 
@@ -198,23 +311,8 @@ func NewCacheReader(redisClient *redis.Client, keyGenerator *redis.KeyGenerator,
 	}
 }
 
-type CacheURLItem struct {
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Dimension   string `json:"dimension"`
-	Status      string `json:"status"`
-	CacheAge    int64  `json:"cache_age"`
-	Size        int64  `json:"size"`
-	DiskSize    int64  `json:"disk_size"`
-	LastAccess  int64  `json:"last_access"`
-	CacheKey    string `json:"cache_key"`
-	CreatedAt   int64  `json:"created_at"`
-	ExpiresAt   int64  `json:"expires_at"`
-	StatusCode  int    `json:"status_code"`
-	Source      string `json:"source"`
-	IndexStatus int    `json:"index_status"`
-	LastBotHit  *int64 `json:"last_bot_hit,omitempty"`
-}
+// CacheURLItem is an alias to the shared type to avoid drift between OSS and EE.
+type CacheURLItem = pkgtypes.CacheURLItem
 
 type CacheURLsResponse struct {
 	Items   []CacheURLItem `json:"items"`
@@ -246,6 +344,24 @@ type CacheListParams struct {
 	StatusCodeFilter  string
 	SourceFilter      string
 	IndexStatusFilter string
+	Title             string
+	CreatedAtMin      int64
+	CreatedAtMax      int64
+	ExpiresAtMin      int64
+	ExpiresAtMax      int64
+	LastAccessMin     int64
+	LastAccessMax     int64
+	LastBotHitMin     int64
+	LastBotHitMax     int64
+	URLStartsWith     string
+	URLEndsWith       string
+	URLNeq            string
+	URLNotContains    string
+	TitleStartsWith   string
+	TitleEndsWith     string
+	TitleNeq          string
+	TitleNotContains  string
+	LastBotHitExists  string
 	StaleTTL          int64
 }
 
@@ -269,6 +385,24 @@ func (cr *CacheReader) ListURLs(params CacheListParams) (*CacheURLsResponse, err
 		params.StatusCodeFilter,
 		params.SourceFilter,
 		params.IndexStatusFilter,
+		params.Title,
+		strconv.FormatInt(params.CreatedAtMin, 10),
+		strconv.FormatInt(params.CreatedAtMax, 10),
+		strconv.FormatInt(params.ExpiresAtMin, 10),
+		strconv.FormatInt(params.ExpiresAtMax, 10),
+		strconv.FormatInt(params.LastAccessMin, 10),
+		strconv.FormatInt(params.LastAccessMax, 10),
+		strconv.FormatInt(params.LastBotHitMin, 10),
+		strconv.FormatInt(params.LastBotHitMax, 10),
+		params.URLStartsWith,
+		params.URLEndsWith,
+		params.URLNeq,
+		params.URLNotContains,
+		params.TitleStartsWith,
+		params.TitleEndsWith,
+		params.TitleNeq,
+		params.TitleNotContains,
+		params.LastBotHitExists,
 	)
 	if err != nil {
 		return nil, err

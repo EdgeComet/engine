@@ -259,6 +259,50 @@ func TestHandlerValidation(t *testing.T) {
 		assert.Contains(t, string(ctx.Response.Body()), `"pending"`)
 	})
 
+	t.Run("title too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longTitle := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title="+longTitle)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("created_at_max < created_at_min returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&created_at_min=2000&created_at_max=1000")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("expires_at_max < expires_at_min returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&expires_at_min=5000&expires_at_max=3000")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("last_access_max < last_access_min returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&last_access_min=5000&last_access_max=3000")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("last_bot_hit_max < last_bot_hit_min returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&last_bot_hit_min=5000&last_bot_hit_max=3000")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("negative created_at_min returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&created_at_min=-1")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("valid title and timestamp params return 200", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title=test&created_at_min=1000")
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+		assert.Contains(t, string(ctx.Response.Body()), `"success":true`)
+	})
+
 	t.Run("host with nil Cache config does not panic", func(t *testing.T) {
 		daemon, _ := setupTestDaemon(t)
 		ctx := makeTestRequest(daemon, "GET", "/internal/cache/summary?host_id=2")
@@ -293,5 +337,74 @@ func TestHandlerValidation(t *testing.T) {
 		ctx.Request.Header.Set("X-Internal-Auth", "")
 		daemon.ServeHTTP(ctx)
 		assert.Equal(t, fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
+	})
+
+	t.Run("url_starts_with too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_starts_with="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("url_ends_with too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_ends_with="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("url_neq too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_neq="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("url_not_contains too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_not_contains="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("title_starts_with too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title_starts_with="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("title_ends_with too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title_ends_with="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("title_neq too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title_neq="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("title_not_contains too long returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		longStr := strings.Repeat("a", 201)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&title_not_contains="+longStr)
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("invalid last_bot_hit_exists returns 400", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&last_bot_hit_exists=maybe")
+		assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
+	})
+
+	t.Run("valid string op params return 200", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/urls?host_id=1&url_starts_with=https")
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+		assert.Contains(t, string(ctx.Response.Body()), `"success":true`)
 	})
 }

@@ -518,6 +518,40 @@ func (d *CacheDaemon) handleSchedulerResumeAPI(ctx *fasthttp.RequestCtx) {
 	httputil.JSONSuccess(ctx, "Scheduler resumed", fasthttp.StatusOK)
 }
 
+// handleCacheURLsAPI handles GET /internal/cache/urls
+// Query params:
+//
+//	host_id            - required, host identifier
+//	cursor             - pagination cursor (default "0")
+//	limit              - items per page (1-100, default 25)
+//	status             - CSV: active,stale,expired
+//	dimension          - CSV: dimension names
+//	url_contains       - case-insensitive URL substring
+//	size_min           - minimum size (bytes)
+//	size_max           - maximum size (bytes)
+//	cache_age_min      - minimum cache age (seconds)
+//	cache_age_max      - maximum cache age (seconds)
+//	status_code        - CSV: HTTP status codes
+//	source             - render or bypass
+//	index_status       - CSV: 1,2,3,4
+//	title              - case-insensitive title substring
+//	created_at_min     - minimum created_at timestamp (unix seconds)
+//	created_at_max     - maximum created_at timestamp (unix seconds)
+//	expires_at_min     - minimum expires_at timestamp
+//	expires_at_max     - maximum expires_at timestamp
+//	last_access_min    - minimum last_access timestamp
+//	last_access_max    - maximum last_access timestamp
+//	last_bot_hit_min   - minimum last_bot_hit timestamp (excludes null)
+//	last_bot_hit_max   - maximum last_bot_hit timestamp (excludes null)
+//	url_starts_with    - case-insensitive URL prefix
+//	url_ends_with      - case-insensitive URL suffix
+//	url_neq            - case-insensitive URL not-equal
+//	url_not_contains   - case-insensitive URL not-contains
+//	title_starts_with  - case-insensitive title prefix
+//	title_ends_with    - case-insensitive title suffix
+//	title_neq          - case-insensitive title not-equal
+//	title_not_contains - case-insensitive title not-contains
+//	last_bot_hit_exists - "true" or "false"
 func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 	host, hostID, ok := d.resolveHost(ctx)
 	if !ok {
@@ -542,7 +576,7 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 	statusFilter := queryParamString(ctx, "status")
 	if statusFilter != "" {
 		allowed := map[string]bool{"active": true, "stale": true, "expired": true}
-		parsed, err := parseCSVFilter(statusFilter, allowed, "status")
+		parsed, err := httputil.ParseCSVFilter(statusFilter, allowed, "status")
 		if err != nil {
 			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 			return
@@ -643,12 +677,164 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 	indexStatusFilter := queryParamString(ctx, "index_status")
 	if indexStatusFilter != "" {
 		allowed := map[string]bool{"1": true, "2": true, "3": true, "4": true}
-		parsed, err := parseCSVFilter(indexStatusFilter, allowed, "index_status")
+		parsed, err := httputil.ParseCSVFilter(indexStatusFilter, allowed, "index_status")
 		if err != nil {
 			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 			return
 		}
 		indexStatusFilter = strings.Join(parsed, ",")
+	}
+
+	titleFilter := queryParamString(ctx, "title")
+	if len(titleFilter) > 200 {
+		httputil.JSONError(ctx, "title must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	createdAtMin, err := queryParamInt64(ctx, "created_at_min", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if createdAtMin < 0 {
+		httputil.JSONError(ctx, "created_at_min must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	createdAtMax, err := queryParamInt64(ctx, "created_at_max", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if createdAtMax < 0 {
+		httputil.JSONError(ctx, "created_at_max must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if createdAtMax > 0 && createdAtMin > 0 && createdAtMax < createdAtMin {
+		httputil.JSONError(ctx, "created_at_max must be >= created_at_min", fasthttp.StatusBadRequest)
+		return
+	}
+
+	expiresAtMin, err := queryParamInt64(ctx, "expires_at_min", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if expiresAtMin < 0 {
+		httputil.JSONError(ctx, "expires_at_min must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	expiresAtMax, err := queryParamInt64(ctx, "expires_at_max", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if expiresAtMax < 0 {
+		httputil.JSONError(ctx, "expires_at_max must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if expiresAtMax > 0 && expiresAtMin > 0 && expiresAtMax < expiresAtMin {
+		httputil.JSONError(ctx, "expires_at_max must be >= expires_at_min", fasthttp.StatusBadRequest)
+		return
+	}
+
+	lastAccessMin, err := queryParamInt64(ctx, "last_access_min", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if lastAccessMin < 0 {
+		httputil.JSONError(ctx, "last_access_min must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	lastAccessMax, err := queryParamInt64(ctx, "last_access_max", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if lastAccessMax < 0 {
+		httputil.JSONError(ctx, "last_access_max must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if lastAccessMax > 0 && lastAccessMin > 0 && lastAccessMax < lastAccessMin {
+		httputil.JSONError(ctx, "last_access_max must be >= last_access_min", fasthttp.StatusBadRequest)
+		return
+	}
+
+	lastBotHitMin, err := queryParamInt64(ctx, "last_bot_hit_min", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if lastBotHitMin < 0 {
+		httputil.JSONError(ctx, "last_bot_hit_min must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	lastBotHitMax, err := queryParamInt64(ctx, "last_bot_hit_max", 0)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+	if lastBotHitMax < 0 {
+		httputil.JSONError(ctx, "last_bot_hit_max must be >= 0", fasthttp.StatusBadRequest)
+		return
+	}
+	if lastBotHitMax > 0 && lastBotHitMin > 0 && lastBotHitMax < lastBotHitMin {
+		httputil.JSONError(ctx, "last_bot_hit_max must be >= last_bot_hit_min", fasthttp.StatusBadRequest)
+		return
+	}
+
+	urlStartsWith := queryParamString(ctx, "url_starts_with")
+	if len(urlStartsWith) > 200 {
+		httputil.JSONError(ctx, "url_starts_with must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	urlEndsWith := queryParamString(ctx, "url_ends_with")
+	if len(urlEndsWith) > 200 {
+		httputil.JSONError(ctx, "url_ends_with must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	urlNeq := queryParamString(ctx, "url_neq")
+	if len(urlNeq) > 200 {
+		httputil.JSONError(ctx, "url_neq must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	urlNotContains := queryParamString(ctx, "url_not_contains")
+	if len(urlNotContains) > 200 {
+		httputil.JSONError(ctx, "url_not_contains must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	titleStartsWith := queryParamString(ctx, "title_starts_with")
+	if len(titleStartsWith) > 200 {
+		httputil.JSONError(ctx, "title_starts_with must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	titleEndsWith := queryParamString(ctx, "title_ends_with")
+	if len(titleEndsWith) > 200 {
+		httputil.JSONError(ctx, "title_ends_with must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	titleNeq := queryParamString(ctx, "title_neq")
+	if len(titleNeq) > 200 {
+		httputil.JSONError(ctx, "title_neq must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	titleNotContains := queryParamString(ctx, "title_not_contains")
+	if len(titleNotContains) > 200 {
+		httputil.JSONError(ctx, "title_not_contains must be at most 200 characters", fasthttp.StatusBadRequest)
+		return
+	}
+
+	lastBotHitExists := queryParamString(ctx, "last_bot_hit_exists")
+	if lastBotHitExists != "" && lastBotHitExists != "true" && lastBotHitExists != "false" {
+		httputil.JSONError(ctx, "last_bot_hit_exists must be 'true' or 'false'", fasthttp.StatusBadRequest)
+		return
 	}
 
 	staleTTL := d.getStaleTTL(host)
@@ -667,6 +853,24 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		StatusCodeFilter:  statusCodeFilter,
 		SourceFilter:      sourceFilter,
 		IndexStatusFilter: indexStatusFilter,
+		Title:             titleFilter,
+		CreatedAtMin:      createdAtMin,
+		CreatedAtMax:      createdAtMax,
+		ExpiresAtMin:      expiresAtMin,
+		ExpiresAtMax:      expiresAtMax,
+		LastAccessMin:     lastAccessMin,
+		LastAccessMax:     lastAccessMax,
+		LastBotHitMin:     lastBotHitMin,
+		LastBotHitMax:     lastBotHitMax,
+		URLStartsWith:     urlStartsWith,
+		URLEndsWith:       urlEndsWith,
+		URLNeq:            urlNeq,
+		URLNotContains:    urlNotContains,
+		TitleStartsWith:   titleStartsWith,
+		TitleEndsWith:     titleEndsWith,
+		TitleNeq:          titleNeq,
+		TitleNotContains:  titleNotContains,
+		LastBotHitExists:  lastBotHitExists,
 		StaleTTL:          staleTTL,
 	}
 
@@ -730,7 +934,7 @@ func (d *CacheDaemon) handleCacheQueueAPI(ctx *fasthttp.RequestCtx) {
 	priorityRaw := queryParamString(ctx, "priority")
 	if priorityRaw != "" {
 		allowed := map[string]bool{"high": true, "normal": true, "autorecache": true}
-		priorityFilter, err = parseCSVFilter(priorityRaw, allowed, "priority")
+		priorityFilter, err = httputil.ParseCSVFilter(priorityRaw, allowed, "priority")
 		if err != nil {
 			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 			return
@@ -788,6 +992,18 @@ func queryParamInt(ctx *fasthttp.RequestCtx, name string, defaultValue int) (int
 	return val, nil
 }
 
+func queryParamInt64(ctx *fasthttp.RequestCtx, name string, defaultValue int64) (int64, error) {
+	raw := string(ctx.QueryArgs().Peek(name))
+	if raw == "" {
+		return defaultValue, nil
+	}
+	val, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid integer", name)
+	}
+	return val, nil
+}
+
 func queryParamString(ctx *fasthttp.RequestCtx, name string) string {
 	return string(ctx.QueryArgs().Peek(name))
 }
@@ -821,18 +1037,4 @@ func handleRedisError(ctx *fasthttp.RequestCtx, err error, logger *zap.Logger) b
 		httputil.JSONError(ctx, "internal error", fasthttp.StatusInternalServerError)
 	}
 	return true
-}
-
-func parseCSVFilter(value string, allowed map[string]bool, fieldName string) ([]string, error) {
-	if value == "" {
-		return nil, nil
-	}
-	parts := strings.Split(value, ",")
-	for i, p := range parts {
-		parts[i] = strings.TrimSpace(p)
-		if !allowed[parts[i]] {
-			return nil, fmt.Errorf("invalid %s filter: %s", fieldName, parts[i])
-		}
-	}
-	return parts, nil
 }
