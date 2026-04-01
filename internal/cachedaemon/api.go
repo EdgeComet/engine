@@ -16,6 +16,28 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// URLStatusResponse is the response for the url-status endpoint
+type URLStatusResponse struct {
+	URL   string         `json:"url"`
+	Cache URLCacheStatus `json:"cache"`
+	Queue URLQueueStatus `json:"queue"`
+}
+
+// URLCacheStatus contains cache information for a single URL
+type URLCacheStatus struct {
+	Exists     bool    `json:"exists"`
+	Status     *string `json:"status"`
+	CreatedAt  *int64  `json:"created_at"`
+	StatusCode *int    `json:"status_code"`
+}
+
+// URLQueueStatus contains queue information for a single URL
+type URLQueueStatus struct {
+	Pending     bool    `json:"pending"`
+	Priority    *string `json:"priority"`
+	ScheduledAt *int64  `json:"scheduled_at"`
+}
+
 // ServeHTTP is the main HTTP request handler for the cache daemon API
 func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	path := string(ctx.Path())
@@ -60,6 +82,8 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleCacheQueueAPI(ctx)
 	case method == "GET" && path == "/internal/cache/queue/summary":
 		d.handleCacheQueueSummaryAPI(ctx)
+	case method == "GET" && path == "/internal/cache/url-status":
+		d.handleURLStatusAPI(ctx)
 	default:
 		httputil.JSONError(ctx, "not found", fasthttp.StatusNotFound)
 	}
@@ -978,6 +1002,135 @@ func (d *CacheDaemon) handleCacheQueueSummaryAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("host_id", host.ID),
 		zap.Int("pending", result.Pending),
 		zap.Int("processing", result.Processing))
+}
+
+func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
+	host, hostID, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	rawURL := queryParamString(ctx, "url")
+	if rawURL == "" {
+		httputil.JSONError(ctx, "url is required", fasthttp.StatusBadRequest)
+		return
+	}
+
+	normalizedResult, err := d.normalizer.Normalize(rawURL, nil)
+	if err != nil {
+		httputil.JSONError(ctx, "invalid url", fasthttp.StatusBadRequest)
+		return
+	}
+	normalizedURL := normalizedResult.NormalizedURL
+	urlHash := d.normalizer.Hash(normalizedURL)
+
+	dimensionIDs, err := resolveDimensionIDs(host, nil)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+
+	staleTTL := d.getStaleTTL(host)
+	now := time.Now().UTC().Unix()
+	reqCtx := context.Background()
+
+	// Cache lookup: find the most recent entry across all dimensions
+	var bestCreatedAt int64
+	var bestStatus string
+	var bestStatusCode int
+	cacheFound := false
+
+	for _, dimID := range dimensionIDs {
+		cacheKey := d.keyGenerator.GenerateCacheKey(hostID, dimID, urlHash)
+		metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
+
+		data, err := d.redis.HGetAll(reqCtx, metadataKey)
+		if err != nil {
+			d.logger.Error("Failed to get cache metadata",
+				zap.Int("host_id", hostID),
+				zap.Int("dimension_id", dimID),
+				zap.Error(err))
+			continue
+		}
+		if len(data) == 0 {
+			continue
+		}
+
+		createdAt, _ := strconv.ParseInt(data["created_at"], 10, 64)
+		if createdAt <= bestCreatedAt && cacheFound {
+			continue
+		}
+
+		expiresAt, _ := strconv.ParseInt(data["expires_at"], 10, 64)
+		statusCode, _ := strconv.Atoi(data["status_code"])
+
+		var status string
+		if now < expiresAt {
+			status = "active"
+		} else if staleTTL > 0 && now < expiresAt+staleTTL {
+			status = "stale"
+		} else {
+			status = "expired"
+		}
+
+		bestCreatedAt = createdAt
+		bestStatus = status
+		bestStatusCode = statusCode
+		cacheFound = true
+	}
+
+	// Queue lookup: find highest priority match
+	priorities := []string{redis.PriorityHigh, redis.PriorityNormal, redis.PriorityAutorecache}
+	var queuePriority string
+	var queueScheduledAt int64
+	queueFound := false
+
+	for _, priority := range priorities {
+		if queueFound {
+			break
+		}
+		queueKey := d.keyGenerator.RecacheQueueKey(hostID, priority)
+		for _, dimID := range dimensionIDs {
+			member := types.RecacheMember{
+				URL:         normalizedURL,
+				DimensionID: dimID,
+			}
+			memberJSON, _ := json.Marshal(member)
+
+			score, err := d.redis.ZScore(reqCtx, queueKey, string(memberJSON))
+			if err != nil {
+				continue
+			}
+			queuePriority = priority
+			queueScheduledAt = int64(score)
+			queueFound = true
+			break
+		}
+	}
+
+	// Build response
+	response := URLStatusResponse{
+		URL: normalizedURL,
+		Cache: URLCacheStatus{
+			Exists: cacheFound,
+		},
+		Queue: URLQueueStatus{
+			Pending: queueFound,
+		},
+	}
+
+	if cacheFound {
+		response.Cache.Status = &bestStatus
+		response.Cache.CreatedAt = &bestCreatedAt
+		response.Cache.StatusCode = &bestStatusCode
+	}
+
+	if queueFound {
+		response.Queue.Priority = &queuePriority
+		response.Queue.ScheduledAt = &queueScheduledAt
+	}
+
+	httputil.JSONData(ctx, response, fasthttp.StatusOK)
 }
 
 func queryParamInt(ctx *fasthttp.RequestCtx, name string, defaultValue int) (int, error) {

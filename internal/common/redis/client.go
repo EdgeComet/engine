@@ -358,6 +358,22 @@ func (c *Client) ZAdd(ctx context.Context, key string, score float64, member str
 	return nil
 }
 
+// ZScore returns the score of a member in a sorted set.
+// Returns redis.Nil error if the member does not exist.
+func (c *Client) ZScore(ctx context.Context, key string, member string) (float64, error) {
+	result, err := c.rdb.ZScore(ctx, key, member).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return 0, err
+		}
+		c.logger.Error("Redis ZSCORE failed",
+			zap.String("key", key),
+			zap.Error(err))
+		return 0, fmt.Errorf("redis zscore failed: %w", err)
+	}
+	return result, nil
+}
+
 func (c *Client) GetClient() *redis.Client {
 	return c.rdb
 }
