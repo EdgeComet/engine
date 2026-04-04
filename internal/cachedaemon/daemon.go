@@ -50,6 +50,9 @@ type CacheDaemon struct {
 	schedulerCancel  context.CancelFunc
 	schedulerPaused  bool
 	schedulerPauseMu sync.RWMutex
+
+	// Reload hook (optional, set by enterprise version)
+	reloadFunc func(ctx context.Context) error
 }
 
 // NewCacheDaemon creates a new cache daemon instance
@@ -272,6 +275,11 @@ func (d *CacheDaemon) IsSchedulerPaused() bool {
 	d.schedulerPauseMu.RLock()
 	defer d.schedulerPauseMu.RUnlock()
 	return d.schedulerPaused
+}
+
+// SetReloadFunc sets the reload hook called by POST /internal/reload
+func (d *CacheDaemon) SetReloadFunc(fn func(ctx context.Context) error) {
+	d.reloadFunc = fn
 }
 
 // getStaleTTL resolves the stale TTL in seconds from host config -> global config -> 0

@@ -16,6 +16,8 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+const reloadTimeout = 10 * time.Second
+
 // URLStatusResponse is the response for the url-status endpoint
 type URLStatusResponse struct {
 	URL   string         `json:"url"`
@@ -74,6 +76,8 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleSchedulerPauseAPI(ctx)
 	case method == "POST" && path == "/internal/scheduler/resume":
 		d.handleSchedulerResumeAPI(ctx)
+	case method == "POST" && path == "/internal/reload":
+		d.handleReloadAPI(ctx)
 	case method == "GET" && path == "/internal/cache/urls":
 		d.handleCacheURLsAPI(ctx)
 	case method == "GET" && path == "/internal/cache/summary":
@@ -540,6 +544,26 @@ func (d *CacheDaemon) handleSchedulerResumeAPI(ctx *fasthttp.RequestCtx) {
 	d.ResumeScheduler()
 
 	httputil.JSONSuccess(ctx, "Scheduler resumed", fasthttp.StatusOK)
+}
+
+// handleReloadAPI handles POST /internal/reload
+func (d *CacheDaemon) handleReloadAPI(ctx *fasthttp.RequestCtx) {
+	if d.reloadFunc == nil {
+		httputil.JSONSuccess(ctx, "reload not configured", fasthttp.StatusOK)
+		return
+	}
+
+	reloadCtx, cancel := context.WithTimeout(context.Background(), reloadTimeout)
+	defer cancel()
+
+	if err := d.reloadFunc(reloadCtx); err != nil {
+		d.logger.Error("reload failed", zap.Error(err))
+		httputil.JSONError(ctx, fmt.Sprintf("reload failed: %s", err.Error()), fasthttp.StatusInternalServerError)
+		return
+	}
+
+	d.logger.Info("Configuration reloaded via API")
+	httputil.JSONSuccess(ctx, "reload completed", fasthttp.StatusOK)
 }
 
 // handleCacheURLsAPI handles GET /internal/cache/urls

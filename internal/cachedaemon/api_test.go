@@ -1,7 +1,9 @@
 package cachedaemon
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 
+	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -311,5 +314,73 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
 		assert.False(t, mr.Exists("meta:cache:1:1:hash1"), "host 1 entry should be deleted")
 		assert.True(t, mr.Exists("meta:cache:2:1:hash2"), "host 2 entry should survive")
+	})
+}
+
+func TestHandleReloadAPI(t *testing.T) {
+	t.Run("returns 401 without auth header", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+
+		ctx := &fasthttp.RequestCtx{}
+		ctx.Request.Header.SetMethod("POST")
+		ctx.Request.SetRequestURI("/internal/reload")
+		daemon.ServeHTTP(ctx)
+
+		assert.Equal(t, fasthttp.StatusUnauthorized, ctx.Response.StatusCode())
+
+		var resp httputil.APIResponse
+		require.NoError(t, json.Unmarshal(ctx.Response.Body(), &resp))
+		assert.False(t, resp.Success)
+		assert.Equal(t, "unauthorized", resp.Message)
+	})
+
+	t.Run("returns success when reloadFunc is nil", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+
+		ctx := makePostRequest(daemon, "/internal/reload", nil)
+
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+
+		var resp httputil.APIResponse
+		require.NoError(t, json.Unmarshal(ctx.Response.Body(), &resp))
+		assert.True(t, resp.Success)
+		assert.Equal(t, "reload not configured", resp.Message)
+	})
+
+	t.Run("calls reloadFunc and returns success", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+
+		called := false
+		daemon.SetReloadFunc(func(ctx context.Context) error {
+			called = true
+			return nil
+		})
+
+		ctx := makePostRequest(daemon, "/internal/reload", nil)
+
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+		assert.True(t, called)
+
+		var resp httputil.APIResponse
+		require.NoError(t, json.Unmarshal(ctx.Response.Body(), &resp))
+		assert.True(t, resp.Success)
+		assert.Equal(t, "reload completed", resp.Message)
+	})
+
+	t.Run("returns error when reloadFunc fails", func(t *testing.T) {
+		daemon, _ := setupTestDaemon(t)
+
+		daemon.SetReloadFunc(func(ctx context.Context) error {
+			return fmt.Errorf("config parse error")
+		})
+
+		ctx := makePostRequest(daemon, "/internal/reload", nil)
+
+		assert.Equal(t, fasthttp.StatusInternalServerError, ctx.Response.StatusCode())
+
+		var resp httputil.APIResponse
+		require.NoError(t, json.Unmarshal(ctx.Response.Body(), &resp))
+		assert.False(t, resp.Success)
+		assert.Contains(t, resp.Message, "config parse error")
 	})
 }
