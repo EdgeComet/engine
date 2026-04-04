@@ -27,6 +27,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+const (
+	redisOperationTimeout = 5 * time.Second
+)
+
 type Server struct {
 	configManager configtypes.EGConfigManager
 	redis         *redis.Client
@@ -316,7 +320,10 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 			now := time.Now().UTC()
 
 			// Update last_bot_hit in cache metadata
-			if err := s.metadataStore.UpdateLastBotHit(ctx, renderCtx.CacheKey, now); err != nil {
+			// Use background context to avoid cancellation when HTTP response is sent
+			botCtx, botCancel := context.WithTimeout(context.Background(), redisOperationTimeout)
+			defer botCancel()
+			if err := s.metadataStore.UpdateLastBotHit(botCtx, renderCtx.CacheKey, now); err != nil {
 				renderCtx.Logger.Error("Failed to update last_bot_hit",
 					zap.String("cache_key", renderCtx.CacheKey.String()),
 					zap.Error(err))
@@ -326,7 +333,7 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 			// Schedule autorecache
 			interval := renderCtx.ResolvedConfig.BothitRecache.Interval
 			scheduledAt := now.Add(interval)
-			if err := s.autorecacheClient.ScheduleAutorecache(ctx, renderCtx.Host.ID, renderCtx.TargetURL, renderCtx.CacheKey.DimensionID, scheduledAt); err != nil {
+			if err := s.autorecacheClient.ScheduleAutorecache(botCtx, renderCtx.Host.ID, renderCtx.TargetURL, renderCtx.CacheKey.DimensionID, scheduledAt); err != nil {
 				renderCtx.Logger.Error("Failed to schedule autorecache",
 					zap.Error(err))
 				// Non-fatal error, continue serving the response

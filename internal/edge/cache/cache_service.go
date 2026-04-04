@@ -11,6 +11,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+const (
+	redisOperationTimeout = 5 * time.Second
+)
+
 // CacheResponse holds cache information for serving
 // Supports both file-based and memory-based serving modes
 // IMPORTANT: Either FilePath OR Content should be set, never both
@@ -51,7 +55,7 @@ func NewCacheService(metadata *MetadataStore, filesystem *FilesystemCache, logge
 // Returns the cache metadata and a boolean indicating if it exists (true for both fresh and expired)
 // Orchestrator will use metadata.IsFresh() to determine if cache is still valid
 func (cs *CacheService) GetCacheEntry(renderCtx *edgectx.RenderContext) (*CacheMetadata, bool) {
-	reqCtx, cancel := renderCtx.ContextWithTimeout(5 * time.Second) // Quick cache operation
+	reqCtx, cancel := context.WithTimeout(context.Background(), redisOperationTimeout)
 	defer cancel()
 
 	renderCtx.Logger.Debug("Checking cache for entry")
