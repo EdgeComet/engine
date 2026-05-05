@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-redis/redis/v8"
 	. "github.com/onsi/gomega"
 
@@ -109,11 +110,16 @@ func parseRecacheMember(memberStr string) (*types.RecacheMember, error) {
 }
 
 // populateCacheEntry creates a cache metadata hash in miniredis
-func populateCacheEntry(mr *miniredis.Miniredis, hostID, dimID int, urlHash string, fields map[string]string) {
-	key := fmt.Sprintf("meta:cache:%d:%d:%s", hostID, dimID, urlHash)
+func populateCacheEntry(mr *miniredis.Miniredis, hostID, dimID int, urlHash uint64, fields map[string]string) {
+	key := fmt.Sprintf("meta:cache:%d:%d:%d", hostID, dimID, urlHash)
 	for k, v := range fields {
 		mr.HSet(key, k, v)
 	}
+}
+
+// hashLabel converts a string label to a stable uint64 hash for use as a test URL hash
+func hashLabel(s string) uint64 {
+	return xxhash.Sum64String(s)
 }
 
 // makeDaemonGETRequest sends an HTTP GET request to the daemon and returns parsed JSON

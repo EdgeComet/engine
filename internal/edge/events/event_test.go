@@ -17,7 +17,7 @@ func TestRequestEvent_Instantiation(t *testing.T) {
 		Host:            "example.com",
 		HostID:          1,
 		URL:             "https://example.com/page",
-		URLHash:         "abc123",
+		URLHash:         0xabc123,
 		EventType:       "render",
 		Dimension:       "desktop",
 		UserAgent:       "Mozilla/5.0",
@@ -46,7 +46,7 @@ func TestRequestEvent_Instantiation(t *testing.T) {
 	assert.Equal(t, "example.com", event.Host)
 	assert.Equal(t, 1, event.HostID)
 	assert.Equal(t, "https://example.com/page", event.URL)
-	assert.Equal(t, "abc123", event.URLHash)
+	assert.Equal(t, uint64(0xabc123), event.URLHash)
 	assert.Equal(t, "render", event.EventType)
 	assert.Equal(t, "desktop", event.Dimension)
 	assert.Equal(t, "Mozilla/5.0", event.UserAgent)

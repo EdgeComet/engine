@@ -204,11 +204,11 @@ func TestBuildRequestEvent_ContextFields(t *testing.T) {
 	assert.Equal(t, "example.com", event.Host)
 	assert.Equal(t, 1, event.HostID)
 	assert.Equal(t, "https://example.com/page", event.URL)
-	assert.Equal(t, "abc123", event.URLHash)
+	assert.Equal(t, uint64(0xabc123), event.URLHash)
 	assert.Equal(t, "desktop", event.Dimension)
 	assert.Equal(t, "Googlebot/2.1", event.UserAgent)
 	assert.Equal(t, "", event.ClientIP)
-	assert.Equal(t, "cache:1:1:abc123", event.CacheKey)
+	assert.Equal(t, "cache:1:1:11256099", event.CacheKey)
 	assert.Equal(t, "eg-instance-123", event.EGInstanceID)
 	assert.InDelta(t, 0.05, event.ServeTime, 0.001)
 }
@@ -836,7 +836,7 @@ func createTestRenderContext() *edgectx.RenderContext {
 		RequestID: "req-123",
 		HTTPCtx:   ctx,
 		TargetURL: "https://example.com/page",
-		URLHash:   "abc123",
+		URLHash:   0xabc123,
 		Host: &types.Host{
 			Domain: "example.com",
 			ID:     1,
@@ -845,7 +845,7 @@ func createTestRenderContext() *edgectx.RenderContext {
 		CacheKey: &types.CacheKey{
 			HostID:      1,
 			DimensionID: 1,
-			URLHash:     "abc123",
+			URLHash:     0xabc123,
 		},
 	}
 }

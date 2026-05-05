@@ -566,7 +566,7 @@ func overrideRenderCtx(cacheKey *types.CacheKey) *edgectx.RenderContext {
 	ctx.Request.SetRequestURI("/test")
 	renderCtx := edgectx.NewRenderContext("test-req", ctx, zap.NewNop(), 120*time.Second)
 	renderCtx.TargetURL = "https://example.com/page"
-	renderCtx.URLHash = "abc123"
+	renderCtx.URLHash = 0xabc123
 	renderCtx.Host = &types.Host{ID: 1}
 	renderCtx.Dimension = "desktop"
 	renderCtx.CacheKey = cacheKey
@@ -578,7 +578,7 @@ func TestSaveOverrideCache(t *testing.T) {
 	t.Run("301 redirect creates metadata-only entry with Location header", func(t *testing.T) {
 		cc, mr := newOverrideCacheCoordinator(t)
 
-		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "redirect301"}
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x301}
 		renderCtx := overrideRenderCtx(cacheKey)
 
 		override := &ResponseOverride{StatusCode: 301, Location: "https://example.com/new-page"}
@@ -596,7 +596,7 @@ func TestSaveOverrideCache(t *testing.T) {
 	t.Run("404 override creates metadata-only entry without Location", func(t *testing.T) {
 		cc, mr := newOverrideCacheCoordinator(t)
 
-		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "status404"}
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x404}
 		renderCtx := overrideRenderCtx(cacheKey)
 
 		override := &ResponseOverride{StatusCode: 404}
@@ -612,7 +612,7 @@ func TestSaveOverrideCache(t *testing.T) {
 	t.Run("bypass source stored correctly", func(t *testing.T) {
 		cc, mr := newOverrideCacheCoordinator(t)
 
-		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "bypass410"}
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x410}
 		renderCtx := overrideRenderCtx(cacheKey)
 
 		override := &ResponseOverride{StatusCode: 410}
@@ -627,7 +627,7 @@ func TestSaveOverrideCache(t *testing.T) {
 	t.Run("stale TTL extends Redis key expiration", func(t *testing.T) {
 		cc, mr := newOverrideCacheCoordinator(t)
 
-		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: "stale301"}
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x5301}
 		renderCtx := overrideRenderCtx(cacheKey)
 
 		staleTTLValue := types.Duration(30 * time.Minute)

@@ -16,7 +16,7 @@ import (
 type PullRequest struct {
 	HostID      int    `json:"host_id"`
 	DimensionID int    `json:"dimension_id"`
-	URLHash     string `json:"url_hash"`
+	URLHash     uint64 `json:"url_hash"`
 }
 
 // PullResponse represents the response from a pull request
@@ -29,7 +29,7 @@ type PullResponse struct {
 type PushRequest struct {
 	HostID      int       `json:"host_id"`
 	DimensionID int       `json:"dimension_id"`
-	URLHash     string    `json:"url_hash"`
+	URLHash     uint64    `json:"url_hash"`
 	Content     []byte    `json:"content"`
 	CreatedAt   time.Time `json:"created_at"`
 	ExpiresAt   time.Time `json:"expires_at"`
@@ -108,7 +108,7 @@ func (c *FastHTTPClient) Pull(ctx context.Context, targetEgID string, req *PullR
 	}
 
 	// Build cache key
-	cacheKey := fmt.Sprintf("cache:%d:%d:%s", req.HostID, req.DimensionID, req.URLHash)
+	cacheKey := fmt.Sprintf("cache:%d:%d:%d", req.HostID, req.DimensionID, req.URLHash)
 
 	// Build URL with query parameter
 	url := fmt.Sprintf("%s://%s/internal/cache/pull?cache_key=%s", c.protocol, address, cacheKey)

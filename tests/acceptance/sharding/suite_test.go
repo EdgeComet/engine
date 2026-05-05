@@ -777,8 +777,8 @@ func (te *TestEnvironment) requestViaEGNoRedirect(targetURL string, egBaseURL st
 // ============================================================================
 
 // BuildCacheKey constructs a Redis metadata key in the format meta:cache:{host_id}:{dimension_id}:{url_hash}
-func (te *TestEnvironment) BuildCacheKey(hostID, dimensionID int, urlHash string) string {
-	return fmt.Sprintf("meta:cache:%d:%d:%s", hostID, dimensionID, urlHash)
+func (te *TestEnvironment) BuildCacheKey(hostID, dimensionID int, urlHash uint64) string {
+	return fmt.Sprintf("meta:cache:%d:%d:%d", hostID, dimensionID, urlHash)
 }
 
 // GetRedisMetadata fetches the full metadata hash from Redis for a given cache key
@@ -799,7 +799,7 @@ func (te *TestEnvironment) GetRedisMetadata(cacheKey string) (map[string]string,
 }
 
 // GetCacheMetadata is a convenience wrapper that builds the cache key and fetches metadata
-func (te *TestEnvironment) GetCacheMetadata(hostID, dimensionID int, urlHash string) (map[string]string, error) {
+func (te *TestEnvironment) GetCacheMetadata(hostID, dimensionID int, urlHash uint64) (map[string]string, error) {
 	cacheKey := te.BuildCacheKey(hostID, dimensionID, urlHash)
 	return te.GetRedisMetadata(cacheKey)
 }

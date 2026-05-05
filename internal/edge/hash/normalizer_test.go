@@ -95,7 +95,6 @@ func TestHashConsistency(t *testing.T) {
 	normHash2 := normalizer.Hash(result2.NormalizedURL)
 
 	assert.Equal(t, normHash1, normHash2, "Normalized URLs should have same hash")
-	assert.Len(t, hash1, 16, "Hash should be 16 characters (64-bit hex)")
 	assert.NotEqual(t, hash1, hash2, "Non-normalized URLs should have different hashes")
 }
 
@@ -146,7 +145,7 @@ func TestHashConsistency_DifferentEncodings(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var normalizedURLs []string
-			var hashes []string
+			var hashes []uint64
 
 			for _, url := range tt.urls {
 				result, err := normalizer.Normalize(url, nil)

@@ -1,6 +1,7 @@
 package sharding_test
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -13,7 +14,7 @@ var _ = Describe("Replication Factor Enforcement", Serial, func() {
 	var (
 		normalizer *hash.URLNormalizer
 		testURL    string
-		urlHash    string
+		urlHash    uint64
 		cacheKey   string
 	)
 
@@ -103,7 +104,7 @@ var _ = Describe("Replication Factor Enforcement", Serial, func() {
 			urlHash = normalizer.Hash(result.NormalizedURL)
 
 			// Bypass cache uses same key structure
-			cacheKey = "meta:bypass_cache:1:1:" + urlHash
+			cacheKey = fmt.Sprintf("meta:bypass_cache:1:1:%d", urlHash)
 
 			By("Making first bypass request via EG1")
 			response1 := testEnv.RequestViaEG1("/bypass-test/replication.html")

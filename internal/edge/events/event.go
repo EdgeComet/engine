@@ -13,7 +13,7 @@ type RequestEvent struct {
 	Host      string `json:"host"`
 	HostID    int    `json:"host_id"`
 	URL       string `json:"url"`
-	URLHash   string `json:"url_hash"`
+	URLHash   uint64 `json:"url_hash"`
 
 	// Request metadata
 	EventType       string `json:"event_type"` // cache_hit, render, bypass, bypass_cache, precache, error

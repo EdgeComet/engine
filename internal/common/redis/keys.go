@@ -27,7 +27,7 @@ func NewKeyGenerator() *KeyGenerator {
 }
 
 // GenerateCacheKey creates a cache key from provided components
-func (kg *KeyGenerator) GenerateCacheKey(hostID int, dimensionID int, urlHash string) *types.CacheKey {
+func (kg *KeyGenerator) GenerateCacheKey(hostID int, dimensionID int, urlHash uint64) *types.CacheKey {
 	return &types.CacheKey{
 		HostID:      hostID,
 		DimensionID: dimensionID,
@@ -38,9 +38,9 @@ func (kg *KeyGenerator) GenerateCacheKey(hostID int, dimensionID int, urlHash st
 // ParseCacheKey extracts components from cache key string
 func (kg *KeyGenerator) ParseCacheKey(cacheKeyStr string) (*types.CacheKey, error) {
 	var hostID, dimensionID int
-	var urlHash string
+	var urlHash uint64
 
-	n, err := fmt.Sscanf(cacheKeyStr, "cache:%d:%d:%s", &hostID, &dimensionID, &urlHash)
+	n, err := fmt.Sscanf(cacheKeyStr, "cache:%d:%d:%d", &hostID, &dimensionID, &urlHash)
 	if err != nil || n != 3 {
 		return nil, fmt.Errorf("invalid cache key format: %s", cacheKeyStr)
 	}

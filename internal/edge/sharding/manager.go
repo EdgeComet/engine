@@ -162,7 +162,7 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 }
 
 // ComputeTargets computes which EGs should store a cache entry
-func (m *Manager) ComputeTargets(ctx context.Context, cacheKey string) ([]string, error) {
+func (m *Manager) ComputeTargets(ctx context.Context, cacheKey *types.CacheKey) ([]string, error) {
 	replicationFactor := 2 // Default
 	if m.config.ReplicationFactor != nil {
 		replicationFactor = *m.config.ReplicationFactor
@@ -174,7 +174,7 @@ func (m *Manager) ComputeTargets(ctx context.Context, cacheKey string) ([]string
 // IsTargetForCache checks if the current EG should store this cache based on hash distribution
 // Returns true if current EG is in the computed target list for this cache key
 // Uses pure hash-based distribution (no rendering EG override) for pull operations
-func (m *Manager) IsTargetForCache(ctx context.Context, cacheKey string) (bool, error) {
+func (m *Manager) IsTargetForCache(ctx context.Context, cacheKey *types.CacheKey) (bool, error) {
 	// If sharding disabled, always store locally
 	if !m.IsEnabled() {
 		return true, nil

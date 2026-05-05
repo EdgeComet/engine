@@ -9,12 +9,26 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"go.uber.org/zap"
+
+	"github.com/edgecomet/engine/pkg/types"
 )
 
-// Distributor determines which EG instances should store a given cache entry
+// Distributor determines which EG instances should store a given cache entry.
+//
+// Distribution hashes a stable canonical form of the cache key (with the URL
+// hash formatted as 16-char lowercase hex) rather than the user-visible
+// CacheKey.String() output. This decouples the cluster mapping from the way
+// cache keys are rendered for Redis/filesystem/logs: changing the user-visible
+// format never reshuffles which EG owns which cache entry.
 type Distributor interface {
-	ComputeTargets(ctx context.Context, cacheKey string, renderingEgID string, replicationFactor int) ([]string, error)
-	ComputeHashTargets(ctx context.Context, cacheKey string, replicationFactor int) ([]string, error)
+	ComputeTargets(ctx context.Context, cacheKey *types.CacheKey, renderingEgID string, replicationFactor int) ([]string, error)
+	ComputeHashTargets(ctx context.Context, cacheKey *types.CacheKey, replicationFactor int) ([]string, error)
+}
+
+// distributionKey returns the canonical hex-formatted cache key used for
+// hash-based EG distribution. This format is fixed and must not change.
+func distributionKey(ck *types.CacheKey) string {
+	return fmt.Sprintf("cache:%d:%d:%016x", ck.HostID, ck.DimensionID, ck.URLHash)
 }
 
 // HashModuloDistributor implements deterministic distribution using hash modulo
@@ -34,10 +48,10 @@ func NewHashModuloDistributor(registry Registry, logger *zap.Logger) *HashModulo
 // ComputeTargets computes target EGs using hash modulo algorithm
 // Algorithm:
 // 1. Get healthy EGs and sort alphabetically (deterministic ordering)
-// 2. Compute primary index: XXHash64(cacheKey) % numEGs
+// 2. Compute primary index: XXHash64(distributionKey) % numEGs
 // 3. Select N consecutive EGs starting from primary (with wrap-around)
 // 4. Ensure rendering EG is included in target list
-func (d *HashModuloDistributor) ComputeTargets(ctx context.Context, cacheKey string, renderingEgID string, replicationFactor int) ([]string, error) {
+func (d *HashModuloDistributor) ComputeTargets(ctx context.Context, cacheKey *types.CacheKey, renderingEgID string, replicationFactor int) ([]string, error) {
 	if replicationFactor <= 0 {
 		return []string{renderingEgID}, nil
 	}
@@ -64,8 +78,8 @@ func (d *HashModuloDistributor) ComputeTargets(ctx context.Context, cacheKey str
 		actualReplication = len(egIDs)
 	}
 
-	// Compute hash and primary index
-	hashValue := xxhash.Sum64String(cacheKey)
+	// Compute hash and primary index from canonical (format-stable) key
+	hashValue := xxhash.Sum64String(distributionKey(cacheKey))
 	primaryIndex := int(hashValue % uint64(len(egIDs)))
 
 	// Select N consecutive EGs with wrap-around
@@ -94,7 +108,7 @@ func (d *HashModuloDistributor) ComputeTargets(ctx context.Context, cacheKey str
 	}
 
 	d.logger.Debug("Computed distribution targets",
-		zap.String("cache_key", cacheKey),
+		zap.String("cache_key", cacheKey.String()),
 		zap.String("rendering_eg", renderingEgID),
 		zap.Int("replication_factor", replicationFactor),
 		zap.Int("cluster_size", len(egIDs)),
@@ -105,7 +119,7 @@ func (d *HashModuloDistributor) ComputeTargets(ctx context.Context, cacheKey str
 
 // ComputeHashTargets computes target EGs using ONLY hash distribution (no rendering EG override)
 // Used for pull operations to check if an EG should store pulled cache based on pure hash distribution
-func (d *HashModuloDistributor) ComputeHashTargets(ctx context.Context, cacheKey string, replicationFactor int) ([]string, error) {
+func (d *HashModuloDistributor) ComputeHashTargets(ctx context.Context, cacheKey *types.CacheKey, replicationFactor int) ([]string, error) {
 	if replicationFactor <= 0 {
 		return []string{}, nil
 	}
@@ -132,8 +146,8 @@ func (d *HashModuloDistributor) ComputeHashTargets(ctx context.Context, cacheKey
 		actualReplication = len(egIDs)
 	}
 
-	// Compute hash and primary index
-	hashValue := xxhash.Sum64String(cacheKey)
+	// Compute hash and primary index from canonical (format-stable) key
+	hashValue := xxhash.Sum64String(distributionKey(cacheKey))
 	primaryIndex := int(hashValue % uint64(len(egIDs)))
 
 	// Select N consecutive EGs with wrap-around (NO rendering EG override)
@@ -144,7 +158,7 @@ func (d *HashModuloDistributor) ComputeHashTargets(ctx context.Context, cacheKey
 	}
 
 	d.logger.Debug("Computed hash-based targets (no rendering override)",
-		zap.String("cache_key", cacheKey),
+		zap.String("cache_key", cacheKey.String()),
 		zap.Int("replication_factor", replicationFactor),
 		zap.Int("cluster_size", len(egIDs)),
 		zap.Strings("targets", targets))
@@ -171,7 +185,7 @@ func NewRandomDistributor(registry Registry, logger *zap.Logger) *RandomDistribu
 // 1. Get healthy EGs
 // 2. Randomly select N EGs
 // 3. Ensure rendering EG is included
-func (d *RandomDistributor) ComputeTargets(ctx context.Context, cacheKey string, renderingEgID string, replicationFactor int) ([]string, error) {
+func (d *RandomDistributor) ComputeTargets(ctx context.Context, cacheKey *types.CacheKey, renderingEgID string, replicationFactor int) ([]string, error) {
 	if replicationFactor <= 0 {
 		return []string{renderingEgID}, nil
 	}
@@ -227,7 +241,7 @@ func (d *RandomDistributor) ComputeTargets(ctx context.Context, cacheKey string,
 	}
 
 	d.logger.Debug("Computed random distribution targets",
-		zap.String("cache_key", cacheKey),
+		zap.String("cache_key", cacheKey.String()),
 		zap.String("rendering_eg", renderingEgID),
 		zap.Int("replication_factor", replicationFactor),
 		zap.Int("cluster_size", len(egIDs)),
@@ -237,7 +251,7 @@ func (d *RandomDistributor) ComputeTargets(ctx context.Context, cacheKey string,
 }
 
 // ComputeHashTargets for random distributor (random selection without rendering EG override)
-func (d *RandomDistributor) ComputeHashTargets(ctx context.Context, cacheKey string, replicationFactor int) ([]string, error) {
+func (d *RandomDistributor) ComputeHashTargets(ctx context.Context, cacheKey *types.CacheKey, replicationFactor int) ([]string, error) {
 	if replicationFactor <= 0 {
 		return []string{}, nil
 	}
@@ -275,7 +289,7 @@ func (d *RandomDistributor) ComputeHashTargets(ctx context.Context, cacheKey str
 	targets := shuffled[:actualReplication]
 
 	d.logger.Debug("Computed random targets (no rendering override)",
-		zap.String("cache_key", cacheKey),
+		zap.String("cache_key", cacheKey.String()),
 		zap.Int("replication_factor", replicationFactor),
 		zap.Int("cluster_size", len(egIDs)),
 		zap.Strings("targets", targets))
@@ -296,19 +310,19 @@ func NewPrimaryOnlyDistributor(logger *zap.Logger) *PrimaryOnlyDistributor {
 }
 
 // ComputeTargets returns only the rendering EG
-func (d *PrimaryOnlyDistributor) ComputeTargets(ctx context.Context, cacheKey string, renderingEgID string, replicationFactor int) ([]string, error) {
+func (d *PrimaryOnlyDistributor) ComputeTargets(ctx context.Context, cacheKey *types.CacheKey, renderingEgID string, replicationFactor int) ([]string, error) {
 	d.logger.Debug("Primary-only distribution",
-		zap.String("cache_key", cacheKey),
+		zap.String("cache_key", cacheKey.String()),
 		zap.String("rendering_eg", renderingEgID))
 
 	return []string{renderingEgID}, nil
 }
 
 // ComputeHashTargets for primary-only distributor (no distribution, no pull-and-store)
-func (d *PrimaryOnlyDistributor) ComputeHashTargets(ctx context.Context, cacheKey string, replicationFactor int) ([]string, error) {
+func (d *PrimaryOnlyDistributor) ComputeHashTargets(ctx context.Context, cacheKey *types.CacheKey, replicationFactor int) ([]string, error) {
 	// Primary-only: only rendering EG stores, no pull-and-store allowed
 	d.logger.Debug("Primary-only distribution (no pull-and-store)",
-		zap.String("cache_key", cacheKey))
+		zap.String("cache_key", cacheKey.String()))
 
 	return []string{}, nil
 }

@@ -460,27 +460,27 @@ func TestCacheKey_String(t *testing.T) {
 			key: CacheKey{
 				HostID:      1,
 				DimensionID: 2,
-				URLHash:     "abc123def456",
+				URLHash:     0xabc123def456,
 			},
-			expected: "cache:1:2:abc123def456",
+			expected: "cache:1:2:188846018851926",
 		},
 		{
 			name: "cache key with zeros",
 			key: CacheKey{
 				HostID:      0,
 				DimensionID: 0,
-				URLHash:     "hash",
+				URLHash:     0,
 			},
-			expected: "cache:0:0:hash",
+			expected: "cache:0:0:0",
 		},
 		{
 			name: "cache key with large IDs",
 			key: CacheKey{
 				HostID:      9999,
 				DimensionID: 1234,
-				URLHash:     "longhashvalue123",
+				URLHash:     0xfedcba9876543210,
 			},
-			expected: "cache:9999:1234:longhashvalue123",
+			expected: "cache:9999:1234:18364758544493064720",
 		},
 	}
 

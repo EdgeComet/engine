@@ -286,12 +286,12 @@ const (
 type CacheKey struct {
 	HostID      int    `json:"h"`
 	DimensionID int    `json:"d"`
-	URLHash     string `json:"u"`
+	URLHash     uint64 `json:"u"`
 }
 
 // String returns cache key in Redis format
 func (ck CacheKey) String() string {
-	return fmt.Sprintf("cache:%d:%d:%s", ck.HostID, ck.DimensionID, ck.URLHash)
+	return fmt.Sprintf("cache:%d:%d:%d", ck.HostID, ck.DimensionID, ck.URLHash)
 }
 
 // EGInfo represents information about an Edge Gateway instance in the registry
@@ -305,10 +305,10 @@ type EGInfo struct {
 // ParseCacheKey parses a cache key string in format "cache:host_id:dimension_id:url_hash"
 func ParseCacheKey(s string) (*CacheKey, error) {
 	var hostID, dimensionID int
-	var urlHash string
+	var urlHash uint64
 
 	// Parse using fmt.Sscanf for cache:host_id:dimension_id:url_hash format
-	n, err := fmt.Sscanf(s, "cache:%d:%d:%s", &hostID, &dimensionID, &urlHash)
+	n, err := fmt.Sscanf(s, "cache:%d:%d:%d", &hostID, &dimensionID, &urlHash)
 	if err != nil || n != 3 {
 		return nil, fmt.Errorf("invalid cache key format: %s", s)
 	}

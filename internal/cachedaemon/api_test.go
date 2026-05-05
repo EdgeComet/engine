@@ -195,22 +195,22 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 	t.Run("deletes all metadata for host", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		populateMetadataHash(mr, 1, 0, "hash1", map[string]string{
+		populateMetadataHash(mr, 1, 0, hashLabel("hash1"), map[string]string{
 			"url": "https://example.com/a", "dimension": "",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "bypass",
 		})
-		populateMetadataHash(mr, 1, 1, "hash2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("hash2"), map[string]string{
 			"url": "https://example.com/b", "dimension": "mobile",
 			"size": "200", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
-		populateMetadataHash(mr, 1, 2, "hash3", map[string]string{
+		populateMetadataHash(mr, 1, 2, hashLabel("hash3"), map[string]string{
 			"url": "https://example.com/c", "dimension": "desktop",
 			"size": "300", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
 
-		key0 := "meta:cache:1:0:hash1"
-		key1 := "meta:cache:1:1:hash2"
-		key2 := "meta:cache:1:2:hash3"
+		key0 := fmt.Sprintf("meta:cache:1:0:%d", hashLabel("hash1"))
+		key1 := fmt.Sprintf("meta:cache:1:1:%d", hashLabel("hash2"))
+		key2 := fmt.Sprintf("meta:cache:1:2:%d", hashLabel("hash3"))
 		require.True(t, mr.Exists(key0))
 		require.True(t, mr.Exists(key1))
 		require.True(t, mr.Exists(key2))
@@ -235,15 +235,15 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 	t.Run("filters by dimension_ids", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		populateMetadataHash(mr, 1, 0, "hash1", map[string]string{
+		populateMetadataHash(mr, 1, 0, hashLabel("hash1"), map[string]string{
 			"url": "https://example.com/a", "dimension": "",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "bypass",
 		})
-		populateMetadataHash(mr, 1, 1, "hash2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("hash2"), map[string]string{
 			"url": "https://example.com/b", "dimension": "mobile",
 			"size": "200", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
-		populateMetadataHash(mr, 1, 2, "hash3", map[string]string{
+		populateMetadataHash(mr, 1, 2, hashLabel("hash3"), map[string]string{
 			"url": "https://example.com/c", "dimension": "desktop",
 			"size": "300", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
@@ -255,9 +255,9 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 		ctx := makePostRequest(daemon, "/internal/cache/invalidate-all", body)
 
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
-		assert.True(t, mr.Exists("meta:cache:1:0:hash1"), "dimension 0 should survive")
-		assert.False(t, mr.Exists("meta:cache:1:1:hash2"), "dimension 1 should be deleted")
-		assert.True(t, mr.Exists("meta:cache:1:2:hash3"), "dimension 2 should survive")
+		assert.True(t, mr.Exists(fmt.Sprintf("meta:cache:1:0:%d", hashLabel("hash1"))), "dimension 0 should survive")
+		assert.False(t, mr.Exists(fmt.Sprintf("meta:cache:1:1:%d", hashLabel("hash2"))), "dimension 1 should be deleted")
+		assert.True(t, mr.Exists(fmt.Sprintf("meta:cache:1:2:%d", hashLabel("hash3"))), "dimension 2 should survive")
 
 		var resp struct {
 			Data types.InvalidateAllAPIData `json:"data"`
@@ -297,11 +297,11 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 	t.Run("does not delete metadata for other hosts", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
 
-		populateMetadataHash(mr, 1, 1, "hash1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("hash1"), map[string]string{
 			"url": "https://example.com/a", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
-		populateMetadataHash(mr, 2, 1, "hash2", map[string]string{
+		populateMetadataHash(mr, 2, 1, hashLabel("hash2"), map[string]string{
 			"url": "https://nocache.com/b", "dimension": "mobile",
 			"size": "200", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
@@ -312,8 +312,8 @@ func TestHandleInvalidateAllAPI(t *testing.T) {
 		ctx := makePostRequest(daemon, "/internal/cache/invalidate-all", body)
 
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
-		assert.False(t, mr.Exists("meta:cache:1:1:hash1"), "host 1 entry should be deleted")
-		assert.True(t, mr.Exists("meta:cache:2:1:hash2"), "host 2 entry should survive")
+		assert.False(t, mr.Exists(fmt.Sprintf("meta:cache:1:1:%d", hashLabel("hash1"))), "host 1 entry should be deleted")
+		assert.True(t, mr.Exists(fmt.Sprintf("meta:cache:2:1:%d", hashLabel("hash2"))), "host 2 entry should survive")
 	})
 }
 

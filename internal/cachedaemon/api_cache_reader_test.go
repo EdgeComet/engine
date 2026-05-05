@@ -144,11 +144,11 @@ func TestHandlerValidation(t *testing.T) {
 
 	t.Run("dimension filter with spaces is trimmed", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
-		populateMetadataHash(mr, 1, 1, "mob1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("mob1"), map[string]string{
 			"url": "https://example.com/m1", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
-		populateMetadataHash(mr, 1, 2, "desk1", map[string]string{
+		populateMetadataHash(mr, 1, 2, hashLabel("desk1"), map[string]string{
 			"url": "https://example.com/d1", "dimension": "desktop",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999", "source": "render",
 		})
@@ -198,17 +198,17 @@ func TestHandlerValidation(t *testing.T) {
 
 	t.Run("status_code filter with spaces is trimmed", func(t *testing.T) {
 		daemon, mr := setupTestDaemon(t)
-		populateMetadataHash(mr, 1, 1, "ok1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ok1"), map[string]string{
 			"url": "https://example.com/ok", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999",
 			"source": "render", "status_code": "200",
 		})
-		populateMetadataHash(mr, 1, 1, "nf1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("nf1"), map[string]string{
 			"url": "https://example.com/nf", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999",
 			"source": "render", "status_code": "404",
 		})
-		populateMetadataHash(mr, 1, 1, "err1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("err1"), map[string]string{
 			"url": "https://example.com/err", "dimension": "mobile",
 			"size": "100", "created_at": "1000000", "expires_at": "9999999999",
 			"source": "render", "status_code": "500",

@@ -13,7 +13,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 	var (
 		normalizer *hash.URLNormalizer
 		testURL    string
-		urlHash    string
+		urlHash    uint64
 		cacheKey   string
 	)
 

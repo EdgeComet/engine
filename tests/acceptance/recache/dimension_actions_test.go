@@ -23,18 +23,18 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 	Context("Invalidate-All with Bypass Dimension", func() {
 		var (
 			normalizer     *hash.URLNormalizer
-			createMetadata func(dimID int, urlHash string)
-			metadataExists func(dimID int, urlHash string) bool
+			createMetadata func(dimID int, urlHash uint64)
+			metadataExists func(dimID int, urlHash uint64) bool
 		)
 
 		BeforeEach(func() {
 			normalizer = hash.NewURLNormalizer()
 
-			createMetadata = func(dimID int, urlHash string) {
+			createMetadata = func(dimID int, urlHash uint64) {
 				ctx := context.Background()
-				metaKey := fmt.Sprintf("meta:cache:%d:%d:%s", testEnv.TestHostID, dimID, urlHash)
+				metaKey := fmt.Sprintf("meta:cache:%d:%d:%d", testEnv.TestHostID, dimID, urlHash)
 				metadata := map[string]interface{}{
-					"url":        fmt.Sprintf("https://example.com/%s", urlHash),
+					"url":        fmt.Sprintf("https://example.com/%d", urlHash),
 					"created_at": time.Now().Unix(),
 					"expires_at": time.Now().Add(1 * time.Hour).Unix(),
 					"status":     200,
@@ -44,9 +44,9 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 
-			metadataExists = func(dimID int, urlHash string) bool {
+			metadataExists = func(dimID int, urlHash uint64) bool {
 				ctx := context.Background()
-				metaKey := fmt.Sprintf("meta:cache:%d:%d:%s", testEnv.TestHostID, dimID, urlHash)
+				metaKey := fmt.Sprintf("meta:cache:%d:%d:%d", testEnv.TestHostID, dimID, urlHash)
 				exists, err := testEnv.RedisClient.Exists(ctx, metaKey).Result()
 				Expect(err).ToNot(HaveOccurred())
 				return exists > 0
@@ -103,18 +103,18 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 	Context("Invalidate-All with Block Dimensions", func() {
 		var (
 			normalizer     *hash.URLNormalizer
-			createMetadata func(dimID int, urlHash string)
-			metadataExists func(dimID int, urlHash string) bool
+			createMetadata func(dimID int, urlHash uint64)
+			metadataExists func(dimID int, urlHash uint64) bool
 		)
 
 		BeforeEach(func() {
 			normalizer = hash.NewURLNormalizer()
 
-			createMetadata = func(dimID int, urlHash string) {
+			createMetadata = func(dimID int, urlHash uint64) {
 				ctx := context.Background()
-				metaKey := fmt.Sprintf("meta:cache:%d:%d:%s", testEnv.TestHostID, dimID, urlHash)
+				metaKey := fmt.Sprintf("meta:cache:%d:%d:%d", testEnv.TestHostID, dimID, urlHash)
 				metadata := map[string]interface{}{
-					"url":        fmt.Sprintf("https://example.com/%s", urlHash),
+					"url":        fmt.Sprintf("https://example.com/%d", urlHash),
 					"created_at": time.Now().Unix(),
 					"expires_at": time.Now().Add(1 * time.Hour).Unix(),
 					"status":     200,
@@ -124,9 +124,9 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 
-			metadataExists = func(dimID int, urlHash string) bool {
+			metadataExists = func(dimID int, urlHash uint64) bool {
 				ctx := context.Background()
-				metaKey := fmt.Sprintf("meta:cache:%d:%d:%s", testEnv.TestHostID, dimID, urlHash)
+				metaKey := fmt.Sprintf("meta:cache:%d:%d:%d", testEnv.TestHostID, dimID, urlHash)
 				exists, err := testEnv.RedisClient.Exists(ctx, metaKey).Result()
 				Expect(err).ToNot(HaveOccurred())
 				return exists > 0

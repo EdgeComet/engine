@@ -24,7 +24,7 @@ var _ = Describe("Cache Reader", func() {
 			expiresAt := now + 3600
 
 			for i := 0; i < 5; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("hash%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("hash%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/page-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now, 10),
@@ -54,7 +54,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// Active entries (expires in the future)
 			for i := 0; i < 3; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("active%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("active%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/active-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now-100, 10),
@@ -67,7 +67,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// Expired entries (expires_at in the past, beyond stale TTL)
 			for i := 0; i < 2; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("expired%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("expired%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/expired-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now-7200, 10),
@@ -100,7 +100,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// Desktop entries (dimension_id=1)
 			for i := 0; i < 3; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("desk%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("desk%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/desk-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now, 10),
@@ -113,7 +113,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// Mobile entries (dimension_id=2)
 			for i := 0; i < 2; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 2, fmt.Sprintf("mob%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 2, hashLabel(fmt.Sprintf("mob%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/mob-%d", i),
 					"dimension":   "mobile",
 					"created_at":  strconv.FormatInt(now, 10),
@@ -143,7 +143,7 @@ var _ = Describe("Cache Reader", func() {
 			now := time.Now().Unix()
 			expiresAt := now + 3600
 
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "prod1", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("prod1"), map[string]string{
 				"url":         "https://example.com/products/shoes",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now, 10),
@@ -153,7 +153,7 @@ var _ = Describe("Cache Reader", func() {
 				"source":      "render",
 			})
 
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "prod2", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("prod2"), map[string]string{
 				"url":         "https://example.com/products/hats",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now, 10),
@@ -163,7 +163,7 @@ var _ = Describe("Cache Reader", func() {
 				"source":      "render",
 			})
 
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "blog1", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("blog1"), map[string]string{
 				"url":         "https://example.com/blog/article",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now, 10),
@@ -193,7 +193,7 @@ var _ = Describe("Cache Reader", func() {
 			expiresAt := now + 3600
 
 			for i := 0; i < 10; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("pag%02d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("pag%02d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/page-%02d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now, 10),
@@ -223,7 +223,7 @@ var _ = Describe("Cache Reader", func() {
 			now := time.Now().Unix()
 
 			// Active render desktop (dimension_id=1)
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "combo1", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("combo1"), map[string]string{
 				"url":         "https://example.com/active-render-desktop",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now-100, 10),
@@ -234,7 +234,7 @@ var _ = Describe("Cache Reader", func() {
 			})
 
 			// Active bypass desktop
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "combo2", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("combo2"), map[string]string{
 				"url":         "https://example.com/active-bypass-desktop",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now-100, 10),
@@ -245,7 +245,7 @@ var _ = Describe("Cache Reader", func() {
 			})
 
 			// Active render mobile (dimension_id=2)
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 2, "combo3", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 2, hashLabel("combo3"), map[string]string{
 				"url":         "https://example.com/active-render-mobile",
 				"dimension":   "mobile",
 				"created_at":  strconv.FormatInt(now-100, 10),
@@ -256,7 +256,7 @@ var _ = Describe("Cache Reader", func() {
 			})
 
 			// Expired render desktop
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "combo4", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("combo4"), map[string]string{
 				"url":         "https://example.com/expired-render-desktop",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now-7200, 10),
@@ -288,7 +288,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// 3 active entries (desktop, dimension_id=1)
 			for i := 0; i < 3; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("sumact%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("sumact%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/active-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now-100, 10),
@@ -301,7 +301,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// 2 stale entries (expired but within stale TTL of 60s)
 			for i := 0; i < 2; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("sumstale%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("sumstale%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/stale-%d", i),
 					"dimension":   "mobile",
 					"created_at":  strconv.FormatInt(now-200, 10),
@@ -313,7 +313,7 @@ var _ = Describe("Cache Reader", func() {
 			}
 
 			// 1 expired entry (beyond stale TTL)
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, "sumexp0", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel("sumexp0"), map[string]string{
 				"url":         "https://example.com/expired-0",
 				"dimension":   "desktop",
 				"created_at":  strconv.FormatInt(now-7200, 10),
@@ -341,7 +341,7 @@ var _ = Describe("Cache Reader", func() {
 
 			// 2 desktop render (dimension_id=1)
 			for i := 0; i < 2; i++ {
-				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, fmt.Sprintf("bddr%d", i), map[string]string{
+				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("bddr%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/dr-%d", i),
 					"dimension":   "desktop",
 					"created_at":  strconv.FormatInt(now, 10),
@@ -353,7 +353,7 @@ var _ = Describe("Cache Reader", func() {
 			}
 
 			// 1 mobile bypass (dimension_id=2)
-			populateCacheEntry(testEnv.MiniRedis, testHostID, 2, "bdmb0", map[string]string{
+			populateCacheEntry(testEnv.MiniRedis, testHostID, 2, hashLabel("bdmb0"), map[string]string{
 				"url":         "https://example.com/mb-0",
 				"dimension":   "mobile",
 				"created_at":  strconv.FormatInt(now, 10),

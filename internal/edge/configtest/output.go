@@ -34,7 +34,7 @@ func printHostTestResult(result *HostTestResult) {
 	fmt.Printf("\n=== Host: %s (host_id: %d) ===\n", result.Host, result.HostID)
 	fmt.Printf("URL: %s\n", result.OriginalURL)
 	fmt.Printf("Normalized URL: %s\n", result.NormalizedURL)
-	fmt.Printf("URL Hash: %s\n", result.URLHash)
+	fmt.Printf("URL Hash: %d\n", result.URLHash)
 	fmt.Println()
 
 	// Print matched pattern

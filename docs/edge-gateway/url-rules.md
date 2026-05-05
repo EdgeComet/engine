@@ -298,7 +298,7 @@ Example output:
 === Host: example.com (host_id: 1) ===
 URL: https://example.com/blog/post
 Normalized URL: https://example.com/blog/post
-URL Hash: a1b2c3d4e5f6
+URL Hash: 177635683940360438
 
 Matched Pattern: /blog/*
 Action: render

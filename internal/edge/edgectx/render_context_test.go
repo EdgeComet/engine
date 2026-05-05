@@ -52,7 +52,7 @@ func TestRenderContext_Enrichment(t *testing.T) {
 	cacheKey := &types.CacheKey{
 		HostID:      1,
 		DimensionID: 2,
-		URLHash:     "abc123",
+		URLHash:     0xabc123,
 	}
 	renderCtx.WithCacheKey(cacheKey)
 	assert.Equal(t, cacheKey, renderCtx.CacheKey)
@@ -64,7 +64,7 @@ func TestRenderContext_FluentInterface(t *testing.T) {
 	ctx := &fasthttp.RequestCtx{}
 
 	host := &types.Host{ID: 1, Domain: "example.com"}
-	cacheKey := &types.CacheKey{HostID: 1, DimensionID: 2, URLHash: "abc123"}
+	cacheKey := &types.CacheKey{HostID: 1, DimensionID: 2, URLHash: 0xabc123}
 
 	// Test fluent interface
 	renderCtx := NewRenderContext(requestID, ctx, logger, 30*time.Second).

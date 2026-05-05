@@ -29,7 +29,7 @@ type RenderContext struct {
 
 	// Request data
 	TargetURL          string
-	URLHash            string
+	URLHash            uint64
 	Host               *types.Host
 	Dimension          string
 	DimensionUnmatched bool // True if User-Agent did not match any dimension and fallback was used
@@ -74,9 +74,9 @@ func (rc *RenderContext) WithProcessedURL(processedURL string) *RenderContext {
 }
 
 // WithURLHash enriches the context with URL hash information
-func (rc *RenderContext) WithURLHash(urlHash string) *RenderContext {
+func (rc *RenderContext) WithURLHash(urlHash uint64) *RenderContext {
 	rc.URLHash = urlHash
-	rc.Logger = rc.Logger.With(zap.String("url_hash", urlHash))
+	rc.Logger = rc.Logger.With(zap.Uint64("url_hash", urlHash))
 	return rc
 }
 

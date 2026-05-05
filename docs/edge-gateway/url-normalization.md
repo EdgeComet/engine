@@ -167,14 +167,15 @@ Configuration follows the standard hierarchy: Global → Host → URL pattern. P
 After normalization, Edge Gateway generates a hash using XXHash64. This hash becomes part of the Redis cache key and HTML filename.
 
 - **Algorithm**: XXHash64 (fast, non-cryptographic hash)
-- **Output format**: 16-character lowercase hexadecimal (e.g., `a1b2c3d4e5f67890`)
+- **In-memory type**: `uint64`
+- **Serialized format**: decimal `uint64` everywhere — Redis cache keys, on-disk filenames, JSON APIs, structured logs, and event log lines (e.g., `11399234567890123456`)
 - **Deterministic**: Same normalized URL always produces same hash
 
 Example transformation:
 ```
 Input:  HTTPS://Example.Com:443/path//to/../page?z=1&a=2&utm_source=google#section
 Output: https://example.com/path/page?a=2&z=1
-Hash:   a1b2c3d4e5f67890
+Hash:   11651889946454949520
 ```
 
 The hash is used in:

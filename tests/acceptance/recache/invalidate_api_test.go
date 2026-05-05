@@ -19,7 +19,7 @@ var _ = Describe("Invalidate API", func() {
 		testURL        = "https://example.com/test"
 		normalizedURL  = "https://example.com/test"
 		normalizer     *hash.URLNormalizer
-		urlHash        string
+		urlHash        uint64
 		dimensionID1   = 1
 		dimensionID2   = 2
 		createMetadata func(dimensionID int)
@@ -33,7 +33,7 @@ var _ = Describe("Invalidate API", func() {
 		urlHash = normalizer.Hash(normalizedURL)
 
 		getCacheKey = func(dimensionID int) string {
-			return fmt.Sprintf("cache:%d:%d:%s", testEnv.TestHostID, dimensionID, urlHash)
+			return fmt.Sprintf("cache:%d:%d:%d", testEnv.TestHostID, dimensionID, urlHash)
 		}
 
 		getMetadataKey = func(dimensionID int) string {

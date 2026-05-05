@@ -27,7 +27,7 @@ type HostTestResult struct {
 	Host          string
 	OriginalURL   string // URL as provided for testing (before normalization)
 	NormalizedURL string
-	URLHash       string
+	URLHash       uint64
 	MatchedRule   *types.URLRule // nil if no rule matched (default behavior)
 	Action        string
 	Config        *config.ResolvedConfig
@@ -144,7 +144,7 @@ func testURLAgainstHost(testURL string, host *types.Host, globalConfig *config.E
 	normalizeResult, err := normalizer.Normalize(testURL, nil)
 
 	normalizedURL := testURL
-	urlHash := "error"
+	var urlHash uint64
 
 	if err == nil {
 		normalizedURL = normalizeResult.NormalizedURL

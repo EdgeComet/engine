@@ -194,7 +194,7 @@ func (f *TemplateFormatter) getTopLevelFieldValue(event *RequestEvent, field str
 	case "url":
 		return formatString(event.URL)
 	case "url_hash":
-		return formatString(event.URLHash)
+		return fmt.Sprintf("%d", event.URLHash)
 	case "event_type":
 		return formatString(event.EventType)
 	case "dimension":

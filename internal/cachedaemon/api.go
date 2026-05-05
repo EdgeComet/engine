@@ -285,7 +285,7 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		if urlDeleted == 0 {
 			d.logger.Warn("No cache metadata found for URL during invalidation",
 				zap.String("url", normalizedResult.NormalizedURL),
-				zap.String("url_hash", urlHash),
+				zap.Uint64("url_hash", urlHash),
 				zap.Int("host_id", req.HostID))
 		}
 		entriesInvalidated += urlDeleted

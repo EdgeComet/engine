@@ -40,8 +40,8 @@ func getStaleTTL(expired types.CacheExpiredConfig) time.Duration {
 // ShardingManager interface for optional sharding operations
 type ShardingManager interface {
 	IsEnabled() bool
-	ComputeTargets(ctx context.Context, cacheKey string) ([]string, error)
-	IsTargetForCache(ctx context.Context, cacheKey string) (bool, error)
+	ComputeTargets(ctx context.Context, cacheKey *types.CacheKey) ([]string, error)
+	IsTargetForCache(ctx context.Context, cacheKey *types.CacheKey) (bool, error)
 	PushToTargets(ctx context.Context, cacheKey *types.CacheKey, content []byte, metadata *cache.CacheMetadata, targetEgIDs []string, requestID string) ([]string, error)
 	PullFromRemote(ctx context.Context, cacheKey *types.CacheKey, egIDs []string) ([]byte, error)
 	GetEgID() string
@@ -325,7 +325,7 @@ func (cc *CacheCoordinator) pushCacheToCluster(renderCtx *edgectx.RenderContext,
 
 	// Compute target EGs for this cache
 	cacheKey := renderCtx.CacheKey.String()
-	targetEgIDs, err := cc.shardingManager.ComputeTargets(ctx, cacheKey)
+	targetEgIDs, err := cc.shardingManager.ComputeTargets(ctx, renderCtx.CacheKey)
 	if err != nil {
 		return fmt.Errorf("failed to compute targets: %w", err)
 	}

@@ -863,7 +863,7 @@ func (te *TestEnvironment) GetCacheKey(targetURL string, dimensionName string) (
 	dimensionID := 1
 
 	// Generate cache key using actual format: cache:{host_id}:{dimension_id}:{url_hash}
-	cacheKey := fmt.Sprintf("cache:%d:%d:%s", te.Config.Test.HostID, dimensionID, urlHash)
+	cacheKey := fmt.Sprintf("cache:%d:%d:%d", te.Config.Test.HostID, dimensionID, urlHash)
 	return cacheKey, nil
 }
 

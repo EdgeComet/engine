@@ -116,9 +116,8 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 }
 
 // Hash generates XXHash64 of normalized URL
-func (n *URLNormalizer) Hash(normalizedURL string) string {
-	h := xxhash.Sum64String(normalizedURL)
-	return fmt.Sprintf("%016x", h)
+func (n *URLNormalizer) Hash(normalizedURL string) uint64 {
+	return xxhash.Sum64String(normalizedURL)
 }
 
 // shouldStripParam delegates to config package for pattern matching

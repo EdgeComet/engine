@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/cespare/xxhash/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -14,6 +15,10 @@ import (
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
 )
+
+func hashLabel(s string) uint64 {
+	return xxhash.Sum64String(s)
+}
 
 func setupTestCacheReader(t *testing.T) (*CacheReader, *miniredis.Miniredis) {
 	mr, err := miniredis.Run()
@@ -31,8 +36,8 @@ func setupTestCacheReader(t *testing.T) (*CacheReader, *miniredis.Miniredis) {
 	return cr, mr
 }
 
-func populateMetadataHash(mr *miniredis.Miniredis, hostID, dimID int, urlHash string, fields map[string]string) {
-	key := fmt.Sprintf("meta:cache:%d:%d:%s", hostID, dimID, urlHash)
+func populateMetadataHash(mr *miniredis.Miniredis, hostID, dimID int, urlHash uint64, fields map[string]string) {
+	key := fmt.Sprintf("meta:cache:%d:%d:%d", hostID, dimID, urlHash)
 	for k, v := range fields {
 		mr.HSet(key, k, v)
 	}
@@ -45,7 +50,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		for i := 0; i < 5; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("hash%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("hash%d", i)), map[string]string{
 				"url":         fmt.Sprintf("https://example.com/page%d", i),
 				"dimension":   "mobile",
 				"size":        "1000",
@@ -71,7 +76,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 
 		// Active entries (expires in future)
 		for i := 0; i < 3; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("active%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("active%d", i)), map[string]string{
 				"url":        fmt.Sprintf("https://example.com/active%d", i),
 				"dimension":  "mobile",
 				"size":       "500",
@@ -83,7 +88,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 
 		// Expired entries (expires in past, beyond stale window)
 		for i := 0; i < 2; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("expired%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("expired%d", i)), map[string]string{
 				"url":        fmt.Sprintf("https://example.com/expired%d", i),
 				"dimension":  "mobile",
 				"size":       "500",
@@ -110,7 +115,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("dimension filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "mobile1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("mobile1"), map[string]string{
 			"url":        "https://example.com/m1",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -118,7 +123,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 2, "desktop1", map[string]string{
+		populateMetadataHash(mr, 1, 2, hashLabel("desktop1"), map[string]string{
 			"url":        "https://example.com/d1",
 			"dimension":  "desktop",
 			"size":       "500",
@@ -142,7 +147,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("url_contains filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "prod1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("prod1"), map[string]string{
 			"url":        "https://example.com/products/shoes",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -150,7 +155,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "about1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("about1"), map[string]string{
 			"url":        "https://example.com/about",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -174,7 +179,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("size range filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "small1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("small1"), map[string]string{
 			"url":        "https://example.com/small",
 			"dimension":  "mobile",
 			"size":       "50",
@@ -182,7 +187,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "med1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("med1"), map[string]string{
 			"url":        "https://example.com/medium",
 			"dimension":  "mobile",
 			"size":       "300",
@@ -190,7 +195,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "large1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("large1"), map[string]string{
 			"url":        "https://example.com/large",
 			"dimension":  "mobile",
 			"size":       "1000",
@@ -216,7 +221,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		// Recent (age ~100s)
-		populateMetadataHash(mr, 1, 1, "recent1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("recent1"), map[string]string{
 			"url":        "https://example.com/recent",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -225,7 +230,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Old (age ~7200s)
-		populateMetadataHash(mr, 1, 1, "old1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("old1"), map[string]string{
 			"url":        "https://example.com/old",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -251,7 +256,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		// Very recent (age ~60s) - should be excluded by min
-		populateMetadataHash(mr, 1, 1, "recent60", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("recent60"), map[string]string{
 			"url":        "https://example.com/very-recent",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -260,7 +265,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Medium age (~3600s) - should be included
-		populateMetadataHash(mr, 1, 1, "medium3600", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("medium3600"), map[string]string{
 			"url":        "https://example.com/medium-age",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -269,7 +274,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Very old (age ~86400s) - should be excluded by max
-		populateMetadataHash(mr, 1, 1, "old86400", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("old86400"), map[string]string{
 			"url":        "https://example.com/very-old",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -294,7 +299,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("status_code filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "ok1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ok1"), map[string]string{
 			"url":         "https://example.com/ok",
 			"dimension":   "mobile",
 			"size":        "500",
@@ -303,7 +308,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"status_code": "200",
 			"source":      "render",
 		})
-		populateMetadataHash(mr, 1, 1, "notfound1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("notfound1"), map[string]string{
 			"url":         "https://example.com/notfound",
 			"dimension":   "mobile",
 			"size":        "500",
@@ -328,7 +333,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("source filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "render1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("render1"), map[string]string{
 			"url":        "https://example.com/rendered",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -336,7 +341,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "bypass1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("bypass1"), map[string]string{
 			"url":        "https://example.com/bypassed",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -360,7 +365,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("index_status filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "idx1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("idx1"), map[string]string{
 			"url":          "https://example.com/indexable",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -369,7 +374,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":       "render",
 			"index_status": "1",
 		})
-		populateMetadataHash(mr, 1, 1, "idx2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("idx2"), map[string]string{
 			"url":          "https://example.com/noindex",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -395,7 +400,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		// This entry matches all filters
-		populateMetadataHash(mr, 1, 1, "match1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("match1"), map[string]string{
 			"url":        "https://example.com/products/1",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -404,7 +409,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Active but desktop
-		populateMetadataHash(mr, 1, 2, "nomatch1", map[string]string{
+		populateMetadataHash(mr, 1, 2, hashLabel("nomatch1"), map[string]string{
 			"url":        "https://example.com/products/2",
 			"dimension":  "desktop",
 			"size":       "500",
@@ -413,7 +418,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Mobile but bypass source
-		populateMetadataHash(mr, 1, 1, "nomatch2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("nomatch2"), map[string]string{
 			"url":        "https://example.com/products/3",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -441,7 +446,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		for i := 0; i < 10; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("page%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("page%d", i)), map[string]string{
 				"url":        fmt.Sprintf("https://example.com/page%d", i),
 				"dimension":  "mobile",
 				"size":       "500",
@@ -476,7 +481,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("empty result", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "entry1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("entry1"), map[string]string{
 			"url":        "https://example.com/page",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -501,7 +506,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("missing optional fields", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "minimal1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("minimal1"), map[string]string{
 			"url":        "https://example.com/minimal",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -526,7 +531,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title contains filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tprod1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tprod1"), map[string]string{
 			"url":        "https://example.com/page1",
 			"title":      "Product Guide",
 			"dimension":  "mobile",
@@ -535,7 +540,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tman1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tman1"), map[string]string{
 			"url":        "https://example.com/page2",
 			"title":      "User Manual",
 			"dimension":  "mobile",
@@ -544,7 +549,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tfaq1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tfaq1"), map[string]string{
 			"url":        "https://example.com/page3",
 			"title":      "Product FAQ",
 			"dimension":  "mobile",
@@ -571,7 +576,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title contains is case insensitive", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tupper1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tupper1"), map[string]string{
 			"url":        "https://example.com/upper",
 			"title":      "UPPERCASE TITLE",
 			"dimension":  "mobile",
@@ -596,7 +601,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("created_at range filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "c1hour", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("c1hour"), map[string]string{
 			"url":        "https://example.com/one-hour",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -604,7 +609,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "c2hour", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("c2hour"), map[string]string{
 			"url":        "https://example.com/two-hours",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -612,7 +617,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "crecent", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("crecent"), map[string]string{
 			"url":        "https://example.com/recent",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -640,7 +645,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("expires_at range filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "esoon", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("esoon"), map[string]string{
 			"url":        "https://example.com/exp-soon",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -648,7 +653,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+1800),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "elater", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("elater"), map[string]string{
 			"url":        "https://example.com/exp-later",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -656,7 +661,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+7200),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "efar", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("efar"), map[string]string{
 			"url":        "https://example.com/exp-far",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -681,7 +686,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("last_access range filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "larecent", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("larecent"), map[string]string{
 			"url":         "https://example.com/la-recent",
 			"dimension":   "mobile",
 			"size":        "500",
@@ -690,7 +695,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_access": fmt.Sprintf("%d", now-60),
 			"source":      "render",
 		})
-		populateMetadataHash(mr, 1, 1, "laold", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("laold"), map[string]string{
 			"url":         "https://example.com/la-old",
 			"dimension":   "mobile",
 			"size":        "500",
@@ -716,7 +721,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("last_bot_hit range filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "lbhrecent", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhrecent"), map[string]string{
 			"url":          "https://example.com/lbh-recent",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -725,7 +730,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-100),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhold", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhold"), map[string]string{
 			"url":          "https://example.com/lbh-old",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -734,7 +739,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-7200),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhnone", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhnone"), map[string]string{
 			"url":        "https://example.com/lbh-none",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -758,7 +763,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("last_bot_hit range excludes entries without last_bot_hit", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "lbhwith", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhwith"), map[string]string{
 			"url":          "https://example.com/with-lbh",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -767,7 +772,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-100),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhwithout", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhwithout"), map[string]string{
 			"url":        "https://example.com/without-lbh",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -791,7 +796,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title and timestamp combined", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "combo1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("combo1"), map[string]string{
 			"url":        "https://example.com/combo1",
 			"title":      "Product Page",
 			"dimension":  "mobile",
@@ -800,7 +805,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "combo2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("combo2"), map[string]string{
 			"url":        "https://example.com/combo2",
 			"title":      "Product Page",
 			"dimension":  "mobile",
@@ -809,7 +814,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "combo3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("combo3"), map[string]string{
 			"url":        "https://example.com/combo3",
 			"title":      "About Us",
 			"dimension":  "mobile",
@@ -837,7 +842,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		// Entry just expired (1 second ago)
-		populateMetadataHash(mr, 1, 1, "justexpired1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("justexpired1"), map[string]string{
 			"url":        "https://example.com/just-expired",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -846,7 +851,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 		// Active entry
-		populateMetadataHash(mr, 1, 1, "active1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("active1"), map[string]string{
 			"url":        "https://example.com/active",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -882,7 +887,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("url starts_with filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "swprod1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("swprod1"), map[string]string{
 			"url":        "https://example.com/products/shoes",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -890,7 +895,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "swabout1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("swabout1"), map[string]string{
 			"url":        "https://example.com/about",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -914,7 +919,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("url ends_with filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "ewpdf1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ewpdf1"), map[string]string{
 			"url":        "https://example.com/page.pdf",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -922,7 +927,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "ewhtml1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ewhtml1"), map[string]string{
 			"url":        "https://example.com/page.html",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -946,7 +951,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("url neq filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "neq1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("neq1"), map[string]string{
 			"url":        "https://example.com/page1",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -954,7 +959,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "neq2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("neq2"), map[string]string{
 			"url":        "https://example.com/page2",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -962,7 +967,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "neq3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("neq3"), map[string]string{
 			"url":        "https://example.com/page3",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -988,7 +993,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("url not_contains filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "ncadmin1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ncadmin1"), map[string]string{
 			"url":        "https://example.com/admin/settings",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -996,7 +1001,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "ncprod1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ncprod1"), map[string]string{
 			"url":        "https://example.com/products/shoes",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -1004,7 +1009,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "ncadmin2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("ncadmin2"), map[string]string{
 			"url":        "https://example.com/admin/users",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -1028,7 +1033,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title starts_with filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tsw1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tsw1"), map[string]string{
 			"url":        "https://example.com/p1",
 			"title":      "Getting Started Guide",
 			"dimension":  "mobile",
@@ -1037,7 +1042,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tsw2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tsw2"), map[string]string{
 			"url":        "https://example.com/p2",
 			"title":      "API Reference",
 			"dimension":  "mobile",
@@ -1046,7 +1051,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tsw3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tsw3"), map[string]string{
 			"url":        "https://example.com/p3",
 			"title":      "Getting Help",
 			"dimension":  "mobile",
@@ -1073,7 +1078,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title ends_with filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tew1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tew1"), map[string]string{
 			"url":        "https://example.com/p1",
 			"title":      "User Guide",
 			"dimension":  "mobile",
@@ -1082,7 +1087,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tew2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tew2"), map[string]string{
 			"url":        "https://example.com/p2",
 			"title":      "Admin Guide",
 			"dimension":  "mobile",
@@ -1091,7 +1096,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tew3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tew3"), map[string]string{
 			"url":        "https://example.com/p3",
 			"title":      "Quick Start",
 			"dimension":  "mobile",
@@ -1118,7 +1123,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title neq filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tneq1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tneq1"), map[string]string{
 			"url":        "https://example.com/p1",
 			"title":      "Home",
 			"dimension":  "mobile",
@@ -1127,7 +1132,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tneq2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tneq2"), map[string]string{
 			"url":        "https://example.com/p2",
 			"title":      "About",
 			"dimension":  "mobile",
@@ -1136,7 +1141,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tneq3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tneq3"), map[string]string{
 			"url":        "https://example.com/p3",
 			"title":      "Contact",
 			"dimension":  "mobile",
@@ -1163,7 +1168,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("title not_contains filter", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "tnc1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tnc1"), map[string]string{
 			"url":        "https://example.com/p1",
 			"title":      "Product A Review",
 			"dimension":  "mobile",
@@ -1172,7 +1177,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tnc2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tnc2"), map[string]string{
 			"url":        "https://example.com/p2",
 			"title":      "Product B Info",
 			"dimension":  "mobile",
@@ -1181,7 +1186,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "tnc3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("tnc3"), map[string]string{
 			"url":        "https://example.com/p3",
 			"title":      "Company News",
 			"dimension":  "mobile",
@@ -1206,7 +1211,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("last_bot_hit_exists true", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "lbhe1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhe1"), map[string]string{
 			"url":          "https://example.com/hit1",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -1215,7 +1220,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-500),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhe2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhe2"), map[string]string{
 			"url":          "https://example.com/hit2",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -1224,7 +1229,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-200),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhe3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhe3"), map[string]string{
 			"url":        "https://example.com/nohit",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -1250,7 +1255,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("last_bot_hit_exists false", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "lbhef1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhef1"), map[string]string{
 			"url":          "https://example.com/hit1",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -1259,7 +1264,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-500),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhef2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhef2"), map[string]string{
 			"url":          "https://example.com/hit2",
 			"dimension":    "mobile",
 			"size":         "500",
@@ -1268,7 +1273,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"last_bot_hit": fmt.Sprintf("%d", now-200),
 			"source":       "render",
 		})
-		populateMetadataHash(mr, 1, 1, "lbhef3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("lbhef3"), map[string]string{
 			"url":        "https://example.com/nohit",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -1292,7 +1297,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("string ops are case insensitive", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "cicase1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("cicase1"), map[string]string{
 			"url":        "https://Example.COM/Products/Shoes",
 			"dimension":  "mobile",
 			"size":       "500",
@@ -1315,7 +1320,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 	t.Run("combined string ops", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		populateMetadataHash(mr, 1, 1, "cso1", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("cso1"), map[string]string{
 			"url":        "https://example.com/products/shoes",
 			"title":      "Running Shoes",
 			"dimension":  "mobile",
@@ -1324,7 +1329,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "cso2", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("cso2"), map[string]string{
 			"url":        "https://example.com/products/hats",
 			"title":      "Summer Hats",
 			"dimension":  "mobile",
@@ -1333,7 +1338,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"expires_at": fmt.Sprintf("%d", now+3600),
 			"source":     "render",
 		})
-		populateMetadataHash(mr, 1, 1, "cso3", map[string]string{
+		populateMetadataHash(mr, 1, 1, hashLabel("cso3"), map[string]string{
 			"url":        "https://example.com/about",
 			"title":      "About Running",
 			"dimension":  "mobile",
@@ -1367,7 +1372,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 
 		// 60 active entries
 		for i := 0; i < 60; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("active%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("active%d", i)), map[string]string{
 				"dimension":  "mobile",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now+3600),
@@ -1377,7 +1382,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 
 		// 25 stale entries (expired but within stale_ttl window)
 		for i := 0; i < 25; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("stale%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("stale%d", i)), map[string]string{
 				"dimension":  "desktop",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now-300),
@@ -1387,7 +1392,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 
 		// 15 expired entries (past stale_ttl window)
 		for i := 0; i < 15; i++ {
-			populateMetadataHash(mr, 1, 2, fmt.Sprintf("expired%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 2, hashLabel(fmt.Sprintf("expired%d", i)), map[string]string{
 				"dimension":  "mobile",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now-3600),
@@ -1407,7 +1412,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		for i := 0; i < 10; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("sized%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("sized%d", i)), map[string]string{
 				"dimension":  "mobile",
 				"size":       "1000",
 				"expires_at": fmt.Sprintf("%d", now+3600),
@@ -1424,7 +1429,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
 		for i := 0; i < 40; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("mob%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("mob%d", i)), map[string]string{
 				"dimension":  "mobile",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now+3600),
@@ -1436,7 +1441,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			if i >= 30 {
 				src = "bypass"
 			}
-			populateMetadataHash(mr, 1, 2, fmt.Sprintf("desk%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 2, hashLabel(fmt.Sprintf("desk%d", i)), map[string]string{
 				"dimension":  "desktop",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now+3600),
@@ -1457,7 +1462,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 
 		// Entry just expired
 		for i := 0; i < 5; i++ {
-			populateMetadataHash(mr, 1, 1, fmt.Sprintf("justexp%d", i), map[string]string{
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("justexp%d", i)), map[string]string{
 				"dimension":  "mobile",
 				"size":       "100",
 				"expires_at": fmt.Sprintf("%d", now-1),

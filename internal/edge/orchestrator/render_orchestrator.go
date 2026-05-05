@@ -1002,7 +1002,7 @@ func (ro *RenderOrchestrator) tryPullFromRemoteSmartly(
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	isTarget, err := ro.cacheCoord.shardingManager.IsTargetForCache(ctx, renderCtx.CacheKey.String())
+	isTarget, err := ro.cacheCoord.shardingManager.IsTargetForCache(ctx, renderCtx.CacheKey)
 	if err != nil {
 		renderCtx.Logger.Warn("Failed to compute distribution targets, falling back to memory-only pull",
 			zap.Error(err))

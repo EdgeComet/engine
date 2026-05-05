@@ -396,7 +396,7 @@ func (ms *MetadataStore) generateFilePath(cacheKey *types.CacheKey, timestamp ti
 	hour := timestamp.Format("15")
 	minute := timestamp.Format("04")
 
-	filename := fmt.Sprintf("%s_%d.html", cacheKey.URLHash, cacheKey.DimensionID)
+	filename := fmt.Sprintf("%d_%d.html", cacheKey.URLHash, cacheKey.DimensionID)
 
 	// Return RELATIVE path (without base_path) so it can be used across different EGs
 	return filepath.Join(
