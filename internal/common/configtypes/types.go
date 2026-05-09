@@ -36,6 +36,7 @@ type EgConfig struct {
 	UnmatchedDimension string                      `yaml:"unmatched_dimension,omitempty"`
 	TrackingParams     *types.TrackingParamsConfig `yaml:"tracking_params,omitempty"`
 	BothitRecache      *types.BothitRecacheConfig  `yaml:"bothit_recache,omitempty"`
+	Recache            *types.RecacheLimitConfig   `yaml:"recache,omitempty"`
 	Hosts              HostsIncludeConfig          `yaml:"hosts"`
 	CacheSharding      *CacheShardingConfig        `yaml:"cache_sharding,omitempty"`
 	Headers            *types.HeadersConfig        `yaml:"headers,omitempty"`

@@ -13,6 +13,16 @@ import (
 	"github.com/edgecomet/engine/internal/edge/recache"
 )
 
+// readyItem pairs a queue entry with the per-host concurrency slot reserved
+// for it. The slot is acquired by the scheduler before dispatch and released
+// by whichever distributor path finishes the entry's work — either the
+// per-URL goroutine on success/failure, or the early-return loops in
+// DistributeToEGs when no EGs are available.
+type readyItem struct {
+	entry InternalQueueEntry
+	slot  Slot
+}
+
 // RecacheResult represents the result of a single recache attempt
 type RecacheResult struct {
 	Entry   InternalQueueEntry
@@ -20,8 +30,10 @@ type RecacheResult struct {
 	Error   error
 }
 
-// DistributeToEGs distributes a batch of recache requests across healthy EG instances
-func (d *CacheDaemon) DistributeToEGs(batch []InternalQueueEntry) {
+// DistributeToEGs distributes a batch of recache requests across healthy EG instances.
+// Every successful TryAcquire upstream is paired with exactly one Release here,
+// either in an early-return loop or in the per-URL goroutine's deferred release.
+func (d *CacheDaemon) DistributeToEGs(batch []readyItem) {
 	ctx := context.Background()
 
 	// Get healthy EGs from registry
@@ -30,20 +42,14 @@ func (d *CacheDaemon) DistributeToEGs(batch []InternalQueueEntry) {
 		d.logger.Error("Failed to query EG registry",
 			zap.Error(err),
 			zap.Int("batch_size", len(batch)))
-		// Re-enqueue entire batch
-		for _, entry := range batch {
-			d.internalQueue.Enqueue(entry)
-		}
+		d.releaseAndReenqueue(batch, fmt.Errorf("eg registry query failed: %w", err))
 		return
 	}
 
 	if len(egs) == 0 {
 		d.logger.Warn("No healthy EGs available, re-enqueueing batch",
 			zap.Int("batch_size", len(batch)))
-		// Re-enqueue entire batch
-		for _, entry := range batch {
-			d.internalQueue.Enqueue(entry)
-		}
+		d.releaseAndReenqueue(batch, fmt.Errorf("no healthy edge gateways available"))
 		return
 	}
 
@@ -86,8 +92,70 @@ func (d *CacheDaemon) DistributeToEGs(batch []InternalQueueEntry) {
 	d.HandleRecacheResults(resultsChan)
 }
 
-// SendBatchToEG sends a batch of recache requests to a single EG concurrently
-func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []InternalQueueEntry, results chan<- RecacheResult, wg *sync.WaitGroup) {
+// releaseAndReenqueue releases every concurrency slot in batch, applies retry
+// backoff (so the next dispatch attempt is delayed), and re-enqueues the
+// entries. Used by DistributeToEGs early-return paths so persistent EG-side
+// failures do not cause the daemon to spin re-dispatching the same batch on
+// every tick. Entries that have exceeded MaxRetries are discarded.
+func (d *CacheDaemon) releaseAndReenqueue(batch []readyItem, cause error) {
+	retried := 0
+	discarded := 0
+	for _, item := range batch {
+		d.concurrencyLimiter.Release(item.slot)
+		entry, retry := d.markEntryFailed(item.entry, cause)
+		if !retry {
+			discarded++
+			continue
+		}
+		if !d.internalQueue.Enqueue(entry) {
+			d.logger.Error("Internal queue full while re-enqueueing after EG dispatch failure; entry dropped",
+				zap.Int("host_id", entry.HostID),
+				zap.String("url", entry.URL),
+				zap.Int("dimension_id", entry.DimensionID),
+				zap.Int("retry_count", entry.RetryCount))
+			discarded++
+			continue
+		}
+		retried++
+	}
+	d.logger.Info("Recache batch deferred after EG dispatch failure",
+		zap.Int("retry", retried),
+		zap.Int("discard", discarded),
+		zap.Error(cause))
+}
+
+// markEntryFailed updates an entry's retry bookkeeping after a failed
+// dispatch attempt. Returns the updated entry and whether the caller should
+// re-enqueue (false = MaxRetries exceeded, caller must discard).
+func (d *CacheDaemon) markEntryFailed(entry InternalQueueEntry, cause error) (InternalQueueEntry, bool) {
+	entry.RetryCount++
+	now := time.Now().UTC()
+	entry.LastAttempt = now
+	if entry.RetryCount >= d.daemonConfig.InternalQueue.MaxRetries {
+		d.logger.Error("Recache failed after max retries, discarding",
+			zap.Int("host_id", entry.HostID),
+			zap.String("url", entry.URL),
+			zap.Int("dimension_id", entry.DimensionID),
+			zap.Int("retry_count", entry.RetryCount),
+			zap.Error(cause))
+		return entry, false
+	}
+	delay := d.retryBaseDelay * (1 << (entry.RetryCount - 1))
+	entry.NextRetryAfter = now.Add(delay)
+	d.logger.Debug("Recache failed, will retry with backoff",
+		zap.Int("host_id", entry.HostID),
+		zap.String("url", entry.URL),
+		zap.Int("dimension_id", entry.DimensionID),
+		zap.Int("retry_count", entry.RetryCount),
+		zap.Duration("retry_after", delay),
+		zap.Error(cause))
+	return entry, true
+}
+
+// SendBatchToEG sends a batch of recache requests to a single EG concurrently.
+// Each per-URL goroutine releases its concurrency slot via defer once the
+// request completes (success, EG error, or timeout).
+func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []readyItem, results chan<- RecacheResult, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	d.logger.Debug("Sending batch to EG",
@@ -96,20 +164,21 @@ func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []InternalQueueEntry
 
 	var batchWG sync.WaitGroup
 
-	for _, entry := range batch {
+	for _, item := range batch {
 		batchWG.Add(1)
 
-		go func(e InternalQueueEntry) {
+		go func(it readyItem) {
 			defer batchWG.Done()
+			defer d.concurrencyLimiter.Release(it.slot)
 
-			err := d.SendRecacheRequest(egAddress, e)
+			err := d.SendRecacheRequest(egAddress, it.entry)
 
 			results <- RecacheResult{
-				Entry:   e,
+				Entry:   it.entry,
 				Success: err == nil,
 				Error:   err,
 			}
-		}(entry)
+		}(item)
 	}
 
 	// Wait for all requests in this EG batch to complete
@@ -164,54 +233,37 @@ func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEn
 	return nil
 }
 
-// HandleRecacheResults processes results and implements retry logic
+// HandleRecacheResults processes results and implements retry logic.
+// Failed entries are marked with backoff via markEntryFailed and re-enqueued;
+// entries past MaxRetries are discarded. If the internal queue is full when
+// re-enqueueing, the entry is dropped with an error log instead of disappearing
+// silently.
 func (d *CacheDaemon) HandleRecacheResults(resultsChan chan RecacheResult) {
 	successCount := 0
 	retryCount := 0
 	discardCount := 0
-	failedEntries := []InternalQueueEntry{}
 
 	for result := range resultsChan {
 		if result.Success {
 			successCount++
-		} else {
-			// Increment retry count
-			result.Entry.RetryCount++
-			result.Entry.LastAttempt = time.Now().UTC()
-
-			if result.Entry.RetryCount < d.daemonConfig.InternalQueue.MaxRetries {
-				// Calculate exponential backoff delay: 5s, 10s, 20s, etc.
-				delay := d.retryBaseDelay * (1 << (result.Entry.RetryCount - 1))
-				result.Entry.NextRetryAfter = time.Now().UTC().Add(delay)
-
-				// Re-enqueue for retry
-				failedEntries = append(failedEntries, result.Entry)
-				retryCount++
-
-				d.logger.Debug("Recache failed, will retry with backoff",
-					zap.Int("host_id", result.Entry.HostID),
-					zap.String("url", result.Entry.URL),
-					zap.Int("dimension_id", result.Entry.DimensionID),
-					zap.Int("retry_count", result.Entry.RetryCount),
-					zap.Duration("retry_after", delay),
-					zap.Error(result.Error))
-			} else {
-				// Discard after max retries
-				discardCount++
-
-				d.logger.Error("Recache failed after max retries, discarding",
-					zap.Int("host_id", result.Entry.HostID),
-					zap.String("url", result.Entry.URL),
-					zap.Int("dimension_id", result.Entry.DimensionID),
-					zap.Int("retry_count", result.Entry.RetryCount),
-					zap.Error(result.Error))
-			}
+			continue
 		}
-	}
 
-	// Re-enqueue failed entries
-	for _, entry := range failedEntries {
-		d.internalQueue.Enqueue(entry)
+		entry, retry := d.markEntryFailed(result.Entry, result.Error)
+		if !retry {
+			discardCount++
+			continue
+		}
+		if !d.internalQueue.Enqueue(entry) {
+			d.logger.Error("Internal queue full while re-enqueueing failed recache; entry dropped",
+				zap.Int("host_id", entry.HostID),
+				zap.String("url", entry.URL),
+				zap.Int("dimension_id", entry.DimensionID),
+				zap.Int("retry_count", entry.RetryCount))
+			discardCount++
+			continue
+		}
+		retryCount++
 	}
 
 	d.logger.Info("Recache batch results",

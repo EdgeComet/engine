@@ -48,6 +48,12 @@ bypass:
   timeout: 30s
   user_agent: "Mozilla/5.0 (compatible; EdgeComet/1.0)"
 
+# Per-host recache concurrency limit (origin protection).
+# Caps the maximum in-flight recache requests the cache daemon will dispatch
+# for any single host. Override per-host with `recache.max_concurrent` on a host.
+recache:
+  max_concurrent: 5
+
 log:
   level: "info"
   console:

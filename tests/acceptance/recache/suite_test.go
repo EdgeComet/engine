@@ -240,6 +240,12 @@ func (env *RecacheTestEnvironment) Start() error {
       events:
         wait_for: "networkIdle"
     dimensions:
+      bypass:
+        id: 0
+        action: "bypass"
+        width: 1920
+        height: 1080
+        render_ua: "bypass"
       desktop:
         id: 1
         width: 1920

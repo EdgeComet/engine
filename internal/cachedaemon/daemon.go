@@ -37,6 +37,20 @@ type CacheDaemon struct {
 	lastTickMu      sync.RWMutex
 	lastTickTime    time.Time
 
+	// Per-host recache concurrency limiter (origin protection gate)
+	concurrencyLimiter *HostConcurrencyLimiter
+
+	// reloadMu serialises configuration reloads against scheduler ticks so that
+	// hostByID and concurrencyLimiter are always observed in a consistent
+	// state from a single tick. Reload takes the write lock; the scheduler's
+	// gate loop takes the read lock.
+	reloadMu sync.RWMutex
+
+	// Local host_id -> *types.Host cache; rebuilt from configManager on init/reload.
+	// Read under reloadMu.RLock; written only by rebuildHostByIDLocked while
+	// reloadMu.Lock is held.
+	hostByID map[int]*types.Host
+
 	// Readers
 	cacheReader *CacheReader
 	queueReader *QueueReader
@@ -97,11 +111,14 @@ func NewCacheDaemon(
 	// Initialize key generator
 	keyGenerator := redis.NewKeyGenerator()
 
-	// Initialize HTTP client for recache requests to EGs
+	// Initialize HTTP client for recache requests to EGs.
+	// MaxConnsPerHost caps the daemon-side connection storm to any single EG.
+	const maxConnsPerEG = 256
 	httpClient := &fasthttp.Client{
 		ReadTimeout:         time.Duration(daemonCfg.Recache.TimeoutPerURL),
 		WriteTimeout:        time.Duration(daemonCfg.Recache.TimeoutPerURL),
 		MaxIdleConnDuration: 500 * time.Millisecond,
+		MaxConnsPerHost:     maxConnsPerEG,
 	}
 
 	// Get retry base delay from config (default: 5s)
@@ -132,26 +149,80 @@ func NewCacheDaemon(
 	}
 
 	daemon := &CacheDaemon{
-		daemonConfig:     daemonCfg,
-		configManager:    configManager,
-		redis:            redisClient,
-		logger:           logger,
-		internalAuthKey:  internalAuthKey,
-		internalQueue:    internalQueue,
-		rsRegistry:       rsRegistry,
-		egRegistry:       egRegistry,
-		normalizer:       normalizer,
-		keyGenerator:     keyGenerator,
-		httpClient:       httpClient,
-		retryBaseDelay:   retryBaseDelay,
-		startTime:        time.Now().UTC(),
-		metricsCollector: metricsCollector,
-		metricsServer:    metricsServer,
-		cacheReader:      NewCacheReader(redisClient, keyGenerator, logger),
-		queueReader:      NewQueueReader(redisClient, keyGenerator, internalQueue, logger),
+		daemonConfig:       daemonCfg,
+		configManager:      configManager,
+		redis:              redisClient,
+		logger:             logger,
+		internalAuthKey:    internalAuthKey,
+		internalQueue:      internalQueue,
+		rsRegistry:         rsRegistry,
+		egRegistry:         egRegistry,
+		normalizer:         normalizer,
+		keyGenerator:       keyGenerator,
+		httpClient:         httpClient,
+		retryBaseDelay:     retryBaseDelay,
+		startTime:          time.Now().UTC(),
+		concurrencyLimiter: NewHostConcurrencyLimiter(egConfig, configManager.GetHosts()),
+		metricsCollector:   metricsCollector,
+		metricsServer:      metricsServer,
+		cacheReader:        NewCacheReader(redisClient, keyGenerator, logger),
+		queueReader:        NewQueueReader(redisClient, keyGenerator, internalQueue, logger),
 	}
 
+	daemon.reloadMu.Lock()
+	daemon.rebuildHostByIDLocked()
+	daemon.reloadMu.Unlock()
+
 	return daemon, nil
+}
+
+// rebuildHostByIDLocked refreshes the local host_id -> *types.Host lookup
+// from the config manager. Caller must hold d.reloadMu (write lock).
+func (d *CacheDaemon) rebuildHostByIDLocked() {
+	hosts := d.configManager.GetHosts()
+	m := make(map[int]*types.Host, len(hosts))
+	for i := range hosts {
+		m[hosts[i].ID] = &hosts[i]
+	}
+	d.hostByID = m
+}
+
+// publishConcurrencyMetrics snapshots the per-host concurrency limiter state
+// and exports it to Prometheus. Called once per scheduler tick.
+// Domain labels are looked up under reloadMu.RLock so they stay consistent
+// with the snapshot the limiter just produced.
+func (d *CacheDaemon) publishConcurrencyMetrics() {
+	if d.metricsCollector == nil {
+		return
+	}
+	stats := d.concurrencyLimiter.AllStats()
+	d.reloadMu.RLock()
+	defer d.reloadMu.RUnlock()
+	for hostID, s := range stats {
+		var domain string
+		if h, ok := d.hostByID[hostID]; ok && h != nil {
+			domain = h.Domain
+		}
+		d.metricsCollector.SetHostConcurrency(hostID, domain, s.InFlight, int64(s.MaxConcurrent), s.AcquiredTotal, s.DeniedTotal)
+	}
+}
+
+// actionForEntry resolves the dimension's effective action for a queue entry.
+// Returns an empty URLRuleAction when host or dimension are missing — the
+// scheduler treats these entries as unresolved and discards them before
+// dispatch. Caller must hold d.reloadMu.RLock so hostByID stays stable for
+// the duration of the lookup.
+func (d *CacheDaemon) actionForEntry(entry InternalQueueEntry) types.URLRuleAction {
+	host := d.hostByID[entry.HostID]
+	if host == nil {
+		return ""
+	}
+	for _, dim := range host.Dimensions {
+		if dim.ID == entry.DimensionID {
+			return dim.EffectiveAction()
+		}
+	}
+	return ""
 }
 
 // Start starts the cache daemon components (scheduler, etc.)
@@ -277,9 +348,28 @@ func (d *CacheDaemon) IsSchedulerPaused() bool {
 	return d.schedulerPaused
 }
 
-// SetReloadFunc sets the reload hook called by POST /internal/reload
+// SetReloadFunc sets the reload hook called by POST /internal/reload.
+// The supplied fn is wrapped so that, on success, the daemon refreshes its
+// host lookup cache and the per-host concurrency limiter from the new config
+// atomically — both updates happen while reloadMu is held for write so a
+// concurrent scheduler tick can never observe one new and one old.
 func (d *CacheDaemon) SetReloadFunc(fn func(ctx context.Context) error) {
-	d.reloadFunc = fn
+	if fn == nil {
+		d.reloadFunc = nil
+		return
+	}
+	d.reloadFunc = func(ctx context.Context) error {
+		if err := fn(ctx); err != nil {
+			return err
+		}
+		eg := d.configManager.GetConfig()
+		hosts := d.configManager.GetHosts()
+		d.reloadMu.Lock()
+		d.rebuildHostByIDLocked()
+		d.concurrencyLimiter.Reload(eg, hosts)
+		d.reloadMu.Unlock()
+		return nil
+	}
 }
 
 // getStaleTTL resolves the stale TTL in seconds from host config -> global config -> 0

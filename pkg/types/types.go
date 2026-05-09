@@ -11,6 +11,13 @@ import (
 	"github.com/edgecomet/engine/pkg/pattern"
 )
 
+// RecacheLimitConfig configures per-host recache concurrency limits.
+// Controls the maximum number of in-flight recache requests the cache daemon
+// will dispatch for a single host at any time.
+type RecacheLimitConfig struct {
+	MaxConcurrent int `yaml:"max_concurrent,omitempty" json:"max_concurrent,omitempty"`
+}
+
 // HeadersConfig defines safe request and response headers configuration.
 // Supports both replacement (safe_*) and additive (safe_*_add) directives.
 // At each config level, only ONE of safe_request/safe_request_add can be used (same for response).
@@ -46,6 +53,7 @@ type Host struct {
 	BothitRecache      *BothitRecacheConfig         `yaml:"bothit_recache,omitempty" json:"bothit_recache,omitempty"`   // Host-level bot hit recache override
 	Headers            *HeadersConfig               `yaml:"headers,omitempty" json:"headers,omitempty"`                 // Host-level headers override
 	ClientIP           *ClientIPConfig              `yaml:"client_ip,omitempty" json:"client_ip,omitempty"`             // Host-level client IP override
+	Recache            *RecacheLimitConfig          `yaml:"recache,omitempty" json:"recache,omitempty"`                 // Host-level per-origin recache concurrency override
 	URLRules           []URLRule                    `yaml:"url_rules,omitempty" json:"url_rules,omitempty"`             // URL pattern rules
 }
 

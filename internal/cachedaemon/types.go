@@ -2,10 +2,11 @@ package cachedaemon
 
 // StatusResponse is the response for GET /status endpoint
 type StatusResponse struct {
-	Daemon        DaemonStatus             `json:"daemon"`
-	InternalQueue InternalQueueStatus      `json:"internal_queue"`
-	RSCapacity    RSCapacityStatus         `json:"rs_capacity"`
-	Queues        map[int]HostQueuesStatus `json:"queues"` // Keyed by host_id (int)
+	Daemon        DaemonStatus                  `json:"daemon"`
+	InternalQueue InternalQueueStatus           `json:"internal_queue"`
+	RSCapacity    RSCapacityStatus              `json:"rs_capacity"`
+	Queues        map[int]HostQueuesStatus      `json:"queues"`      // Keyed by host_id (int)
+	Concurrency   map[int]HostConcurrencyStats `json:"concurrency"` // Per-host concurrency limiter stats
 }
 
 // DaemonStatus represents daemon health and uptime information

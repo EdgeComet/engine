@@ -52,27 +52,26 @@ func (d *CacheDaemon) Run(ctx context.Context) {
 				continue
 			}
 
-			// Calculate available RS capacity
-			availableCapacity := d.CalculateAvailableCapacity()
-
 			// Every tick: Process high priority queues
-			d.ProcessHighPriorityQueues(availableCapacity)
+			d.ProcessHighPriorityQueues()
 
 			// Every Nth tick: Process normal + autorecache queues
 			if tickCount%normalCheckTicks == 0 {
-				d.ProcessNormalPriorityQueues(availableCapacity)
-				d.ProcessAutoRecacheQueues(availableCapacity)
+				d.ProcessNormalPriorityQueues()
+				d.ProcessAutoRecacheQueues()
 			}
 
-			// Every tick: Process internal queue
-			d.ProcessInternalQueue(availableCapacity)
+			// Every tick: Process internal queue (computes RS budget locally)
+			d.ProcessInternalQueue()
+
+			// Publish per-host concurrency stats to metrics
+			d.publishConcurrencyMetrics()
 
 			// Log queue status periodically (every 10 ticks or when non-empty)
 			if tickCount%10 == 0 || d.internalQueue.Size() > 0 {
 				d.logger.Debug("Scheduler status",
 					zap.Int("tick", tickCount),
-					zap.Int("internal_queue_size", d.internalQueue.Size()),
-					zap.Int("available_capacity", availableCapacity))
+					zap.Int("internal_queue_size", d.internalQueue.Size()))
 			}
 
 		case <-ctx.Done():
@@ -131,7 +130,7 @@ func (d *CacheDaemon) CalculateAvailableCapacity() int {
 }
 
 // ProcessHighPriorityQueues pulls entries from high priority ZSETs and enqueues them
-func (d *CacheDaemon) ProcessHighPriorityQueues(availableCapacity int) {
+func (d *CacheDaemon) ProcessHighPriorityQueues() {
 	ctx := context.Background()
 
 	// Check internal queue space
@@ -222,7 +221,7 @@ func (d *CacheDaemon) ProcessHighPriorityQueues(availableCapacity int) {
 }
 
 // ProcessNormalPriorityQueues pulls entries from normal priority ZSETs and enqueues them
-func (d *CacheDaemon) ProcessNormalPriorityQueues(availableCapacity int) {
+func (d *CacheDaemon) ProcessNormalPriorityQueues() {
 	ctx := context.Background()
 
 	// Check internal queue space
@@ -313,7 +312,7 @@ func (d *CacheDaemon) ProcessNormalPriorityQueues(availableCapacity int) {
 }
 
 // ProcessAutoRecacheQueues pulls entries from autorecache ZSETs (only due entries)
-func (d *CacheDaemon) ProcessAutoRecacheQueues(availableCapacity int) {
+func (d *CacheDaemon) ProcessAutoRecacheQueues() {
 	ctx := context.Background()
 
 	// Check internal queue space
@@ -437,56 +436,148 @@ func (d *CacheDaemon) ProcessAutoRecacheQueues(availableCapacity int) {
 	}
 }
 
-// ProcessInternalQueue processes entries from internal queue and sends to EGs
-func (d *CacheDaemon) ProcessInternalQueue(availableCapacity int) {
-	if availableCapacity <= 0 {
-		d.logger.Debug("No available capacity for processing internal queue")
+// ProcessInternalQueue processes entries from the internal queue through two
+// composed gates and dispatches the survivors to Edge Gateways:
+//
+//  1. Per-host concurrency gate (origin protection): every entry must acquire
+//     a slot on its host's semaphore. Applies to render and bypass alike.
+//  2. RS capacity gate (online traffic protection): only render entries
+//     decrement the per-tick RS budget; bypass entries skip this gate.
+//
+// Entries that fail either gate are re-enqueued for the next tick. Slots
+// acquired in this function travel with the entry into DistributeToEGs and
+// are released by the path that finishes the entry's work.
+func (d *CacheDaemon) ProcessInternalQueue() {
+	queueSize := d.internalQueue.Size()
+	if queueSize == 0 {
 		return
 	}
 
-	// Dequeue batch (up to availableCapacity)
-	batchSize := availableCapacity
-	if batchSize > d.internalQueue.Size() {
-		batchSize = d.internalQueue.Size()
-	}
-
-	if batchSize == 0 {
-		// Queue empty, nothing to process
-		return
+	batchSize := queueSize
+	if batchSize > d.daemonConfig.InternalQueue.MaxSize {
+		batchSize = d.daemonConfig.InternalQueue.MaxSize
 	}
 
 	batch := d.internalQueue.Dequeue(batchSize)
+	if len(batch) == 0 {
+		return
+	}
 
-	// Filter entries based on retry backoff
+	rsBudget := d.CalculateAvailableCapacity()
+	rsBudgetInitial := rsBudget
 	now := time.Now().UTC()
-	readyBatch := []InternalQueueEntry{}
-	notReadyCount := 0
+	skipHosts := map[int]bool{}
 
+	var deferredBackoff, deferredConcurrency, deferredRSBudget, droppedQueueFull, discardedUnknown int
+	ready := make([]readyItem, 0, len(batch))
+
+	// Hold reloadMu for read across the entire gate loop so hostByID
+	// (consumed by actionForEntry) and concurrencyLimiter cannot be swapped
+	// mid-batch. DistributeToEGs runs after the lock is released — its slots
+	// have captured channel refs and don't depend on the current limiter state.
+	d.reloadMu.RLock()
 	for _, entry := range batch {
-		if entry.NextRetryAfter.IsZero() || !now.Before(entry.NextRetryAfter) {
-			readyBatch = append(readyBatch, entry)
-		} else {
-			// Re-enqueue entries not yet ready for retry
-			d.internalQueue.Enqueue(entry)
-			notReadyCount++
+		if !entry.NextRetryAfter.IsZero() && now.Before(entry.NextRetryAfter) {
+			if !d.internalQueue.Enqueue(entry) {
+				d.logQueueFullDrop(entry, "backoff")
+				droppedQueueFull++
+				continue
+			}
+			deferredBackoff++
+			continue
 		}
+
+		// Discard entries with unresolved host or dimension before acquiring
+		// a slot. Such entries would fail at the EG with "host/dimension not
+		// found" and consume an origin slot for the round-trip duration. The
+		// usual cause is a queue entry persisted in Redis after the host or
+		// dimension was removed from config.
+		action := d.actionForEntry(entry)
+		if action == "" {
+			d.logger.Warn("Discarding recache entry with unresolved host or dimension",
+				zap.Int("host_id", entry.HostID),
+				zap.Int("dimension_id", entry.DimensionID),
+				zap.String("url", entry.URL))
+			discardedUnknown++
+			continue
+		}
+
+		if skipHosts[entry.HostID] {
+			if !d.internalQueue.Enqueue(entry) {
+				d.logQueueFullDrop(entry, "concurrency")
+				droppedQueueFull++
+				continue
+			}
+			deferredConcurrency++
+			continue
+		}
+
+		slot, ok := d.concurrencyLimiter.TryAcquire(entry.HostID)
+		if !ok {
+			skipHosts[entry.HostID] = true
+			if !d.internalQueue.Enqueue(entry) {
+				d.logQueueFullDrop(entry, "concurrency")
+				droppedQueueFull++
+				continue
+			}
+			deferredConcurrency++
+			continue
+		}
+
+		// Only ActionRender consumes RS budget. Bypass and status_* actions
+		// do not reserve render-service tabs.
+		if action == types.ActionRender {
+			if rsBudget <= 0 {
+				d.concurrencyLimiter.Release(slot)
+				if !d.internalQueue.Enqueue(entry) {
+					d.logQueueFullDrop(entry, "rs_budget")
+					droppedQueueFull++
+					continue
+				}
+				deferredRSBudget++
+				continue
+			}
+			rsBudget--
+		}
+
+		ready = append(ready, readyItem{entry: entry, slot: slot})
+	}
+	d.reloadMu.RUnlock()
+
+	if deferredBackoff+deferredConcurrency+deferredRSBudget+discardedUnknown+droppedQueueFull > 0 {
+		d.logger.Debug("Internal queue entries deferred",
+			zap.Int("deferred_backoff", deferredBackoff),
+			zap.Int("deferred_concurrency", deferredConcurrency),
+			zap.Int("deferred_rs_budget", deferredRSBudget),
+			zap.Int("discarded_unknown", discardedUnknown),
+			zap.Int("dropped_queue_full", droppedQueueFull))
 	}
 
-	if notReadyCount > 0 {
-		d.logger.Debug("Re-enqueued entries waiting for retry backoff",
-			zap.Int("not_ready_count", notReadyCount))
-	}
-
-	if len(readyBatch) == 0 {
-		d.logger.Debug("No entries ready for processing after backoff filter")
+	if len(ready) == 0 {
 		return
 	}
 
 	d.logger.Info("Processing internal queue batch",
-		zap.Int("batch_size", len(readyBatch)),
-		zap.Int("deferred", notReadyCount),
-		zap.Int("available_capacity", availableCapacity))
+		zap.Int("batch_size", len(ready)),
+		zap.Int("rs_budget_initial", rsBudgetInitial),
+		zap.Int("rs_budget_remaining", rsBudget),
+		zap.Int("deferred_backoff", deferredBackoff),
+		zap.Int("deferred_concurrency", deferredConcurrency),
+		zap.Int("deferred_rs_budget", deferredRSBudget),
+		zap.Int("discarded_unknown", discardedUnknown),
+		zap.Int("dropped_queue_full", droppedQueueFull))
 
-	// Distribute to EGs with retry logic
-	d.DistributeToEGs(readyBatch)
+	d.DistributeToEGs(ready)
+}
+
+// logQueueFullDrop records an internal-queue overflow. The entry is dropped
+// because the queue is at MaxSize when we tried to re-enqueue it after a
+// gate rejection. Operators see one error log per dropped entry so the loss
+// is observable.
+func (d *CacheDaemon) logQueueFullDrop(entry InternalQueueEntry, reason string) {
+	d.logger.Error("Internal queue full while re-enqueueing deferred entry; entry dropped",
+		zap.Int("host_id", entry.HostID),
+		zap.String("url", entry.URL),
+		zap.Int("dimension_id", entry.DimensionID),
+		zap.String("reason", reason))
 }

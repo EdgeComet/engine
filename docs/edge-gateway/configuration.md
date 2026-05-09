@@ -399,6 +399,17 @@ bothit_recache:
     - "*Googlebot*"
     - "*Bingbot*"
 
+# Per-host recache concurrency cap (origin protection)
+# The cache daemon will hold at most this many in-flight recache requests
+# per host at a time. Render and bypass entries both consume a slot.
+# Distinct from the cluster-level rs_capacity_reserved knob in
+# cache-daemon.yaml (which only paces render-mode dispatch).
+# Override per host in hosts.d/*.yaml under `recache.max_concurrent`.
+recache:
+  # Default cap for hosts without an override; must be >= 1
+  # Default: 5
+  max_concurrent: 5
+
 cache_sharding:
   # Enable cache sharding across multiple EG instances
   # Default: false
@@ -536,6 +547,12 @@ hosts:
       interval: 12h
       match_ua:
         - "*Googlebot*"
+
+    # Override the global recache.max_concurrent for this host.
+    # Useful for high-traffic origins that can absorb more parallel recache
+    # requests, or for fragile origins that need a tighter cap.
+    recache:
+      max_concurrent: 50
 
     # Override safe headers (replaces global array)
     safe_headers:

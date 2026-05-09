@@ -480,8 +480,9 @@ func (d *CacheDaemon) handleStatusAPI(ctx *fasthttp.RequestCtx) {
 			MaxSize:             d.daemonConfig.InternalQueue.MaxSize,
 			CapacityUsedPercent: float64(d.internalQueue.Size()) / float64(d.daemonConfig.InternalQueue.MaxSize) * 100,
 		},
-		RSCapacity: d.GetRSCapacityStatus(),
-		Queues:     d.GetQueuesStatus(),
+		RSCapacity:  d.GetRSCapacityStatus(),
+		Queues:      d.GetQueuesStatus(),
+		Concurrency: d.concurrencyLimiter.AllStats(),
 	}
 
 	respJSON, _ := json.Marshal(status)

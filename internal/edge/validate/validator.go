@@ -368,6 +368,9 @@ func loadAndValidateMainConfig(path string, collector *ErrorCollector) (*configt
 	// Validate bothit_recache
 	validateBothitRecacheConfig(&cfg, filepath.Base(path), collector)
 
+	// Validate recache concurrency limits
+	validateRecacheLimitConfig(&cfg, filepath.Base(path), collector)
+
 	// Validate safe_headers
 	validateHeadersConfigGlobal(&cfg, filepath.Base(path), collector)
 
@@ -1307,6 +1310,34 @@ func validateHostBothitRecache(hostIndex int, host *types.Host, filename string,
 	}
 }
 
+// validateRecacheLimitInternal validates a RecacheLimitConfig at any level.
+// MaxConcurrent == 0 is treated as "unset → inherit the parent default" so
+// that an empty `recache: {}` block (or `recache:` with no children) is not
+// a config-load failure. Only negative values are rejected.
+func validateRecacheLimitInternal(cfg *types.RecacheLimitConfig, level string) error {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.MaxConcurrent < 0 {
+		return fmt.Errorf("%s recache.max_concurrent must be a positive integer (omit the block to inherit the default), got %d", level, cfg.MaxConcurrent)
+	}
+	return nil
+}
+
+// validateRecacheLimitConfig validates global recache concurrency configuration.
+func validateRecacheLimitConfig(cfg *configtypes.EgConfig, filename string, collector *ErrorCollector) {
+	if err := validateRecacheLimitInternal(cfg.Recache, "global"); err != nil {
+		collector.Add(filename, 0, "%v", err)
+	}
+}
+
+// validateHostRecacheLimit validates per-host recache concurrency override.
+func validateHostRecacheLimit(hostIndex int, host *types.Host, filename string, collector *ErrorCollector) {
+	if err := validateRecacheLimitInternal(host.Recache, fmt.Sprintf("host[%d] (%s)", hostIndex, host.Domain)); err != nil {
+		collector.Add(filename, 0, "%v", err)
+	}
+}
+
 // validateHostHeaders validates headers at host level
 func validateHostHeaders(hostIndex int, host *types.Host, filename string, collector *ErrorCollector) {
 	if host.Headers == nil {
@@ -1626,6 +1657,9 @@ func validateHosts(hosts *configtypes.HostsConfig, filename string, hasGlobalDim
 
 		// Validate bothit_recache
 		validateHostBothitRecache(i, host, filename, collector)
+
+		// Validate per-host recache concurrency limit
+		validateHostRecacheLimit(i, host, filename, collector)
 
 		// Validate safe_headers
 		validateHostHeaders(i, host, filename, collector)

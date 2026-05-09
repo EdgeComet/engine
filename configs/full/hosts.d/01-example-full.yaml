@@ -156,6 +156,15 @@ hosts:
         - "*Bingbot*"
 
     # -------------------------------------------------------------------------
+    # HOST-LEVEL RECACHE CONCURRENCY OVERRIDE
+    # -------------------------------------------------------------------------
+    # Override the global recache.max_concurrent for this host. Useful for
+    # high-traffic origins that can absorb more parallel recache requests, or
+    # for fragile origins that need a tighter cap. Must be >= 1.
+    recache:
+      max_concurrent: 50
+
+    # -------------------------------------------------------------------------
     # HOST-LEVEL CACHE SHARDING
     # -------------------------------------------------------------------------
     cache_sharding:

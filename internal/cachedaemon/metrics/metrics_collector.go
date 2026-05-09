@@ -58,6 +58,13 @@ func (mc *MetricsCollector) RecordEGRequest(egID, status string) {
 		zap.String("status", status))
 }
 
+// SetHostConcurrency publishes a snapshot of a host's per-origin concurrency state.
+// `host` is the primary domain (matches the EG-side `host` label vocabulary);
+// `hostID` is the numeric ID used for cross-service disambiguation.
+func (mc *MetricsCollector) SetHostConcurrency(hostID int, host string, inFlight, maxConcurrent int64, acquiredTotal, deniedTotal uint64) {
+	mc.prometheus.SetHostConcurrency(hostID, host, inFlight, maxConcurrent, acquiredTotal, deniedTotal)
+}
+
 func (mc *MetricsCollector) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	mc.prometheus.ServeHTTP(ctx)
 }

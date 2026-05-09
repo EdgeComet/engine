@@ -58,7 +58,9 @@ internal_queue:
   retry_base_delay: 5s
 
 recache:
-  # Percentage of render service capacity to reserve for online traffic
+  # Percentage of render service capacity to reserve for online traffic.
+  # Applies only to render-mode entries — bypass entries skip this gate
+  # because they don't consume render-service tabs.
   # Default: 0.30
   # Valid range: 0.0-1.0
   rs_capacity_reserved: 0.30
@@ -66,6 +68,11 @@ recache:
   # Timeout for each individual URL recache request
   # Default: 60s
   timeout_per_url: 60s
+
+# Note: per-host recache concurrency limits live in the Edge Gateway config
+# (`recache.max_concurrent` global default; `hosts[].recache.max_concurrent`
+# per-host override). They are origin-protection limits, distinct from the
+# cluster-level `rs_capacity_reserved` knob above.
 
 http_api:
   # Enable the HTTP API server

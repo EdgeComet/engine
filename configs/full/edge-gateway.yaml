@@ -431,6 +431,28 @@ bothit_recache:
     - "$AnthropicBot"
 
 # =============================================================================
+# RECACHE CONCURRENCY LIMIT (per-host)
+# =============================================================================
+# Caps the maximum in-flight recache requests the cache daemon will dispatch
+# for any single host at any time. Acts as origin protection: a slow origin
+# holds slots longer, so the daemon naturally backs off without manual tuning.
+#
+# Distinct from `recache.rs_capacity_reserved` in cache-daemon.yaml:
+# - This limit is per-host, applies to render and bypass entries alike.
+# - The cache-daemon `rs_capacity_reserved` is a cluster-wide reservation of
+#   render-service tabs for online traffic, applied only to render entries.
+#
+# Per-host overrides may be set on individual hosts in hosts.d/*.yaml:
+#   recache:
+#     max_concurrent: 50
+
+recache:
+  # Maximum concurrent recache requests per host (default for hosts without override)
+  # Must be >= 1
+  # Default: 5
+  max_concurrent: 5
+
+# =============================================================================
 # CACHE SHARDING CONFIGURATION
 # =============================================================================
 # Distribute cache across multiple EG instances
