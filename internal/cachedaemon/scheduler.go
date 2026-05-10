@@ -12,6 +12,12 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// maxHighPriorityDrainIterations bounds the per-tick drain loop in Run() so a
+// single host with a very large queue cannot block other tick work indefinitely.
+// Each iteration pulls up to Sum(MaxConcurrent) across all hosts, so the cap
+// gives ~Sum(MaxConcurrent) * 100 URLs/tick as a safety ceiling.
+const maxHighPriorityDrainIterations = 100
+
 // Run is the main scheduler loop that processes recache queues
 // This runs in a separate goroutine and respects context cancellation
 func (d *CacheDaemon) Run(ctx context.Context) {
@@ -52,16 +58,40 @@ func (d *CacheDaemon) Run(ctx context.Context) {
 				continue
 			}
 
-			// Every tick: Process high priority queues
-			d.ProcessHighPriorityQueues()
+			// Drain runs FIRST so high-priority entries acquire concurrency
+			// slots before normal/auto on Nth ticks. The original code pulled
+			// high before normal/auto; preserve that precedence here. Each
+			// iteration pulls up to Sum(MaxConcurrent) URLs and dispatches
+			// them; slots are released synchronously inside
+			// ProcessInternalQueue -> DistributeToEGs, so the next iteration
+			// can re-acquire them. Bounded by the constant.
+			totalPulled, drainIterations := 0, 0
+			for i := 0; i < maxHighPriorityDrainIterations; i++ {
+				pulled := d.ProcessHighPriorityQueues()
+				if pulled == 0 {
+					break
+				}
+				totalPulled += pulled
+				drainIterations++
+				d.ProcessInternalQueue()
+			}
+			if totalPulled > 0 {
+				d.logger.Info("High priority drain completed",
+					zap.Int("pulled", totalPulled),
+					zap.Int("iterations", drainIterations),
+					zap.Bool("hit_iteration_cap", drainIterations == maxHighPriorityDrainIterations))
+			}
 
-			// Every Nth tick: Process normal + autorecache queues
+			// Every Nth tick: pull normal + autorecache. Their entries land
+			// in the (now-empty) internal queue and dispatch via the
+			// post-loop ProcessInternalQueue below.
 			if tickCount%normalCheckTicks == 0 {
 				d.ProcessNormalPriorityQueues()
 				d.ProcessAutoRecacheQueues()
 			}
 
-			// Every tick: Process internal queue (computes RS budget locally)
+			// Every tick: dispatch normal/auto entries pulled above and any
+			// backoff-deferred entries. No-op when the queue is empty.
 			d.ProcessInternalQueue()
 
 			// Publish per-host concurrency stats to metrics
@@ -129,15 +159,16 @@ func (d *CacheDaemon) CalculateAvailableCapacity() int {
 	return availableForRecache
 }
 
-// ProcessHighPriorityQueues pulls entries from high priority ZSETs and enqueues them
-func (d *CacheDaemon) ProcessHighPriorityQueues() {
+// ProcessHighPriorityQueues pulls entries from high priority ZSETs and enqueues them.
+// Returns the number of entries pulled (used by Run() to drive the drain loop).
+func (d *CacheDaemon) ProcessHighPriorityQueues() int {
 	ctx := context.Background()
 
 	// Check internal queue space
 	internalQueueSpace := d.daemonConfig.InternalQueue.MaxSize - d.internalQueue.Size()
 	if internalQueueSpace <= 0 {
 		d.logger.Debug("Internal queue full, skipping high priority queue processing")
-		return
+		return 0
 	}
 
 	hosts := d.GetConfiguredHosts()
@@ -150,8 +181,15 @@ func (d *CacheDaemon) ProcessHighPriorityQueues() {
 
 		zsetKey := d.keyGenerator.RecacheQueueKey(hostID, redis.PriorityHigh)
 
-		// ZPOPMIN to get and remove lowest score entry (FIFO by score)
-		result, err := d.redis.ZPopMin(ctx, zsetKey, 1)
+		pullCount := int64(d.concurrencyLimiter.MaxConcurrent(hostID))
+		if pullCount < 1 {
+			pullCount = 1
+		}
+		if remaining := int64(internalQueueSpace - pulledCount); pullCount > remaining {
+			pullCount = remaining
+		}
+
+		result, err := d.redis.ZPopMin(ctx, zsetKey, pullCount)
 		if err != nil {
 			d.logger.Error("Failed to pop from high priority queue",
 				zap.Int("host_id", hostID),
@@ -161,63 +199,61 @@ func (d *CacheDaemon) ProcessHighPriorityQueues() {
 		}
 
 		if len(result) == 0 {
-			// Queue empty for this host
 			continue
 		}
 
-		// Parse RecacheMember from JSON
-		memberJSON := result[0].Member.(string)
-		score := result[0].Score
-		var member types.RecacheMember
-		if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
-			d.logger.Error("Failed to unmarshal RecacheMember",
-				zap.Int("host_id", hostID),
-				zap.String("member_json", memberJSON),
-				zap.Error(err))
-			continue
-		}
+		for _, r := range result {
+			memberJSON := r.Member.(string)
+			score := r.Score
+			var member types.RecacheMember
+			if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
+				d.logger.Error("Failed to unmarshal RecacheMember",
+					zap.Int("host_id", hostID),
+					zap.String("member_json", memberJSON),
+					zap.Error(err))
+				continue
+			}
 
-		// Create internal queue entry
-		entry := InternalQueueEntry{
-			HostID:      hostID,
-			URL:         member.URL,
-			DimensionID: member.DimensionID,
-			RetryCount:  0,
-			QueuedAt:    time.Now().UTC(),
-		}
+			entry := InternalQueueEntry{
+				HostID:      hostID,
+				URL:         member.URL,
+				DimensionID: member.DimensionID,
+				RetryCount:  0,
+				QueuedAt:    time.Now().UTC(),
+			}
 
-		// Enqueue
-		if d.internalQueue.Enqueue(entry) {
-			pulledCount++
-			d.logger.Debug("Pulled from high priority queue",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL),
-				zap.Int("dimension_id", member.DimensionID))
-		} else {
-			d.logger.Warn("Failed to enqueue entry (queue full)",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL))
-
-			// Re-add to ZSET since we couldn't enqueue
-			if err := d.redis.ZAdd(ctx, zsetKey, score, memberJSON); err != nil {
-				d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+			if d.internalQueue.Enqueue(entry) {
+				pulledCount++
+				d.logger.Debug("Pulled from high priority queue",
 					zap.Int("host_id", hostID),
 					zap.String("url", member.URL),
-					zap.String("key", zsetKey),
-					zap.Error(err))
+					zap.Int("dimension_id", member.DimensionID))
 			} else {
-				d.logger.Info("Re-added entry to ZSET after enqueue failure",
+				d.logger.Warn("Failed to enqueue entry (queue full)",
 					zap.Int("host_id", hostID),
 					zap.String("url", member.URL))
+
+				if err := d.redis.ZAdd(ctx, zsetKey, score, memberJSON); err != nil {
+					d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL),
+						zap.String("key", zsetKey),
+						zap.Error(err))
+				} else {
+					d.logger.Info("Re-added entry to ZSET after enqueue failure",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL))
+				}
 			}
 		}
 	}
 
 	if pulledCount > 0 {
-		d.logger.Info("Processed high priority queues",
+		d.logger.Debug("Processed high priority queues",
 			zap.Int("entries_pulled", pulledCount),
 			zap.Int("hosts_checked", len(hosts)))
 	}
+	return pulledCount
 }
 
 // ProcessNormalPriorityQueues pulls entries from normal priority ZSETs and enqueues them
@@ -241,8 +277,15 @@ func (d *CacheDaemon) ProcessNormalPriorityQueues() {
 
 		zsetKey := d.keyGenerator.RecacheQueueKey(hostID, redis.PriorityNormal)
 
-		// ZPOPMIN to get and remove lowest score entry (FIFO by score)
-		result, err := d.redis.ZPopMin(ctx, zsetKey, 1)
+		pullCount := int64(d.concurrencyLimiter.MaxConcurrent(hostID))
+		if pullCount < 1 {
+			pullCount = 1
+		}
+		if remaining := int64(internalQueueSpace - pulledCount); pullCount > remaining {
+			pullCount = remaining
+		}
+
+		result, err := d.redis.ZPopMin(ctx, zsetKey, pullCount)
 		if err != nil {
 			d.logger.Error("Failed to pop from normal priority queue",
 				zap.Int("host_id", hostID),
@@ -252,60 +295,57 @@ func (d *CacheDaemon) ProcessNormalPriorityQueues() {
 		}
 
 		if len(result) == 0 {
-			// Queue empty for this host
 			continue
 		}
 
-		// Parse RecacheMember from JSON
-		memberJSON := result[0].Member.(string)
-		score := result[0].Score
-		var member types.RecacheMember
-		if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
-			d.logger.Error("Failed to unmarshal RecacheMember",
-				zap.Int("host_id", hostID),
-				zap.String("member_json", memberJSON),
-				zap.Error(err))
-			continue
-		}
+		for _, r := range result {
+			memberJSON := r.Member.(string)
+			score := r.Score
+			var member types.RecacheMember
+			if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
+				d.logger.Error("Failed to unmarshal RecacheMember",
+					zap.Int("host_id", hostID),
+					zap.String("member_json", memberJSON),
+					zap.Error(err))
+				continue
+			}
 
-		// Create internal queue entry
-		entry := InternalQueueEntry{
-			HostID:      hostID,
-			URL:         member.URL,
-			DimensionID: member.DimensionID,
-			RetryCount:  0,
-			QueuedAt:    time.Now().UTC(),
-		}
+			entry := InternalQueueEntry{
+				HostID:      hostID,
+				URL:         member.URL,
+				DimensionID: member.DimensionID,
+				RetryCount:  0,
+				QueuedAt:    time.Now().UTC(),
+			}
 
-		// Enqueue
-		if d.internalQueue.Enqueue(entry) {
-			pulledCount++
-			d.logger.Debug("Pulled from normal priority queue",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL),
-				zap.Int("dimension_id", member.DimensionID))
-		} else {
-			d.logger.Warn("Failed to enqueue entry (queue full)",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL))
-
-			// Re-add to ZSET since we couldn't enqueue
-			if err := d.redis.ZAdd(ctx, zsetKey, score, memberJSON); err != nil {
-				d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+			if d.internalQueue.Enqueue(entry) {
+				pulledCount++
+				d.logger.Debug("Pulled from normal priority queue",
 					zap.Int("host_id", hostID),
 					zap.String("url", member.URL),
-					zap.String("key", zsetKey),
-					zap.Error(err))
+					zap.Int("dimension_id", member.DimensionID))
 			} else {
-				d.logger.Info("Re-added entry to ZSET after enqueue failure",
+				d.logger.Warn("Failed to enqueue entry (queue full)",
 					zap.Int("host_id", hostID),
 					zap.String("url", member.URL))
+
+				if err := d.redis.ZAdd(ctx, zsetKey, score, memberJSON); err != nil {
+					d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL),
+						zap.String("key", zsetKey),
+						zap.Error(err))
+				} else {
+					d.logger.Info("Re-added entry to ZSET after enqueue failure",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL))
+				}
 			}
 		}
 	}
 
 	if pulledCount > 0 {
-		d.logger.Info("Processed normal priority queues",
+		d.logger.Debug("Processed normal priority queues",
 			zap.Int("entries_pulled", pulledCount),
 			zap.Int("hosts_checked", len(hosts)))
 	}
@@ -363,8 +403,22 @@ func (d *CacheDaemon) ProcessAutoRecacheQueues() {
 			zap.Int64("due_count", dueCount),
 			zap.Int64("total_count", totalCount))
 
-		// ZPOPMIN to get and remove lowest score entry (earliest due)
-		result, err := d.redis.ZPopMin(ctx, zsetKey, 1)
+		pullCount := int64(d.concurrencyLimiter.MaxConcurrent(hostID))
+		if pullCount < 1 {
+			pullCount = 1
+		}
+		if remaining := int64(internalQueueSpace - pulledCount); pullCount > remaining {
+			pullCount = remaining
+		}
+		// Critical: clamp to dueCount so ZPOPMIN does not pop entries scheduled
+		// for the future. ZPOPMIN returns the N lowest scores unconditionally;
+		// without this clamp, batched pulls would dispatch URLs ahead of their
+		// scheduled time and silently break the autorecache contract.
+		if pullCount > dueCount {
+			pullCount = dueCount
+		}
+
+		result, err := d.redis.ZPopMin(ctx, zsetKey, pullCount)
 		if err != nil {
 			d.logger.Error("Failed to pop from autorecache queue",
 				zap.Int("host_id", hostID),
@@ -374,63 +428,60 @@ func (d *CacheDaemon) ProcessAutoRecacheQueues() {
 		}
 
 		if len(result) == 0 {
-			// Queue empty (race condition - entry was taken between ZCOUNT and ZPOPMIN)
 			continue
 		}
 
-		// Parse RecacheMember from JSON
-		memberJSON := result[0].Member.(string)
-		score := int64(result[0].Score)
-		var member types.RecacheMember
-		if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
-			d.logger.Error("Failed to unmarshal RecacheMember",
-				zap.Int("host_id", hostID),
-				zap.String("member_json", memberJSON),
-				zap.Error(err))
-			continue
-		}
-
-		// Create internal queue entry
-		entry := InternalQueueEntry{
-			HostID:      hostID,
-			URL:         member.URL,
-			DimensionID: member.DimensionID,
-			RetryCount:  0,
-			QueuedAt:    time.Now().UTC(),
-		}
-
-		// Enqueue
-		if d.internalQueue.Enqueue(entry) {
-			pulledCount++
-			d.logger.Debug("Pulled from autorecache queue",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL),
-				zap.Int("dimension_id", member.DimensionID),
-				zap.Int64("scheduled_at", score),
-				zap.Int64("now", now))
-		} else {
-			d.logger.Warn("Failed to enqueue entry (queue full)",
-				zap.Int("host_id", hostID),
-				zap.String("url", member.URL))
-
-			// Re-add to ZSET since we couldn't enqueue
-			if err := d.redis.ZAdd(ctx, zsetKey, float64(score), memberJSON); err != nil {
-				d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+		for _, r := range result {
+			memberJSON := r.Member.(string)
+			score := int64(r.Score)
+			var member types.RecacheMember
+			if err := json.Unmarshal([]byte(memberJSON), &member); err != nil {
+				d.logger.Error("Failed to unmarshal RecacheMember",
 					zap.Int("host_id", hostID),
-					zap.String("url", member.URL),
-					zap.String("key", zsetKey),
+					zap.String("member_json", memberJSON),
 					zap.Error(err))
-			} else {
-				d.logger.Info("Re-added entry to ZSET after enqueue failure",
+				continue
+			}
+
+			entry := InternalQueueEntry{
+				HostID:      hostID,
+				URL:         member.URL,
+				DimensionID: member.DimensionID,
+				RetryCount:  0,
+				QueuedAt:    time.Now().UTC(),
+			}
+
+			if d.internalQueue.Enqueue(entry) {
+				pulledCount++
+				d.logger.Debug("Pulled from autorecache queue",
 					zap.Int("host_id", hostID),
 					zap.String("url", member.URL),
-					zap.Int64("scheduled_at", score))
+					zap.Int("dimension_id", member.DimensionID),
+					zap.Int64("scheduled_at", score),
+					zap.Int64("now", now))
+			} else {
+				d.logger.Warn("Failed to enqueue entry (queue full)",
+					zap.Int("host_id", hostID),
+					zap.String("url", member.URL))
+
+				if err := d.redis.ZAdd(ctx, zsetKey, float64(score), memberJSON); err != nil {
+					d.logger.Error("CRITICAL: Failed to re-add dropped entry to ZSET",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL),
+						zap.String("key", zsetKey),
+						zap.Error(err))
+				} else {
+					d.logger.Info("Re-added entry to ZSET after enqueue failure",
+						zap.Int("host_id", hostID),
+						zap.String("url", member.URL),
+						zap.Int64("scheduled_at", score))
+				}
 			}
 		}
 	}
 
 	if pulledCount > 0 {
-		d.logger.Info("Processed autorecache queues",
+		d.logger.Debug("Processed autorecache queues",
 			zap.Int("entries_pulled", pulledCount),
 			zap.Int("hosts_checked", len(hosts)))
 	}
@@ -557,7 +608,7 @@ func (d *CacheDaemon) ProcessInternalQueue() {
 		return
 	}
 
-	d.logger.Info("Processing internal queue batch",
+	d.logger.Debug("Processing internal queue batch",
 		zap.Int("batch_size", len(ready)),
 		zap.Int("rs_budget_initial", rsBudgetInitial),
 		zap.Int("rs_budget_remaining", rsBudget),

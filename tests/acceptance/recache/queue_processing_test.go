@@ -16,6 +16,7 @@ var _ = Describe("Scheduler Processing", func() {
 
 		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
+		testEnv.DrainMockEGResponses()
 
 		// Add mock RS with capacity for processing
 		err = testEnv.AddMockRSToRegistry("rs-1", 100, 0)
@@ -88,6 +89,61 @@ var _ = Describe("Scheduler Processing", func() {
 				size, _ := testEnv.GetZSETSize(autorecacheKey)
 				return size
 			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(0)), "Autorecache queue should be processed after 60 ticks")
+		})
+
+		It("respects due semantics under batched ZPopMin (only popped scheduled<=now)", func() {
+			// Regression guard for the autorecache-specific dueCount clamp.
+			// With max_concurrent=5 and batched ZPopMin, the limiter would
+			// otherwise pull 5 lowest-score entries even if only 3 are due,
+			// dispatching 2 future-scheduled URLs ahead of their scheduled time.
+			//
+			// Use dimension_id=0 (bypass) so the dispatch path doesn't depend on
+			// RS budget — the mock RS heartbeat would otherwise expire before the
+			// autorecache check fires at ~6s.
+			autorecacheKey := fmt.Sprintf("recache:%d:autorecache", testEnv.TestHostID)
+			now := time.Now().Unix()
+
+			for i := 0; i < 3; i++ {
+				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "autorecache",
+					fmt.Sprintf("https://example.com/due-%d", i), 0, float64(now-10))
+				Expect(err).ToNot(HaveOccurred())
+			}
+			for i := 0; i < 7; i++ {
+				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "autorecache",
+					fmt.Sprintf("https://example.com/future-%d", i), 0, float64(now+300))
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			size, _ := testEnv.GetZSETSize(autorecacheKey)
+			Expect(size).To(Equal(int64(10)))
+
+			Eventually(func() int64 {
+				size, _ := testEnv.GetZSETSize(autorecacheKey)
+				return size
+			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(7)),
+				"only the 3 due entries should be popped; 7 future-scheduled entries must remain")
+
+			received, _ := testEnv.DrainChannelUntilCount(3, 2*time.Second)
+			Expect(received).To(Equal(3),
+				"mock EG receives exactly 3 dispatches (the due entries)")
+
+			Consistently(func() int {
+				select {
+				case <-testEnv.MockEGReceivedCh:
+					return 1
+				default:
+					return 0
+				}
+			}, 1500*time.Millisecond, 200*time.Millisecond).Should(Equal(0),
+				"no future-scheduled entries must be dispatched ahead of time")
+
+			entries, err := getZSETEntries(testEnv.RedisClient, autorecacheKey)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(entries).To(HaveLen(7))
+			for _, e := range entries {
+				Expect(e.Score).To(BeNumerically(">", float64(now)),
+					"every remaining entry must be future-scheduled")
+			}
 		})
 	})
 

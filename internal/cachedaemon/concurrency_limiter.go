@@ -167,6 +167,16 @@ func (l *HostConcurrencyLimiter) Stats(hostID int) HostConcurrencyStats {
 	}
 }
 
+// MaxConcurrent returns the effective max-concurrent limit for hostID
+// (per-host override -> global config value -> DefaultMaxConcurrent).
+// Hot-path version of Stats(hostID).MaxConcurrent that avoids allocating
+// a HostConcurrencyStats struct.
+func (l *HostConcurrencyLimiter) MaxConcurrent(hostID int) int {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.effectiveLocked(hostID)
+}
+
 // AllStats returns a snapshot keyed by host_id for every host the limiter
 // has tracked since startup (including hosts removed from config).
 func (l *HostConcurrencyLimiter) AllStats() map[int]HostConcurrencyStats {

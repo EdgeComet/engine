@@ -24,6 +24,7 @@ var _ = Describe("Retry Backoff", func() {
 
 		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
+		testEnv.DrainMockEGResponses()
 
 		// Ensure there is RS capacity to process
 		err = testEnv.AddMockRSToRegistry("rs-1", 100, 0)

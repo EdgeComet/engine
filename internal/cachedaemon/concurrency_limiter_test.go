@@ -248,3 +248,34 @@ func TestConcurrencyLimiter_AllStatsContainsTrackedHosts(t *testing.T) {
 	assert.Equal(t, 10, all[42].MaxConcurrent)
 	assert.Equal(t, 3, all[7].MaxConcurrent)
 }
+
+func TestConcurrencyLimiter_MaxConcurrentAccessor(t *testing.T) {
+	t.Run("default fallback when no global config and no override", func(t *testing.T) {
+		l := NewHostConcurrencyLimiter(&configtypes.EgConfig{}, nil)
+		assert.Equal(t, DefaultMaxConcurrent, l.MaxConcurrent(123))
+	})
+
+	t.Run("global config value applies to hosts without override", func(t *testing.T) {
+		l := newLimiter(7, nil)
+		assert.Equal(t, 7, l.MaxConcurrent(1))
+		assert.Equal(t, 7, l.MaxConcurrent(99))
+	})
+
+	t.Run("per-host override takes precedence over global", func(t *testing.T) {
+		l := newLimiter(3, map[int]int{42: 11})
+		assert.Equal(t, 11, l.MaxConcurrent(42))
+		assert.Equal(t, 3, l.MaxConcurrent(7), "non-overridden hosts use global")
+	})
+
+	t.Run("reload updates resolved value", func(t *testing.T) {
+		l := newLimiter(2, nil)
+		assert.Equal(t, 2, l.MaxConcurrent(50))
+
+		eg := &configtypes.EgConfig{Recache: &types.RecacheLimitConfig{MaxConcurrent: 8}}
+		hosts := []types.Host{{ID: 50, Recache: &types.RecacheLimitConfig{MaxConcurrent: 13}}}
+		l.Reload(eg, hosts)
+
+		assert.Equal(t, 13, l.MaxConcurrent(50), "override after reload")
+		assert.Equal(t, 8, l.MaxConcurrent(99), "global default after reload for non-overridden host")
+	})
+}

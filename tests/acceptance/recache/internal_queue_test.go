@@ -16,6 +16,7 @@ var _ = Describe("Internal Queue Processing", func() {
 
 		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
+		testEnv.DrainMockEGResponses()
 
 		// Add mock RS with capacity
 		err = testEnv.AddMockRSToRegistry("rs-1", 100, 0)

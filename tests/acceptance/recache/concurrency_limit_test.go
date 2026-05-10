@@ -20,6 +20,7 @@ var _ = Describe("Per-Host Concurrency Limiter", func() {
 
 		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
+		testEnv.DrainMockEGResponses()
 
 		err = testEnv.AddMockRSToRegistry("rs-1", 100, 0)
 		Expect(err).ToNot(HaveOccurred())
@@ -118,6 +119,67 @@ var _ = Describe("Per-Host Concurrency Limiter", func() {
 				return received
 			}, 30*time.Second, 200*time.Millisecond).Should(BeNumerically(">=", 1),
 				"after EG returns, the daemon must successfully dispatch — proving slots were not leaked")
+		})
+	})
+
+	Context("Saturation under burst", func() {
+		It("acquires max_concurrent slots within the first tick, not 1 per tick", func() {
+			// Block every mock-EG response so dispatched requests hold their slots.
+			// Without the throughput fix, only 1 URL/sec reaches the limiter and
+			// in_flight peaks at 1. With the fix, the first tick pulls MaxConcurrent
+			// (5) and all 5 saturate the host's semaphore.
+			release := testEnv.HoldMockEG()
+			defer release()
+
+			// Refresh RS registration so last_seen is current (RegistryTTL=3s);
+			// otherwise a slow BeforeEach could leave RS borderline-stale and
+			// dispatches would defer on rs_budget=0.
+			err := testEnv.AddMockRSToRegistry("rs-1", 100, 0)
+			Expect(err).ToNot(HaveOccurred())
+
+			score := float64(time.Now().Unix())
+			for i := 0; i < 50; i++ {
+				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "high",
+					fmt.Sprintf("https://example.com/saturation-%d", i), 1, score)
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			Eventually(func() float64 {
+				return getInFlight(testEnv, testEnv.TestHostID)
+			}, 3*time.Second, 50*time.Millisecond).Should(Equal(float64(5)),
+				"in_flight must saturate at max_concurrent=5 within the first tick window")
+
+			respBody, statusCode, err := testEnv.SendStatusRequest()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(statusCode).To(Equal(200))
+
+			var status map[string]interface{}
+			Expect(json.Unmarshal(respBody, &status)).To(Succeed())
+			concurrency, ok := status["concurrency"].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+			hostStats, ok := concurrency[fmt.Sprintf("%d", testEnv.TestHostID)].(map[string]interface{})
+			Expect(ok).To(BeTrue())
+
+			acquired, _ := hostStats["acquired_total"].(float64)
+			Expect(acquired).To(Equal(float64(5)),
+				"acquired_total must be exactly 5: drain blocks at iter 1 inside DistributeToEGs.wg.Wait so no further acquires happen; without the fix it would be 1-2 in this window")
+		})
+	})
+
+	Context("Drain mode for high priority", func() {
+		It("drains a 200-URL burst within a few ticks instead of 200 ticks", func() {
+			// With drain mode + fast mock EG, 200 URLs at max_concurrent=5 should
+			// process within seconds. Without the fix, 1 URL/sec means ~200s.
+			score := float64(time.Now().Unix())
+			for i := 0; i < 200; i++ {
+				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "high",
+					fmt.Sprintf("https://example.com/drain-%d", i), 1, score)
+				Expect(err).ToNot(HaveOccurred())
+			}
+
+			received, _ := testEnv.DrainChannelUntilCount(200, 6*time.Second)
+			Expect(received).To(Equal(200),
+				"all 200 URLs must reach the mock EG within 6s; without drain mode this would take ~200s")
 		})
 	})
 

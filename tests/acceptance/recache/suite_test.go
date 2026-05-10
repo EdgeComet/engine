@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -108,6 +109,12 @@ type RecacheTestEnvironment struct {
 	MockEGPort       int
 	MockEGResponses  chan bool // true = success, false = error
 	MockEGReceivedCh chan RecacheRequestReceived
+
+	// MockEGHoldCh, when non-nil, blocks every mock-EG response handler until
+	// the channel is closed. Tests use this via HoldMockEG() to observe
+	// concurrency state (in_flight, acquired_total) before slots release.
+	MockEGHoldMu sync.Mutex
+	MockEGHoldCh chan struct{}
 }
 
 // NewRecacheTestEnvironment creates a new test environment
@@ -470,6 +477,16 @@ func (env *RecacheTestEnvironment) StartMockEG() error {
 					// Channel full, skip
 				}
 				entriesCount = 1
+			}
+
+			// If a hold-gate is installed, block every response until the test
+			// closes it. Allows tests to observe in-flight slots/concurrency
+			// before responses settle.
+			env.MockEGHoldMu.Lock()
+			hold := env.MockEGHoldCh
+			env.MockEGHoldMu.Unlock()
+			if hold != nil {
+				<-hold
 			}
 
 			// Check if we should succeed or fail
@@ -1159,6 +1176,42 @@ func (env *RecacheTestEnvironment) SetMockEGResponse(success bool) {
 func (env *RecacheTestEnvironment) SetMockEGResponses(responses []bool) {
 	for _, success := range responses {
 		env.MockEGResponses <- success
+	}
+}
+
+// HoldMockEG installs a hold-gate that blocks every mock-EG response handler
+// until the returned release function is called. Lets tests observe in-flight
+// slot counts before responses settle. If a previous gate is still installed,
+// it is closed first so any handlers stuck on it are released.
+func (env *RecacheTestEnvironment) HoldMockEG() (release func()) {
+	env.MockEGHoldMu.Lock()
+	defer env.MockEGHoldMu.Unlock()
+	if env.MockEGHoldCh != nil {
+		close(env.MockEGHoldCh)
+	}
+	ch := make(chan struct{})
+	env.MockEGHoldCh = ch
+	return func() {
+		env.MockEGHoldMu.Lock()
+		defer env.MockEGHoldMu.Unlock()
+		if env.MockEGHoldCh == ch {
+			close(ch)
+			env.MockEGHoldCh = nil
+		}
+	}
+}
+
+// DrainMockEGResponses empties the channel of pre-configured mock-EG responses.
+// Tests that program responses via SetMockEGResponses{,Response} must call this
+// in BeforeEach so leftover items from a previous test do not leak into the
+// next test's dispatch results.
+func (env *RecacheTestEnvironment) DrainMockEGResponses() {
+	for {
+		select {
+		case <-env.MockEGResponses:
+		default:
+			return
+		}
 	}
 }
 
