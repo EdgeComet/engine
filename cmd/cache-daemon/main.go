@@ -40,24 +40,10 @@ func main() {
 		initialLogger.Fatal("Failed to load cache-daemon config", zap.Error(err))
 	}
 
-	// Resolve EG config path (relative paths are relative to daemon config directory)
-	egConfigPath := daemonConfig.EgConfig
-	if !filepath.IsAbs(egConfigPath) {
-		daemonDir := filepath.Dir(*configPath)
-		egConfigPath = filepath.Join(daemonDir, egConfigPath)
-	}
-
-	initialLogger.Info("Loading EG config for hosts",
-		zap.String("eg_config_path", egConfigPath))
-
-	// Load EG configuration (for hosts only)
-	configManager, err := config.NewEGConfigManager(egConfigPath, initialLogger.Logger)
-	if err != nil {
-		fmt.Println(egConfigPath)
-		initialLogger.Fatal("!!!!Failed to load EG config", zap.Error(err))
-	}
-
-	// Reconfigure logger based on daemon config settings (uses INFO level during startup if configured level is higher)
+	// Reconfigure logger based on daemon config settings (uses INFO level during startup if configured level is higher).
+	// Must happen before constructing any long-lived component, otherwise that
+	// component captures the default console-only debug logger and its later
+	// output bypasses the configured file sink.
 	dynamicLogger, err := logger.NewLoggerWithStartupOverride(daemonConfig.Logging)
 	if err != nil {
 		initialLogger.Fatal("Failed to create configured logger", zap.Error(err))
@@ -66,6 +52,23 @@ func main() {
 
 	// Add Daemon ID to all logs
 	zapLogger := dynamicLogger.With(zap.String("daemon_id", daemonConfig.DaemonID))
+
+	// Resolve EG config path (relative paths are relative to daemon config directory)
+	egConfigPath := daemonConfig.EgConfig
+	if !filepath.IsAbs(egConfigPath) {
+		daemonDir := filepath.Dir(*configPath)
+		egConfigPath = filepath.Join(daemonDir, egConfigPath)
+	}
+
+	zapLogger.Info("Loading EG config for hosts",
+		zap.String("eg_config_path", egConfigPath))
+
+	// Load EG configuration (for hosts only)
+	configManager, err := config.NewEGConfigManager(egConfigPath, zapLogger)
+	if err != nil {
+		fmt.Println(egConfigPath)
+		zapLogger.Fatal("!!!!Failed to load EG config", zap.Error(err))
+	}
 
 	// Initialize Redis client from daemon config
 	redisClient, err := redis.NewClient(&daemonConfig.Redis, zapLogger)
