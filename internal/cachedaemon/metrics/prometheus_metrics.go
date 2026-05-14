@@ -35,6 +35,12 @@ type PrometheusMetrics struct {
 	recacheAcquiredTotal *prometheus.CounterVec
 	recacheDeniedTotal   *prometheus.CounterVec
 
+	// Per-priority pull counter: count of entries popped from a Redis ZSET
+	// into the internal queue. Labelled by priority and host_id so operators
+	// can verify the unified drain is actually pulling normal/autorecache on
+	// every tick, not just on the old 60s cadence.
+	recachePulledTotal *prometheus.CounterVec
+
 	// Tracks last published totals per host so SetHostConcurrency can publish
 	// the delta only — never deletes the series, never produces false counter
 	// resets observable to scrapers.
@@ -144,6 +150,16 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 		[]string{"host", "host_id"},
 	)
 
+	pm.recachePulledTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "cd",
+			Name:      "recache_pulled_total",
+			Help:      "Total entries pulled from Redis recache queues into the internal queue per priority and host",
+		},
+		[]string{"priority", "host_id"},
+	)
+
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(pm.recacheRequestsTotal)
 	registry.MustRegister(pm.queueDepth)
@@ -154,6 +170,7 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 	registry.MustRegister(pm.recacheMaxConcurrent)
 	registry.MustRegister(pm.recacheAcquiredTotal)
 	registry.MustRegister(pm.recacheDeniedTotal)
+	registry.MustRegister(pm.recachePulledTotal)
 
 	gatherer := prometheus.Gatherer(registry)
 	handler := promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{
@@ -212,6 +229,14 @@ func (pm *PrometheusMetrics) SetHostConcurrency(hostID int, host string, inFligh
 	if deniedTotal > prev.denied {
 		pm.recacheDeniedTotal.WithLabelValues(host, hostIDLabel).Add(float64(deniedTotal - prev.denied))
 	}
+}
+
+// RecordRecachePulled increments the per-priority pull counter by n.
+func (pm *PrometheusMetrics) RecordRecachePulled(priority string, hostID int, n int) {
+	if n <= 0 {
+		return
+	}
+	pm.recachePulledTotal.WithLabelValues(priority, strconv.Itoa(hostID)).Add(float64(n))
 }
 
 func (pm *PrometheusMetrics) ServeHTTP(ctx *fasthttp.RequestCtx) {

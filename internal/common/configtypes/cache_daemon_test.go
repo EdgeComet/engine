@@ -19,8 +19,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 			DB:   0,
 		},
 		Scheduler: CacheDaemonScheduler{
-			TickInterval:        types.Duration(1 * time.Second),
-			NormalCheckInterval: types.Duration(60 * time.Second),
+			TickInterval: types.Duration(1 * time.Second),
 		},
 		InternalQueue: CacheDaemonInternalQueue{
 			MaxSize:    1000,
@@ -87,8 +86,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(50 * time.Millisecond),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(50 * time.Millisecond),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -102,30 +100,6 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 			errMsg:  "tick_interval must be >= 100ms",
 		},
 		{
-			name: "normal_check_interval not multiple of tick_interval should fail",
-			config: &CacheDaemonConfig{
-				EgConfig: "/path/to/edge-gateway.yaml",
-				DaemonID: "daemon-1",
-				Redis: RedisConfig{
-					Addr: "localhost:6379",
-					DB:   0,
-				},
-				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(3 * time.Second),
-					NormalCheckInterval: types.Duration(10 * time.Second), // 10 % 3 != 0
-				},
-				InternalQueue: CacheDaemonInternalQueue{
-					MaxSize:    1000,
-					MaxRetries: 3,
-				},
-				Recache: CacheDaemonRecache{
-					RSCapacityReserved: 0.30,
-				},
-			},
-			wantErr: true,
-			errMsg:  "must be a multiple of tick_interval",
-		},
-		{
 			name: "max_size <= 0 should fail",
 			config: &CacheDaemonConfig{
 				EgConfig: "/path/to/edge-gateway.yaml",
@@ -135,8 +109,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    0,
@@ -159,8 +132,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -183,8 +155,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -207,8 +178,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -231,8 +201,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -256,8 +225,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -285,8 +253,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,
@@ -314,8 +281,7 @@ func TestCacheDaemonConfig_Validate(t *testing.T) {
 					DB:   0,
 				},
 				Scheduler: CacheDaemonScheduler{
-					TickInterval:        types.Duration(1 * time.Second),
-					NormalCheckInterval: types.Duration(60 * time.Second),
+					TickInterval: types.Duration(1 * time.Second),
 				},
 				InternalQueue: CacheDaemonInternalQueue{
 					MaxSize:    1000,

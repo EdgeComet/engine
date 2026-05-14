@@ -65,6 +65,13 @@ func (mc *MetricsCollector) SetHostConcurrency(hostID int, host string, inFlight
 	mc.prometheus.SetHostConcurrency(hostID, host, inFlight, maxConcurrent, acquiredTotal, deniedTotal)
 }
 
+// RecordRecachePulled exposes per-priority pull counts to Prometheus.
+// Called by the scheduler each time a batch of entries is pulled from a
+// Redis ZSET into the internal queue.
+func (mc *MetricsCollector) RecordRecachePulled(priority string, hostID int, n int) {
+	mc.prometheus.RecordRecachePulled(priority, hostID, n)
+}
+
 func (mc *MetricsCollector) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	mc.prometheus.ServeHTTP(ctx)
 }

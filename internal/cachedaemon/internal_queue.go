@@ -86,3 +86,17 @@ func (q *InternalQueue) CountByHostID(hostID int) int {
 	}
 	return count
 }
+
+// CountsByHostID returns the per-host entry counts in a single pass.
+// Used by the scheduler's per-host skip-on-defer logic so it doesn't have to
+// call CountByHostID once per host (O(N hosts × queue size) vs O(queue size)).
+func (q *InternalQueue) CountsByHostID() map[int]int {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	counts := make(map[int]int, 8)
+	for _, entry := range q.entries {
+		counts[entry.HostID]++
+	}
+	return counts
+}

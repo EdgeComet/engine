@@ -20,7 +20,23 @@ CD maintains three queue types as Redis sorted sets, each with URLs scored by sc
 - Normal queue - General cache updating queue for bulk recache operations.
 - Autorecache queue - Populated automatically by EG when bots hit cached content. URLs are scheduled based on configured intervals.
 
-CD processes queues in priority order: priority first, then normal, then autorecache. Only URLs with a scheduled time in the past are picked for processing. This ensures urgent updates happen first while background recaching continues at a lower priority.
+## Drain loop
+
+CD runs a unified drain on every `scheduler.tick_interval`. On each tick the scheduler walks all configured hosts and, per host, pulls at most one priority's worth of work in strict order: `high` first, then `normal`, then due `autorecache` (entries scheduled at or before "now"). Strict priority within a host is preserved by stopping at the first non-empty priority — a host's `normal` items wait only for that host's `high` to drain, never for an unrelated host's backlog.
+
+The drain has three guardrails:
+
+- **Rotating host cursor.** The host scan starts at a per-daemon cursor that advances by the number of hosts visited each iteration. When the internal queue fills before every host has been visited, the next iteration resumes at the host after the last one visited, so a heavy backlog at the front of the list can never starve later hosts.
+- **Durability pre-check.** Before popping from Redis, CD checks the host's free concurrency slots. If none are free, no items are pulled — the backlog stays in durable Redis instead of piling up in the volatile in-memory queue. As soon as slots release, the next iter pulls.
+- **Empty-host-list panic guard.** When the host list is empty (startup before the host loader populates, or every host removed), the drain loop is skipped but the tick-end `ProcessInternalQueue` still runs so retry/backoff items continue to dispatch.
+
+Throughput is governed by the per-host `max_concurrent` cap and average render time: roughly `max_concurrent / avg_render_time` requests per second per host. `tick_interval` is an idle re-scan interval, not a throughput knob.
+
+Within a host, `high` can still starve `normal`/`autorecache` if it is continuously fed — standard priority-queue behaviour. Operators size `max_concurrent` accordingly and route batch work that should not preempt other priorities through `normal` rather than `high`.
+
+### Operator note: backoff backpressure during outages
+
+`internal_queue.max_size` is load-bearing for the daemon's durability vs crash-loss tradeoff. Pulled items leave durable Redis and live in the internal queue until dispatch; on a daemon crash they are lost. During an EG or RS outage, dispatch failures re-enqueue entries onto the internal queue with exponential backoff. If the outage persists, deferred entries accumulate and the queue's free space shrinks, slowing fresh Redis pulls — by design, since pulling more would risk overflowing the volatile queue and dropping work via `logQueueFullDrop`. The expected operator observation in this state is: Redis ZSET counts grow while iq stays near capacity. This is durability backpressure, not a stuck drain — once the outage clears, the backoff entries drain (success or `max_retries` exceeded) and Redis catches up. If you regularly see drops, raise `internal_queue.max_size` for the outage envelope you want to absorb.
 
 
 
@@ -42,7 +58,7 @@ For proactive cache updates, use POST /internal/cache/recache endpoint to add UR
 
 Large websites can have hundreds of thousands or even millions of pages. Keeping all rendered versions up to date would consume significant resources and money. However, Googlebot and AI bots don't crawl all pages. Monthly crawl ratios vary from 10-20% up to 60-70% depending on site size and structure.
 
-Autorecache leverages this pattern. When a bot hits cached content, EG checks if the User-Agent matches configured bot patterns (bothit_recache.match_ua). If matched, EG adds the URL to the autorecache queue in Redis with a scheduled time based on the configured interval (e.g., 24h from now). CD periodically scans this queue, picks URLs that are due, and sends them for rendering.
+Autorecache leverages this pattern. When a bot hits cached content, EG checks if the User-Agent matches configured bot patterns (bothit_recache.match_ua). If matched, EG adds the URL to the autorecache queue in Redis with a scheduled time based on the configured interval (e.g., 24h from now). CD scans this queue on every tick and picks URLs whose scheduled time is at or before now (the "due" filter is enforced by clamping `ZPOPMIN` to the count returned by `ZCOUNT(-inf, now)`).
 
 This approach keeps fresh cached versions only for pages that bots actually visit, saving resources by ignoring pages that aren't being crawled.
 

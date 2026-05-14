@@ -112,7 +112,6 @@ func main() {
 		}()
 
 		zapLogger.Info("Cache daemon started",
-			zap.String("daemon_id", daemonConfig.DaemonID),
 			zap.String("api_addr", listenAddr))
 
 		// Switch to configured log level after startup is complete

@@ -22,8 +22,7 @@ type CacheDaemonConfig struct {
 
 // CacheDaemonScheduler defines scheduler timing configuration
 type CacheDaemonScheduler struct {
-	TickInterval        types.Duration `yaml:"tick_interval"`         // How often scheduler runs (min: 100ms, e.g., 1s)
-	NormalCheckInterval types.Duration `yaml:"normal_check_interval"` // How often to check normal/autorecache queues (e.g., 60s)
+	TickInterval types.Duration `yaml:"tick_interval"` // How often scheduler runs (min: 100ms, e.g., 1s)
 }
 
 // CacheDaemonInternalQueue defines internal queue configuration
@@ -78,12 +77,6 @@ func (c *CacheDaemonConfig) Validate() error {
 	tickInterval := time.Duration(c.Scheduler.TickInterval)
 	if tickInterval < 100*time.Millisecond {
 		return fmt.Errorf("scheduler.tick_interval must be >= 100ms, got %v", tickInterval)
-	}
-
-	// Validate normal_check_interval is multiple of tick_interval
-	normalCheckInterval := time.Duration(c.Scheduler.NormalCheckInterval)
-	if normalCheckInterval%tickInterval != 0 {
-		return fmt.Errorf("scheduler.normal_check_interval (%v) must be a multiple of tick_interval (%v)", normalCheckInterval, tickInterval)
 	}
 
 	// Validate max_size > 0

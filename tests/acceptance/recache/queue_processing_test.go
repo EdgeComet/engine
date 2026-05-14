@@ -60,8 +60,10 @@ var _ = Describe("Scheduler Processing", func() {
 	})
 
 	Context("Normal/Autorecache Queue Processing", func() {
-		It("should process normal and autorecache queues every 60 ticks", func() {
-			// Add entries to normal and autorecache ZSETs
+		It("drains normal and autorecache at the same per-tick cadence as high", func() {
+			// Under the unified drain (no normal_check_interval gate), normal
+			// and due autorecache flow at the same rate as high whenever
+			// concurrency and RS budget have headroom.
 			score := float64(time.Now().Unix())
 			err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "normal", "https://example.com/normal", 1, score)
 			Expect(err).ToNot(HaveOccurred())
@@ -69,7 +71,6 @@ var _ = Describe("Scheduler Processing", func() {
 			err = addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "autorecache", "https://example.com/autorecache", 1, score)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Verify entries exist
 			normalKey := "recache:1:normal"
 			autorecacheKey := "recache:1:autorecache"
 
@@ -78,17 +79,16 @@ var _ = Describe("Scheduler Processing", func() {
 			size, _ = testEnv.GetZSETSize(autorecacheKey)
 			Expect(size).To(Equal(int64(1)))
 
-			// Wait for entries to be pulled from ZSETs (processed after 60 ticks = 6 seconds)
-			// Use Eventually to poll for empty state with 10 second timeout
+			// Both queues should drain within a small number of ticks, not 60.
 			Eventually(func() int64 {
 				size, _ := testEnv.GetZSETSize(normalKey)
 				return size
-			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(0)), "Normal queue should be processed after 60 ticks")
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)), "Normal queue should drain at per-tick cadence (no 60s gate)")
 
 			Eventually(func() int64 {
 				size, _ := testEnv.GetZSETSize(autorecacheKey)
 				return size
-			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(0)), "Autorecache queue should be processed after 60 ticks")
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)), "Autorecache queue should drain at per-tick cadence")
 		})
 
 		It("respects due semantics under batched ZPopMin (only popped scheduled<=now)", func() {
@@ -148,67 +148,67 @@ var _ = Describe("Scheduler Processing", func() {
 	})
 
 	Context("Priority Hierarchy", func() {
-		It("should process queues in strict priority order: high -> normal -> autorecache (Scenario 3)", func() {
+		It("dispatches high before normal before autorecache within a host (strict priority order)", func() {
 			// Pause scheduler for deterministic setup
 			err := testEnv.PauseScheduler()
 			Expect(err).ToNot(HaveOccurred())
 
-			// Add entries to all three priority queues
 			score := float64(time.Now().Unix())
 
-			// Add 2 high priority entries (processed every tick)
 			for i := 1; i <= 2; i++ {
 				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "high",
 					fmt.Sprintf("https://example.com/high%d", i), 1, score)
 				Expect(err).ToNot(HaveOccurred())
 			}
-
-			// Add 1 normal priority entry (processed every 60 ticks)
 			err = addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "normal",
 				"https://example.com/normal1", 1, score)
 			Expect(err).ToNot(HaveOccurred())
-
-			// Add 1 autorecache entry (processed every 60 ticks)
 			err = addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "autorecache",
 				"https://example.com/autorecache1", 1, score)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Verify initial state
 			highSize, _ := testEnv.GetZSETSize("recache:1:high")
 			normalSize, _ := testEnv.GetZSETSize("recache:1:normal")
 			autorecacheSize, _ := testEnv.GetZSETSize("recache:1:autorecache")
-
 			Expect(highSize).To(Equal(int64(2)))
 			Expect(normalSize).To(Equal(int64(1)))
 			Expect(autorecacheSize).To(Equal(int64(1)))
 
-			// Resume scheduler to start processing
 			err = testEnv.ResumeScheduler()
 			Expect(err).ToNot(HaveOccurred())
 
-			// Wait for high priority to be drained (2 entries, processed every tick)
+			// All three priorities drain within a few ticks under the unified
+			// drain. Strict priority order within a host means high entries
+			// pop before normal, which pops before autorecache. Sibling
+			// dispatches within the same batch are concurrent (goroutine
+			// scheduling), so we only assert the cross-priority order: the
+			// first two received are both high, the third is normal, the
+			// fourth is autorecache.
+			received, requests := testEnv.DrainChannelUntilCount(4, 5*time.Second)
+			Expect(received).To(Equal(4), "all 4 entries should dispatch to mock EG")
+
+			firstTwo := []string{requests[0].URL, requests[1].URL}
+			Expect(firstTwo).To(ConsistOf(
+				"https://example.com/high1",
+				"https://example.com/high2",
+			), "first two dispatches must be the high-priority pair")
+			Expect(requests[2].URL).To(Equal("https://example.com/normal1"),
+				"normal must dispatch after both high entries")
+			Expect(requests[3].URL).To(Equal("https://example.com/autorecache1"),
+				"autorecache must dispatch last")
+
 			Eventually(func() int64 {
 				size, _ := testEnv.GetZSETSize("recache:1:high")
 				return size
-			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)), "High priority should be drained first")
-
-			// Normal and autorecache should still be untouched (need 60 ticks)
-			normalSize, _ = testEnv.GetZSETSize("recache:1:normal")
-			autorecacheSize, _ = testEnv.GetZSETSize("recache:1:autorecache")
-			Expect(normalSize).To(Equal(int64(1)), "Normal queue should not be processed yet")
-			Expect(autorecacheSize).To(Equal(int64(1)), "Autorecache queue should not be processed yet")
-
-			// After 60 ticks (6 seconds), scheduler pulls entries from normal and autorecache
-			// Use Eventually to poll for empty state with 10 second timeout
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)))
 			Eventually(func() int64 {
 				size, _ := testEnv.GetZSETSize("recache:1:normal")
 				return size
-			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(0)), "Normal queue should be processed after 60 ticks")
-
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)))
 			Eventually(func() int64 {
 				size, _ := testEnv.GetZSETSize("recache:1:autorecache")
 				return size
-			}, 10*time.Second, 200*time.Millisecond).Should(Equal(int64(0)), "Autorecache queue should be processed after 60 ticks")
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)))
 		})
 	})
 })

@@ -12,7 +12,6 @@ redis:
 
 scheduler:
   tick_interval: 1s
-  normal_check_interval: 60s
 
 internal_queue:
   max_size: 1000

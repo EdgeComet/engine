@@ -342,8 +342,7 @@ hosts:
 			DB:       0,
 		},
 		Scheduler: configtypes.CacheDaemonScheduler{
-			TickInterval:        types.Duration(100 * time.Millisecond),
-			NormalCheckInterval: types.Duration(6 * time.Second), // 60 ticks * 100ms = 6s
+			TickInterval: types.Duration(100 * time.Millisecond),
 		},
 		InternalQueue: configtypes.CacheDaemonInternalQueue{
 			MaxSize:        1000,

@@ -62,14 +62,6 @@ scheduler:
   # Recommendation: 1s for production, 100ms for tests
   tick_interval: 1s
 
-  # Normal queue check interval
-  # How often to check normal and autorecache queues
-  # Must be a multiple of tick_interval
-  # Format: Go duration string (s, m)
-  # Required
-  # Recommendation: 60s for production (balances responsiveness vs. Redis load)
-  normal_check_interval: 60s
-
 # =============================================================================
 # INTERNAL QUEUE CONFIGURATION
 # =============================================================================

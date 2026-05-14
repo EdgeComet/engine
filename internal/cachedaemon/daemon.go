@@ -40,6 +40,18 @@ type CacheDaemon struct {
 	// Per-host recache concurrency limiter (origin protection gate)
 	concurrencyLimiter *HostConcurrencyLimiter
 
+	// hostCursor rotates the per-tick host scan so a backlog at the front of
+	// GetConfiguredHosts() cannot starve hosts later in the list when the
+	// internal queue fills before every host has been visited. Read/written
+	// only by Run() (single goroutine), so no synchronisation is needed.
+	hostCursor int
+
+	// dispatchHook, when non-nil, replaces the EG dispatch path inside
+	// ProcessInternalQueue. Used by scheduler unit tests to observe gated
+	// entries without standing up a real EG. The hook owns slot release for
+	// the entries it receives (matches DistributeToEGs' contract).
+	dispatchHook func(batch []readyItem)
+
 	// reloadMu serialises configuration reloads against scheduler ticks so that
 	// hostByID and concurrencyLimiter are always observed in a consistent
 	// state from a single tick. Reload takes the write lock; the scheduler's
@@ -163,6 +175,7 @@ func NewCacheDaemon(
 		retryBaseDelay:     retryBaseDelay,
 		startTime:          time.Now().UTC(),
 		concurrencyLimiter: NewHostConcurrencyLimiter(egConfig, configManager.GetHosts()),
+		hostCursor:         0,
 		metricsCollector:   metricsCollector,
 		metricsServer:      metricsServer,
 		cacheReader:        NewCacheReader(redisClient, keyGenerator, logger),

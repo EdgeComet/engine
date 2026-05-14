@@ -34,18 +34,22 @@ redis:
   db: 0
 
 scheduler:
-  # How often the scheduler runs its main loop
+  # How often the scheduler runs its main loop. Every tick, the daemon drains
+  # all three priorities (high > normal > due autorecache) for every host
+  # whose per-host concurrency cap has headroom. The unified drain replaced
+  # the separate `normal_check_interval` gate — normal and autorecache items
+  # are no longer throttled to a coarser cadence.
   # Default: 1s
   # Minimum: 100ms
   tick_interval: 1s
 
-  # How often to check normal and autorecache queues
-  # Default: 60s
-  # Must be a multiple of tick_interval
-  normal_check_interval: 60s
-
 internal_queue:
-  # Maximum entries in the internal queue
+  # Maximum entries in the in-memory internal queue. Load-bearing knob for
+  # the durability vs crash-loss tradeoff: pulled items leave durable Redis
+  # and live here until dispatch. Size too small and outage backpressure
+  # spills via `logQueueFullDrop`; size too large and a daemon crash loses
+  # more in-flight work. No magic answer — size for your worst expected
+  # outage window.
   # Default: 1000
   max_size: 1000
 
@@ -169,7 +173,6 @@ The daemon validates configuration at startup. Common validation rules:
 - `eg_config` and `daemon_id` are required
 - `redis.addr` is required, `redis.db` must be >= 0
 - `scheduler.tick_interval` must be >= 100ms
-- `scheduler.normal_check_interval` must be a multiple of `tick_interval`
 - `internal_queue.max_size` must be > 0
 - `internal_queue.max_retries` must be >= 1
 - `recache.rs_capacity_reserved` must be between 0.0 and 1.0
