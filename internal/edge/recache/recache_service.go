@@ -256,6 +256,12 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Dimensions[dimensionName]
 	renderReq := orchestrator.BuildRenderRequest(url, requestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
+	if host.RenderKey != "" {
+		if renderReq.Headers == nil {
+			renderReq.Headers = make(map[string][]string)
+		}
+		renderReq.Headers[types.HeaderRenderKey] = []string{host.RenderKey}
+	}
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)
@@ -443,7 +449,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("bypass cache TTL is 0, skipping recache")
 	}
 
-	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Logger)
+	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		return fmt.Errorf("bypass fetch failed: %w", err)
 	}

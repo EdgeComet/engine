@@ -11,6 +11,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/urlutil"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // BypassResponse holds the fetched content from bypass request
@@ -55,7 +56,8 @@ func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *Bypas
 
 // FetchContent fetches content directly from the target URL without rendering.
 // clientHeaders contains safe request headers to forward to the origin.
-func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string][]string, logger *zap.Logger) (*BypassResponse, error) {
+// renderKey, when non-empty, is sent as X-Render-Key so the origin can verify the request originated from EdgeComet.
+func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string][]string, renderKey string, logger *zap.Logger) (*BypassResponse, error) {
 	logger.Info("Using bypass mode", zap.String("url", targetURL))
 
 	req := fasthttp.AcquireRequest()
@@ -79,6 +81,11 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 				req.Header.Add(name, value)
 			}
 		}
+	}
+
+	// Set engine-managed X-Render-Key after clientHeaders so it cannot be overridden by forwarded headers.
+	if renderKey != "" {
+		req.Header.Set(types.HeaderRenderKey, renderKey)
 	}
 
 	if err := bs.client.Do(req, resp); err != nil {

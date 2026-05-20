@@ -784,6 +784,12 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 	// Build render request with TabID (use resolved config to respect URL pattern overrides)
 	req := BuildRenderRequest(renderCtx.TargetURL, renderCtx.RequestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 	req.Headers = renderCtx.ClientHeaders
+	if renderCtx.Host != nil && renderCtx.Host.RenderKey != "" {
+		if req.Headers == nil {
+			req.Headers = make(map[string][]string)
+		}
+		req.Headers[types.HeaderRenderKey] = []string{renderCtx.Host.RenderKey}
+	}
 
 	// Call render service with context
 	ctx, cancel := renderCtx.GetContext()
@@ -1250,7 +1256,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	// 2. FETCH FROM ORIGIN (cache miss or caching disabled)
-	bypassResp, err := ro.bypassSvc.FetchContent(renderCtx.TargetURL, renderCtx.ClientHeaders, renderCtx.Logger)
+	bypassResp, err := ro.bypassSvc.FetchContent(renderCtx.TargetURL, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		if staleBypassCache != nil {
 			if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_error"); staleErr == nil {

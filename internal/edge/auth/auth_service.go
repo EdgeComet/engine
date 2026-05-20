@@ -28,9 +28,9 @@ func NewAuthenticationService(configManager configtypes.EGConfigManager, logger 
 
 // ValidateRenderKey validates the X-Render-Key header and returns the authorized host
 func (as *AuthenticationService) ValidateRenderKey(renderCtx *edgectx.RenderContext) (*types.Host, error) {
-	renderKey := string(renderCtx.HTTPCtx.Request.Header.Peek("X-Render-Key"))
+	renderKey := string(renderCtx.HTTPCtx.Request.Header.Peek(types.HeaderRenderKey))
 	if renderKey == "" {
-		return nil, fmt.Errorf("X-Render-Key header is required")
+		return nil, fmt.Errorf("%s header is required", types.HeaderRenderKey)
 	}
 
 	parsedURL, err := url.Parse(renderCtx.TargetURL)
