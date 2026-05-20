@@ -547,6 +547,7 @@ const (
 	MaxHeadingLength         = 500
 	MaxHeadingsPerLevel      = 5
 	MaxExternalDomains       = 20
+	MaxBreadcrumbs           = 5
 )
 
 // PageSEO extraction limits - performance
@@ -581,6 +582,12 @@ const (
 type HreflangEntry struct {
 	Lang string `json:"lang"` // Language/region code (e.g., "en-US", "x-default")
 	URL  string `json:"url"`  // Alternate URL (resolved to absolute)
+}
+
+// BreadcrumbEntry represents one item in a schema.org BreadcrumbList
+type BreadcrumbEntry struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
 }
 
 // PageSEO contains SEO-relevant metadata extracted from rendered HTML
@@ -624,7 +631,8 @@ type PageSEO struct {
 	HreflangSelf string          `json:"hreflang_self,omitempty"`
 
 	// Structured data
-	StructuredDataTypes []string `json:"structured_data_types,omitempty"`
+	StructuredDataTypes []string          `json:"structured_data_types,omitempty"`
+	Breadcrumbs         []BreadcrumbEntry `json:"breadcrumbs,omitempty"`
 }
 
 // Duration wraps time.Duration with extended YAML parsing support for days and weeks

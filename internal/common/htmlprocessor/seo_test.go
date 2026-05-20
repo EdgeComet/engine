@@ -3,6 +3,7 @@ package htmlprocessor
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/pkg/types"
@@ -1634,4 +1635,501 @@ func TestExtractPageSEO_FullIntegration(t *testing.T) {
 	assert.Equal(t, "en", seo.HreflangSelf)
 
 	assert.Equal(t, []string{"Organization", "WebPage"}, seo.StructuredDataTypes)
+}
+
+func wrapBreadcrumbScript(jsonBody string) string {
+	return `<html><head><script type="application/ld+json">` + jsonBody + `</script></head></html>`
+}
+
+func TestExtractBreadcrumbs_HappyPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		pageURL  string
+		expected []types.BreadcrumbEntry
+	}{
+		{
+			name: "google simple form (name on ListItem, item as string)",
+			html: wrapBreadcrumbScript(`{
+                "@type":"BreadcrumbList",
+                "itemListElement":[
+                    {"@type":"ListItem","position":1,"name":"Home","item":"https://e.com/"},
+                    {"@type":"ListItem","position":2,"name":"Guides","item":"https://e.com/guides"},
+                    {"@type":"ListItem","position":3,"name":"Web Perf","item":"https://e.com/guides/web"}
+                ]
+            }`),
+			pageURL: "https://e.com/guides/web",
+			expected: []types.BreadcrumbEntry{
+				{Name: "Home", URL: "https://e.com/"},
+				{Name: "Guides", URL: "https://e.com/guides"},
+				{Name: "Web Perf", URL: "https://e.com/guides/web"},
+			},
+		},
+		{
+			name: "google full form (item is object with @id and name)",
+			html: wrapBreadcrumbScript(`{
+                "@type":"BreadcrumbList",
+                "itemListElement":[
+                    {"@type":"ListItem","position":1,"item":{"@id":"https://e.com/","name":"Home"}},
+                    {"@type":"ListItem","position":2,"item":{"@id":"https://e.com/guides","name":"Guides"}}
+                ]
+            }`),
+			pageURL: "https://e.com/",
+			expected: []types.BreadcrumbEntry{
+				{Name: "Home", URL: "https://e.com/"},
+				{Name: "Guides", URL: "https://e.com/guides"},
+			},
+		},
+		{
+			name: "hybrid form (name on ListItem, item is object with @id only)",
+			html: wrapBreadcrumbScript(`{
+                "@type":"BreadcrumbList",
+                "itemListElement":[
+                    {"position":1,"name":"Home","item":{"@id":"https://e.com/"}},
+                    {"position":2,"name":"Guides","item":{"@id":"https://e.com/guides"}}
+                ]
+            }`),
+			pageURL: "https://e.com/",
+			expected: []types.BreadcrumbEntry{
+				{Name: "Home", URL: "https://e.com/"},
+				{Name: "Guides", URL: "https://e.com/guides"},
+			},
+		},
+		{
+			name: "legacy item.url",
+			html: wrapBreadcrumbScript(`{
+                "@type":"BreadcrumbList",
+                "itemListElement":[
+                    {"position":1,"item":{"url":"https://e.com/","name":"Home"}},
+                    {"position":2,"item":{"url":"https://e.com/guides","name":"Guides"}}
+                ]
+            }`),
+			pageURL: "https://e.com/",
+			expected: []types.BreadcrumbEntry{
+				{Name: "Home", URL: "https://e.com/"},
+				{Name: "Guides", URL: "https://e.com/guides"},
+			},
+		},
+		{
+			name: "item.identifier fallback",
+			html: wrapBreadcrumbScript(`{
+                "@type":"BreadcrumbList",
+                "itemListElement":[
+                    {"position":1,"name":"Home","item":{"identifier":"https://e.com/"}}
+                ]
+            }`),
+			pageURL: "https://e.com/",
+			expected: []types.BreadcrumbEntry{
+				{Name: "Home", URL: "https://e.com/"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := parseGoQueryDoc(t, tt.html)
+			result := extractBreadcrumbs(doc, tt.pageURL)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractBreadcrumbs_TrailSelection(t *testing.T) {
+	t.Run("two BreadcrumbLists in separate script tags - first wins", func(t *testing.T) {
+		htmlStr := `<html><head>
+            <script type="application/ld+json">{
+                "@type":"BreadcrumbList",
+                "itemListElement":[{"position":1,"name":"A","item":"https://e.com/a"}]
+            }</script>
+            <script type="application/ld+json">{
+                "@type":"BreadcrumbList",
+                "itemListElement":[{"position":1,"name":"B","item":"https://e.com/b"}]
+            }</script>
+        </head></html>`
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "A", URL: "https://e.com/a"}}, result)
+	})
+
+	t.Run("two BreadcrumbLists in one array - first array element wins", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`[
+            {"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"First","item":"https://e.com/1"}]},
+            {"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"Second","item":"https://e.com/2"}]}
+        ]`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "First", URL: "https://e.com/1"}}, result)
+	})
+
+	t.Run("BreadcrumbList inside @graph", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@graph":[
+                {"@type":"WebSite","name":"x"},
+                {"@type":"BreadcrumbList","itemListElement":[
+                    {"position":1,"name":"Home","item":"https://e.com/"}
+                ]}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("@type as array containing BreadcrumbList", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":["BreadcrumbList","ItemList"],
+            "itemListElement":[{"position":1,"name":"Home","item":"https://e.com/"}]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+}
+
+func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
+	t.Run("position out of declaration order", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":2,"name":"Guides","item":"https://e.com/guides"},
+                {"position":1,"name":"Home","item":"https://e.com/"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{
+			{Name: "Home", URL: "https://e.com/"},
+			{Name: "Guides", URL: "https://e.com/guides"},
+		}, result)
+	})
+
+	t.Run("missing positions appended after positioned", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":2,"name":"Guides","item":"https://e.com/guides"},
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"name":"Orphan","item":"https://e.com/orphan"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{
+			{Name: "Home", URL: "https://e.com/"},
+			{Name: "Guides", URL: "https://e.com/guides"},
+			{Name: "Orphan", URL: "https://e.com/orphan"},
+		}, result)
+	})
+
+	t.Run("sparse positions 1, 2, 5", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"A","item":"https://e.com/a"},
+                {"position":2,"name":"B","item":"https://e.com/b"},
+                {"position":5,"name":"C","item":"https://e.com/c"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Len(t, result, 3)
+		assert.Equal(t, "A", result[0].Name)
+		assert.Equal(t, "B", result[1].Name)
+		assert.Equal(t, "C", result[2].Name)
+	})
+
+	t.Run("position as numeric string", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":"2","name":"Second","item":"https://e.com/2"},
+                {"position":"1","name":"First","item":"https://e.com/1"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, "First", result[0].Name)
+		assert.Equal(t, "Second", result[1].Name)
+	})
+
+	t.Run("last item without URL is dropped", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"position":2,"name":"Guides","item":"https://e.com/guides"},
+                {"position":3,"name":"Current"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/guides/current")
+		assert.Equal(t, []types.BreadcrumbEntry{
+			{Name: "Home", URL: "https://e.com/"},
+			{Name: "Guides", URL: "https://e.com/guides"},
+		}, result)
+	})
+
+	t.Run("mid-item without URL is dropped, deeper items shift up", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"position":2,"name":"NoURL"},
+                {"position":3,"name":"Guides","item":"https://e.com/guides"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{
+			{Name: "Home", URL: "https://e.com/"},
+			{Name: "Guides", URL: "https://e.com/guides"},
+		}, result)
+	})
+
+	t.Run("javascript URL dropped", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"position":2,"name":"Skip","item":"javascript:void(0)"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("mailto URL dropped", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"position":2,"name":"Email","item":"mailto:foo@example.com"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("fragment-only URL dropped", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/"},
+                {"position":2,"name":"Frag","item":"#section"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("all items dropped returns nil slice (not empty)", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"No URL"},
+                {"position":2,"name":"Also no URL"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Nil(t, result, "must be nil (not empty slice) for omitempty to fire")
+	})
+}
+
+func TestExtractBreadcrumbs_Normalization(t *testing.T) {
+	t.Run("relative URL resolved against pageURL", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"/"},
+                {"position":2,"name":"Guides","item":"/guides"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/guides/current")
+		assert.Equal(t, []types.BreadcrumbEntry{
+			{Name: "Home", URL: "https://e.com/"},
+			{Name: "Guides", URL: "https://e.com/guides"},
+		}, result)
+	})
+
+	t.Run("more than 5 items - first 5 kept (root-side)", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/1"},
+                {"position":2,"name":"Cat","item":"https://e.com/2"},
+                {"position":3,"name":"Sub","item":"https://e.com/3"},
+                {"position":4,"name":"Group","item":"https://e.com/4"},
+                {"position":5,"name":"Variant","item":"https://e.com/5"},
+                {"position":6,"name":"Detail","item":"https://e.com/6"},
+                {"position":7,"name":"Extra","item":"https://e.com/7"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Len(t, result, 5)
+		assert.Equal(t, "Home", result[0].Name)
+		assert.Equal(t, "Variant", result[4].Name)
+	})
+
+	t.Run("whitespace and long name normalized", func(t *testing.T) {
+		longName := strings.Repeat("a", 600)
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"  Home  \n Page  ","item":"https://e.com/"},
+                {"position":2,"name":"` + longName + `","item":"https://e.com/2"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, "Home Page", result[0].Name)
+		assert.Equal(t, strings.Repeat("a", 500), result[1].Name)
+	})
+
+	t.Run("long URL truncated", func(t *testing.T) {
+		longTail := strings.Repeat("a", 2100)
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":"https://e.com/` + longTail + `"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Len(t, result, 1)
+		assert.Equal(t, 2000, utf8.RuneCountInString(result[0].URL))
+	})
+}
+
+func TestExtractBreadcrumbs_Robustness(t *testing.T) {
+	cases := []struct {
+		name string
+		html string
+	}{
+		{"malformed JSON", wrapBreadcrumbScript(`{invalid json}`)},
+		{"truncated JSON", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"name":"H`)},
+		{"binary garbage", wrapBreadcrumbScript("\x00\x01\xff\xfe\x7fbinarygarbage\x00\x01")},
+		{"BOM before JSON", wrapBreadcrumbScript("\ufeff{\"@type\":\"BreadcrumbList\"}")},
+		{"itemListElement missing", wrapBreadcrumbScript(`{"@type":"BreadcrumbList"}`)},
+		{"itemListElement as object", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":{"a":1}}`)},
+		{"itemListElement as string", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":"oops"}`)},
+		{"itemListElement as number", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":42}`)},
+		{"itemListElement as null", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":null}`)},
+		{"itemListElement empty array", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[]}`)},
+		{"@type as number", wrapBreadcrumbScript(`{"@type":42,"itemListElement":[{"name":"x","item":"/"}]}`)},
+		{"@type as null", wrapBreadcrumbScript(`{"@type":null,"itemListElement":[{"name":"x","item":"/"}]}`)},
+		{"position as object", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":{"@value":1},"name":"Home","item":"https://e.com/"}]}`)},
+		{"position as bool", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":true,"name":"Home","item":"https://e.com/"}]}`)},
+		{"position negative", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":-1,"name":"Home","item":"https://e.com/"}]}`)},
+		{"position fractional", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":1.5,"name":"Home","item":"https://e.com/"}]}`)},
+		{"position e300", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":1e300,"name":"Home","item":"https://e.com/"}]}`)},
+		{"position abc string", wrapBreadcrumbScript(`{"@type":"BreadcrumbList","itemListElement":[{"position":"abc","name":"Home","item":"https://e.com/"}]}`)},
+		{"empty document", `<html></html>`},
+		{"no JSON-LD scripts", `<html><head><script>console.log("x")</script></head></html>`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := parseGoQueryDoc(t, tc.html)
+			result := extractBreadcrumbs(doc, "https://e.com/")
+			for _, e := range result {
+				assert.NotEmpty(t, e.URL, "any returned entry must have non-empty URL")
+			}
+		})
+	}
+}
+
+func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
+	t.Run("items in itemListElement that are non-objects are skipped", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                null,
+                "string-item",
+                42,
+                {"position":1,"name":"Home","item":"https://e.com/"}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("name with wrong types falls back to item.name", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":42,"item":{"@id":"https://e.com/","name":"Home"}}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
+	})
+
+	t.Run("item with wrong types is skipped through fallback chain", func(t *testing.T) {
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[
+                {"position":1,"name":"Home","item":42}
+            ]
+        }`)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Nil(t, result)
+	})
+
+	t.Run("script body exceeding MaxJSONLDSize is skipped", func(t *testing.T) {
+		padding := strings.Repeat(" ", types.MaxJSONLDSize)
+		htmlStr := wrapBreadcrumbScript(`{
+            "@type":"BreadcrumbList",
+            "itemListElement":[{"position":1,"name":"Home","item":"https://e.com/"}]
+        }` + padding)
+		result := extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		assert.Nil(t, result)
+	})
+
+	t.Run("deeply nested @graph past recursion depth", func(t *testing.T) {
+		var b strings.Builder
+		closes := 0
+		for i := 0; i < types.MaxJSONLDRecursionDepth+5; i++ {
+			b.WriteString(`{"@graph":`)
+			closes++
+		}
+		b.WriteString(`{"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"Home","item":"https://e.com/"}]}`)
+		for i := 0; i < closes; i++ {
+			b.WriteString(`}`)
+		}
+		htmlStr := wrapBreadcrumbScript(b.String())
+		assert.NotPanics(t, func() {
+			_ = extractBreadcrumbs(parseGoQueryDoc(t, htmlStr), "https://e.com/")
+		})
+	})
+}
+
+func FuzzExtractBreadcrumbs(f *testing.F) {
+	f.Add([]byte(`{"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"H","item":"/"}]}`))
+	f.Add([]byte(`[{"@type":"BreadcrumbList"}]`))
+	f.Add([]byte(`{"@graph":[{"@type":"BreadcrumbList"}]}`))
+	f.Add([]byte(`{"@type":"BreadcrumbList","itemListElement":null}`))
+	f.Add([]byte(`{invalid`))
+	f.Add([]byte("\x00\x01\xff"))
+	f.Fuzz(func(t *testing.T, body []byte) {
+		html := `<html><head><script type="application/ld+json">` + string(body) + `</script></head></html>`
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+		if err != nil {
+			return
+		}
+		_ = extractBreadcrumbs(doc, "https://example.com/")
+	})
+}
+
+func TestExtractPageSEO_BreadcrumbsIntegration(t *testing.T) {
+	htmlContent := `<!DOCTYPE html>
+<html>
+<head>
+    <title>Test</title>
+    <script type="application/ld+json">{
+        "@type":"BreadcrumbList",
+        "itemListElement":[
+            {"@type":"ListItem","position":1,"name":"Home","item":"https://example.com/"},
+            {"@type":"ListItem","position":2,"name":"Guides","item":"https://example.com/guides"},
+            {"@type":"ListItem","position":3,"name":"Current"}
+        ]
+    }</script>
+</head>
+<body><h1>Test</h1></body>
+</html>`
+
+	doc, err := ParseWithDOM([]byte(htmlContent))
+	assert.NoError(t, err)
+	seo := doc.ExtractPageSEO(200, "https://example.com/guides/current")
+
+	assert.Equal(t, []types.BreadcrumbEntry{
+		{Name: "Home", URL: "https://example.com/"},
+		{Name: "Guides", URL: "https://example.com/guides"},
+	}, seo.Breadcrumbs)
 }
