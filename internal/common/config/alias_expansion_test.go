@@ -294,7 +294,7 @@ func TestExpandDimensionAliases_ErrorMessageHint(t *testing.T) {
 	assert.Contains(t, errorMsg, "$Amazonbot")
 	assert.Contains(t, errorMsg, "$AnthropicBot")
 	assert.Contains(t, errorMsg, "$AnthropicSearchBot")
-	assert.Contains(t, errorMsg, "and 15 more") // 20 total - 5 displayed = 15 more
+	assert.Contains(t, errorMsg, "and 18 more") // 23 total - 5 displayed = 18 more
 }
 
 func TestExpandDimensionAliases_MultipleUnknownAliases(t *testing.T) {
@@ -487,10 +487,11 @@ func TestExpandBotAliases_CompositeAIBots(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	// AIBots: ChatGPTUserBot(1) + ChatGPTTrainingBot(2) + OpenAISearchBot(1) + PerplexityBot(1) +
-	//         PerplexityUserBot(1) + AnthropicBot(1) + AnthropicUserBot(1) + AnthropicSearchBot(1) +
-	//         Amazonbot(1) + AmazonUser(1) = 11
-	assert.Len(t, expanded, 11)
+	// AIBots: ChatGPTUserBot(1) + ChatGPTTrainingBot(2) + OpenAISearchBot(1) + OpenAIAdsBot(1) +
+	//         PerplexityBot(1) + PerplexityUserBot(1) + AnthropicBot(1) + AnthropicUserBot(1) +
+	//         AnthropicSearchBot(1) + Amazonbot(1) + AmazonUser(1) + GoogleAgentDesktop(1) +
+	//         GoogleAgentMobile(1) = 14
+	assert.Len(t, expanded, 14)
 
 	// Verify patterns from various AI bots
 	assert.Contains(t, expanded, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; ChatGPT-User\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/bot")
@@ -524,8 +525,8 @@ func TestExpandBotAliases_MultipleCompositeAliases(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	// 16 SearchBots + 11 AIBots = 27
-	assert.Len(t, expanded, 27)
+	// 16 SearchBots + 14 AIBots = 30
+	assert.Len(t, expanded, 30)
 }
 
 func TestExpandBotAliases_CompositeUnknownNestedAlias(t *testing.T) {

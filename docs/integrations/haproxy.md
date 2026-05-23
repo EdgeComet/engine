@@ -53,6 +53,7 @@ frontend http-in
     acl is_crawler hdr_sub(user-agent) -i ChatGPT-User
     acl is_crawler hdr_sub(user-agent) -i GPTBot
     acl is_crawler hdr_sub(user-agent) -i OAI-SearchBot
+    acl is_crawler hdr_sub(user-agent) -i OAI-AdsBot
     acl is_crawler hdr_sub(user-agent) -i PerplexityBot
     acl is_crawler hdr_sub(user-agent) -i Perplexity-User
     acl is_crawler hdr_sub(user-agent) -i ClaudeBot
@@ -60,6 +61,7 @@ frontend http-in
     acl is_crawler hdr_sub(user-agent) -i Claude-SearchBot
     acl is_crawler hdr_sub(user-agent) -i Amazonbot
     acl is_crawler hdr_sub(user-agent) -i AMZN-User
+    acl is_crawler hdr_sub(user-agent) -i Google-Agent
 
     # Google Ads bots
     acl is_crawler hdr_sub(user-agent) -i AdsBot-Google

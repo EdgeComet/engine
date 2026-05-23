@@ -30,6 +30,12 @@ var BotAliases = map[string][]string{
 		"Mozilla/5.0 (Linux; Android 5.0; SM-G920A) AppleWebKit (KHTML, like Gecko) Chrome Mobile Safari (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)",
 		"~^Mozilla\\/5\\.0 \\(Linux; Android 6\\.0\\.1; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\) Chrome\\/\\d+.\\d+.\\d+.\\d+ Mobile Safari\\/537\\.36 \\(compatible; AdsBot-Google-Mobile; \\+http\\:\\/\\/www\\.google\\.com\\/mobile\\/adsbot.html\\)",
 	},
+	"GoogleAgentDesktop": {
+		"~^Mozilla\\/5\\.0 \\(X11\\; Linux x86_64\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\; compatible\\; Google-Agent\\; \\+https:\\/\\/developers\\.google\\.com\\/crawling\\/docs\\/crawlers-fetchers\\/google-agent\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Safari\\/537\\.36",
+	},
+	"GoogleAgentMobile": {
+		"~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Google-Agent\\; \\+https:\\/\\/developers\\.google\\.com\\/crawling\\/docs\\/crawlers-fetchers\\/google-agent\\)",
+	},
 	"BingbotDesktop": {
 		"Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
 		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\; compatible\\; bingbot\\/2\\.0\\; \\+http:\\/\\/www\\.bing\\.com\\/bingbot\\.htm\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Safari\\/537\\.36 Edg\\/\\d+\\.\\d+\\.\\d+\\.\\d+",
@@ -46,6 +52,9 @@ var BotAliases = map[string][]string{
 	},
 	"OpenAISearchBot": {
 		"~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot",
+	},
+	"OpenAIAdsBot": {
+		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; OAI-AdsBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/adsbot",
 	},
 	"ChatGPTTrainingBot": {
 		"~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\)\\; compatible\\; GPTBot\\/\\d\\.\\d\\; \\+https:\\/\\/openai\\.com\\/gptbot",
@@ -99,6 +108,7 @@ var BotAliases = map[string][]string{
 		"$ChatGPTUserBot",
 		"$ChatGPTTrainingBot",
 		"$OpenAISearchBot",
+		"$OpenAIAdsBot",
 		"$PerplexityBot",
 		"$PerplexityUserBot",
 		"$AnthropicBot",
@@ -106,6 +116,8 @@ var BotAliases = map[string][]string{
 		"$AnthropicSearchBot",
 		"$Amazonbot",
 		"$AmazonUser",
+		"$GoogleAgentDesktop",
+		"$GoogleAgentMobile",
 	},
 }
 

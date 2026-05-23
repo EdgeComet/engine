@@ -50,6 +50,7 @@ if (req.http.User-Agent ~ "(?i)bingbot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)ChatGPT-User") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)GPTBot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)OAI-SearchBot") { set var.is_crawler = true; }
+if (req.http.User-Agent ~ "(?i)OAI-AdsBot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)PerplexityBot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)Perplexity-User") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)ClaudeBot") { set var.is_crawler = true; }
@@ -57,6 +58,7 @@ if (req.http.User-Agent ~ "(?i)Claude-User") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)Claude-SearchBot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)Amazonbot") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)AMZN-User") { set var.is_crawler = true; }
+if (req.http.User-Agent ~ "(?i)Google-Agent") { set var.is_crawler = true; }
 
 # Google Ads bots
 if (req.http.User-Agent ~ "(?i)AdsBot-Google") { set var.is_crawler = true; }

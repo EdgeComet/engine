@@ -219,6 +219,9 @@ match_ua:
 | `$ChatGPTUserBot` | ChatGPT user browsing |
 | `$ChatGPTTrainingBot` | GPTBot for training |
 | `$OpenAISearchBot` | OpenAI search bot |
+| `$OpenAIAdsBot` | OpenAI ads crawler |
+| `$GoogleAgentDesktop` | Google-Agent desktop crawler |
+| `$GoogleAgentMobile` | Google-Agent mobile crawler |
 | `$PerplexityBot` | Perplexity search bot |
 | `$PerplexityUserBot` | Perplexity user queries |
 | `$AnthropicBot` | Claude indexing bot |
@@ -238,7 +241,7 @@ Composite aliases combine multiple individual aliases for convenience:
 | Alias | Includes |
 |-------|----------|
 | `$SearchBots` | GooglebotSearchDesktop, GooglebotSearchMobile, BingbotDesktop, BingbotMobile. |
-| `$AIBots` | All AI bot aliases (ChatGPT, OpenAI, Perplexity, Anthropic). |
+| `$AIBots` | All AI bot aliases (ChatGPT, OpenAI, Google-Agent, Perplexity, Anthropic, Amazon). |
 
 ## Fallback behavior
 

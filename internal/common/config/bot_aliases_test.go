@@ -220,6 +220,20 @@ func TestGetBotAlias_GoogleBotAdsMobileWeb(t *testing.T) {
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux; Android 6\\.0\\.1; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\) Chrome\\/\\d+.\\d+.\\d+.\\d+ Mobile Safari\\/537\\.36 \\(compatible; AdsBot-Google-Mobile; \\+http\\:\\/\\/www\\.google\\.com\\/mobile\\/adsbot.html\\)")
 }
 
+func TestGetBotAlias_GoogleAgentDesktop(t *testing.T) {
+	patterns, exists := GetBotAlias("GoogleAgentDesktop")
+	assert.True(t, exists)
+	assert.Len(t, patterns, 1)
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(X11\\; Linux x86_64\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\; compatible\\; Google-Agent\\; \\+https:\\/\\/developers\\.google\\.com\\/crawling\\/docs\\/crawlers-fetchers\\/google-agent\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Safari\\/537\\.36")
+}
+
+func TestGetBotAlias_GoogleAgentMobile(t *testing.T) {
+	patterns, exists := GetBotAlias("GoogleAgentMobile")
+	assert.True(t, exists)
+	assert.Len(t, patterns, 1)
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Google-Agent\\; \\+https:\\/\\/developers\\.google\\.com\\/crawling\\/docs\\/crawlers-fetchers\\/google-agent\\)")
+}
+
 func TestGetBotAlias_BingbotDesktop(t *testing.T) {
 	patterns, exists := GetBotAlias("BingbotDesktop")
 	assert.True(t, exists)
@@ -251,6 +265,13 @@ func TestGetBotAlias_OpenAISearchBot(t *testing.T) {
 	assert.True(t, exists)
 	assert.Len(t, patterns, 1)
 	assert.Contains(t, patterns, "~OAI-SearchBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/searchbot")
+}
+
+func TestGetBotAlias_OpenAIAdsBot(t *testing.T) {
+	patterns, exists := GetBotAlias("OpenAIAdsBot")
+	assert.True(t, exists)
+	assert.Len(t, patterns, 1)
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML, like Gecko\\); compatible; OAI-AdsBot\\/\\d+\\.\\d+; \\+https:\\/\\/openai\\.com\\/adsbot")
 }
 
 func TestGetBotAlias_ChatGPTTrainingBot(t *testing.T) {
@@ -345,10 +366,13 @@ func TestGetBotAlias_SearchBots(t *testing.T) {
 func TestGetBotAlias_AIBots(t *testing.T) {
 	patterns, exists := GetBotAlias("AIBots")
 	assert.True(t, exists)
-	assert.Len(t, patterns, 10)
+	assert.Len(t, patterns, 13)
 	assert.Contains(t, patterns, "$ChatGPTUserBot")
 	assert.Contains(t, patterns, "$ChatGPTTrainingBot")
 	assert.Contains(t, patterns, "$OpenAISearchBot")
+	assert.Contains(t, patterns, "$OpenAIAdsBot")
+	assert.Contains(t, patterns, "$GoogleAgentDesktop")
+	assert.Contains(t, patterns, "$GoogleAgentMobile")
 	assert.Contains(t, patterns, "$PerplexityBot")
 	assert.Contains(t, patterns, "$PerplexityUserBot")
 	assert.Contains(t, patterns, "$AnthropicBot")
@@ -360,16 +384,19 @@ func TestGetBotAlias_AIBots(t *testing.T) {
 
 func TestGetAvailableAliases_AllBots(t *testing.T) {
 	aliases := GetAvailableAliases()
-	assert.Len(t, aliases, 20)
+	assert.Len(t, aliases, 23)
 
 	assert.Contains(t, aliases, "GooglebotSearchDesktop")
 	assert.Contains(t, aliases, "GooglebotSearchMobile")
 	assert.Contains(t, aliases, "GoogleBotAds")
 	assert.Contains(t, aliases, "GoogleBotAdsMobileWeb")
+	assert.Contains(t, aliases, "GoogleAgentDesktop")
+	assert.Contains(t, aliases, "GoogleAgentMobile")
 	assert.Contains(t, aliases, "BingbotDesktop")
 	assert.Contains(t, aliases, "BingbotMobile")
 	assert.Contains(t, aliases, "ChatGPTUserBot")
 	assert.Contains(t, aliases, "OpenAISearchBot")
+	assert.Contains(t, aliases, "OpenAIAdsBot")
 	assert.Contains(t, aliases, "ChatGPTTrainingBot")
 	assert.Contains(t, aliases, "PerplexityBot")
 	assert.Contains(t, aliases, "PerplexityUserBot")
@@ -394,11 +421,14 @@ func TestGetAvailableAliases_AllBots(t *testing.T) {
 		"BingbotMobile",
 		"ChatGPTTrainingBot",
 		"ChatGPTUserBot",
+		"GoogleAgentDesktop",
+		"GoogleAgentMobile",
 		"GoogleBotAds",
 		"GoogleBotAdsMobileWeb",
 		"GooglebotSearchDesktop",
 		"GooglebotSearchMobile",
 		"Messengers",
+		"OpenAIAdsBot",
 		"OpenAISearchBot",
 		"PerplexityBot",
 		"PerplexityUserBot",
@@ -577,9 +607,9 @@ func TestBotAliases_VendorGrouping(t *testing.T) {
 		}
 	}
 
-	assert.Len(t, googleAliases, 4, "Should have 4 Google aliases")
+	assert.Len(t, googleAliases, 6, "Should have 6 Google aliases")
 	assert.Len(t, bingAliases, 2, "Should have 2 Bing aliases")
-	assert.Len(t, openAIAliases, 3, "Should have 3 OpenAI aliases")
+	assert.Len(t, openAIAliases, 4, "Should have 4 OpenAI aliases")
 	assert.Len(t, perplexityAliases, 2, "Should have 2 Perplexity aliases")
 	assert.Len(t, anthropicAliases, 3, "Should have 3 Anthropic aliases")
 	assert.Len(t, amazonAliases, 2, "Should have 2 Amazon aliases")

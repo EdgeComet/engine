@@ -46,6 +46,7 @@ const CRAWLER_PATTERN = new RegExp(
     "ChatGPT-User",
     "GPTBot",
     "OAI-SearchBot",
+    "OAI-AdsBot",
     "PerplexityBot",
     "Perplexity-User",
     "ClaudeBot",
@@ -53,6 +54,7 @@ const CRAWLER_PATTERN = new RegExp(
     "Claude-SearchBot",
     "Amazonbot",
     "AMZN-User",
+    "Google-Agent",
 
     // Google Ads bots
     "AdsBot-Google",

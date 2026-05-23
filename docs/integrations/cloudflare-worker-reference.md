@@ -64,6 +64,7 @@ function isCrawler(userAgent) {
     /ChatGPT-User/i,
     /GPTBot/i,
     /OAI-SearchBot/i,
+    /OAI-AdsBot/i,
     /PerplexityBot/i,
     /Perplexity-User/i,
     /ClaudeBot/i,
@@ -71,6 +72,7 @@ function isCrawler(userAgent) {
     /Claude-SearchBot/i,
     /Amazonbot/i,
     /AMZN-User/i,
+    /Google-Agent/i,
 
     // Google Ads bots
     /AdsBot-Google/i,

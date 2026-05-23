@@ -248,6 +248,45 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			By("Verifying OAI-SearchBot was recognized via wildcard pattern")
 			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
 		})
+
+		It("should match OpenAI AdsBot via alias with version", func() {
+			By("Sending request with OAI-AdsBot User-Agent")
+			userAgent := "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-AdsBot/1.0; +https://openai.com/adsbot"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying successful response")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+
+			By("Verifying OAI-AdsBot was recognized via regexp pattern")
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+
+		It("should match Google-Agent desktop bot via alias with Chrome version", func() {
+			By("Sending request with Google-Agent desktop User-Agent")
+			userAgent := "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko; compatible; Google-Agent; +https://developers.google.com/crawling/docs/crawlers-fetchers/google-agent) Chrome/131.0.0.0 Safari/537.36"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying successful response")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+
+			By("Verifying Google-Agent desktop was recognized via regexp pattern")
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
+
+		It("should match Google-Agent mobile bot via alias with Chrome version", func() {
+			By("Sending request with Google-Agent mobile User-Agent")
+			userAgent := "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36 (compatible; Google-Agent; +https://developers.google.com/crawling/docs/crawlers-fetchers/google-agent)"
+			response := requestRenderWithUserAgent("/static/simple.html", userAgent, testEnv.Config.Test.ValidAPIKey)
+
+			By("Verifying successful response")
+			Expect(response.Error).To(BeNil())
+			Expect(response.StatusCode).To(Equal(200))
+
+			By("Verifying Google-Agent mobile was recognized via regexp pattern")
+			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+		})
 	})
 
 	Context("when testing mixed patterns with bot aliases", func() {

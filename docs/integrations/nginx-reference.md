@@ -79,6 +79,7 @@ map $http_user_agent $ec_crawler {
     "~*ChatGPT-User"              1;
     "~*GPTBot"                    1;
     "~*OAI-SearchBot"             1;
+    "~*OAI-AdsBot"                1;
     "~*PerplexityBot"             1;
     "~*Perplexity-User"           1;
     "~*ClaudeBot"                 1;
@@ -86,6 +87,7 @@ map $http_user_agent $ec_crawler {
     "~*Claude-SearchBot"          1;
     "~*Amazonbot"                 1;
     "~*AMZN-User"                 1;
+    "~*Google-Agent"              1;
 
     # Google Ads bots
     "~*AdsBot-Google"             1;
