@@ -80,7 +80,7 @@ map $uri $ec_skip_render {
     "~*\.(avif|css|eot|gif|gz|ico|jpeg|jpg|js|json|map|mp3|mp4|ogg|otf|pdf|png|svg|ttf|txt|wasm|wav|webm|webp|woff|woff2|xml|zip)$" 0;
 }
 
-# 3. Loop prevention (inherits $ec_skip_render, disables for renderer callbacks)
+# 3. Loop prevention (inherits $ec_skip_render, disables for EdgeComet callbacks: render and bypass fetches)
 map $http_x_edge_render $ec_should_render {
     default $ec_skip_render;
     "~."    0;

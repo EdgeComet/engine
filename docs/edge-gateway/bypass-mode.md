@@ -196,3 +196,9 @@ Bad Gateway: Origin unreachable
 - Network unreachable
 
 Bypass mode makes a single attempt to fetch from origin with no retry logic. Configure appropriate timeout values based on your origin server's expected response time.
+
+### Loop prevention
+
+Bypass fetches (including bypass pre-cache/recache triggered by the Cache Daemon) carry the `X-Edge-Render` header. Your integration must detect this header and forward the request straight to origin instead of routing it back through the Edge Gateway.
+
+Without this, the bypass fetch loops back into the Edge Gateway, which serves its own stale bypass cache. A bypass recache then writes that same stale content back, so the cache never refreshes. This is the same requirement as for rendered traffic. See [X-Edge-Render](./x-headers#x-edge-render) and the [nginx integration](/integrations/nginx#loop-prevention).

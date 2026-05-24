@@ -102,7 +102,7 @@ The function checks `request.uri` from the CloudFront event, which contains the 
 
 When Edge Gateway renders a page, the Render Service fetches the target URL from your origin server. Without loop prevention, the Lambda function would detect the Render Service request as a crawler and route it back to Edge Gateway, creating an infinite loop.
 
-The Render Service adds an `X-Edge-Render` header to all outgoing requests. The Lambda function detects this header and passes the request directly to origin:
+EdgeComet adds an `X-Edge-Render` header to all its outgoing requests, both from the Render Service (Chrome fetches) and the Edge Gateway (bypass fetches, including bypass pre-cache). The Lambda function detects this header and passes the request directly to origin:
 
 ```javascript
 if (headers["x-edge-render"]) {
@@ -218,7 +218,7 @@ These headers must be forwarded from viewer to origin for the Lambda@Edge functi
 |--------|----------|---------|
 | `Host` | Yes | Original viewer hostname for URL reconstruction. Without this, CloudFront replaces Host with the origin domain name. |
 | `User-Agent` | Yes | Original client User-Agent for crawler detection. CloudFront normalizes this by default. |
-| `X-Edge-Render` | Yes | Loop prevention. Render Service sets this header on callback requests. |
+| `X-Edge-Render` | Yes | Loop prevention. Set by the Render Service (Chrome fetches) and the Edge Gateway (bypass fetches) on callback requests. |
 | `CloudFront-Forwarded-Proto` | Yes | Original viewer protocol for URL reconstruction. |
 
 Without the custom origin request policy, CloudFront replaces the `User-Agent` with `Amazon CloudFront` (making crawler detection impossible) and the `Host` with the origin domain (breaking URL reconstruction).

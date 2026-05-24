@@ -92,7 +92,7 @@ Detect crawlers, skip static assets, prevent loops, and route matching requests 
 ::: code-group
 
 ```vcl [snippet: eg_router_recv (recv)]
-# Loop prevention: if request is from Render Service, pass to origin
+# Loop prevention: if request is from EdgeComet (render or bypass fetch), pass to origin
 if (req.http.X-Edge-Render) {
     return(pass);
 }

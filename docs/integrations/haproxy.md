@@ -149,7 +149,7 @@ The backend configuration is identical to Option A.
 
 When Edge Gateway renders a page, the Render Service fetches the target URL from your origin server. Without loop prevention, HAProxy would detect this request as a crawler and route it back to Edge Gateway, creating an infinite loop.
 
-The Render Service adds an `X-Edge-Render` header to all outgoing requests. The `from_renderer` ACL detects this header and prevents re-routing.
+EdgeComet adds an `X-Edge-Render` header to all its outgoing requests, both from the Render Service (Chrome fetches) and the Edge Gateway (bypass fetches, including bypass pre-cache). The `from_renderer` ACL detects this header and prevents re-routing.
 
 ```
 Crawler → HAProxy (crawler detected) → Edge Gateway → Render Service

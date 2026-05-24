@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // ChromeStatus represents the current state of a Chrome instance
@@ -22,7 +24,7 @@ const (
 )
 
 // headerEdgeRender is the header name used to identify requests from Render Service
-const headerEdgeRender = "X-Edge-Render"
+const headerEdgeRender = types.HeaderEdgeRender
 
 // String returns the string representation of ChromeStatus
 func (s ChromeStatus) String() string {

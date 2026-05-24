@@ -73,7 +73,7 @@ flowchart LR
 
 When Edge Gateway renders a page, the Render Service fetches the page from your origin through the same reverse proxy. Without a safeguard, this creates an infinite loop: proxy routes to EG, EG fetches from origin through the proxy, the proxy routes back to EG, and so on.
 
-The Render Service adds an `X-Edge-Render` header to its outgoing requests. Your proxy must check for this header early in request processing, before crawler detection. If the header is present, send the request directly to origin and skip all rendering logic.
+EdgeComet adds an `X-Edge-Render` header to its outgoing requests, both from the Render Service (Chrome fetches) and the Edge Gateway (bypass fetches, including bypass pre-cache). Your proxy must check for this header early in request processing, before crawler detection. If the header is present, send the request directly to origin and skip all rendering logic.
 
 ## Crawler detection
 

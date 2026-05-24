@@ -14,6 +14,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// edgeRenderSource identifies edge-gateway bypass fetches in the X-Edge-Render
+// header (render service uses its serviceID; the EG bypass path has no per-tab id).
+const edgeRenderSource = "edge-gateway"
+
 // BypassResponse holds the fetched content from bypass request
 type BypassResponse struct {
 	StatusCode  int
@@ -83,7 +87,10 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 		}
 	}
 
-	// Set engine-managed X-Render-Key after clientHeaders so it cannot be overridden by forwarded headers.
+	// Set engine-managed headers after clientHeaders so they cannot be overridden by forwarded headers.
+	// X-Edge-Render marks this fetch as EdgeComet-originated so the integration routes it straight to
+	// origin instead of looping it back into the Edge Gateway (which would serve the stale bypass cache).
+	req.Header.Set(types.HeaderEdgeRender, edgeRenderSource)
 	if renderKey != "" {
 		req.Header.Set(types.HeaderRenderKey, renderKey)
 	}

@@ -146,15 +146,15 @@ Headers used internally between services. Not typically relevant for client inte
 
 ### X-Edge-Render
 
-Added by Render Service to all outgoing Chrome requests. Used to prevent rendering loops when nginx is configured to route crawler traffic to Edge Gateway.
+Added to all EdgeComet-originated origin fetches: Render Service Chrome requests and Edge Gateway bypass fetches (including bypass pre-cache/recache). Used to prevent loops when the integration routes crawler traffic to Edge Gateway.
 
 | Property | Value |
 |----------|-------|
-| Set by | Render Service |
-| Value | Render Service ID (e.g., `rs-1`) |
+| Set by | Render Service and Edge Gateway (bypass fetches) |
+| Value | Render Service ID (e.g., `rs-1`) for renders; `edge-gateway` for bypass fetches |
 | Purpose | Loop prevention |
 
-When nginx detects this header, it should skip crawler routing and forward the request directly to origin. See [nginx integration](/integrations/nginx#loop-prevention) for configuration details.
+When the integration detects this header, it must skip crawler routing and forward the request directly to origin. Without this, a bypass fetch loops back into the Edge Gateway and is served from the stale bypass cache, so a bypass recache never refreshes. See [nginx integration](/integrations/nginx#loop-prevention) for configuration details.
 
 ### X-Internal-Auth
 

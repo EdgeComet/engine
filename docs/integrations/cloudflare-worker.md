@@ -112,7 +112,7 @@ export default {
     const url = new URL(request.url);
     const userAgent = request.headers.get("User-Agent") || "";
 
-    // Loop prevention: if request is from Render Service, pass to origin
+    // Loop prevention: if request is from EdgeComet (render or bypass fetch), pass to origin
     if (request.headers.get("X-Edge-Render")) {
       return fetch(request);
     }
