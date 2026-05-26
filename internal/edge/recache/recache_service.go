@@ -546,14 +546,15 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 	}
 
 	renderCtx := &edgectx.RenderContext{
-		TargetURL:  url,
-		URLHash:    urlHash,
-		Host:       host,
-		Dimension:  dimensionName,
-		CacheKey:   cacheKey,
-		RequestID:  requestID,
-		Logger:     rs.logger,
-		IsPrecache: true,
+		TargetURL:   url,
+		OriginalURL: url,
+		URLHash:     urlHash,
+		Host:        host,
+		Dimension:   dimensionName,
+		CacheKey:    cacheKey,
+		RequestID:   requestID,
+		Logger:      rs.logger,
+		IsPrecache:  true,
 	}
 
 	// Resolve config for TTL and other cache settings

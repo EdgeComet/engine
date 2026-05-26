@@ -46,6 +46,7 @@ func BuildRequestEvent(
 	if renderCtx != nil {
 		event.RequestID = renderCtx.RequestID
 		event.URL = renderCtx.TargetURL
+		event.OriginalURL = renderCtx.OriginalURL
 		event.URLHash = renderCtx.URLHash
 		event.Dimension = renderCtx.Dimension
 		if renderCtx.HTTPCtx != nil {
@@ -116,6 +117,7 @@ func BuildErrorEvent(
 	host string,
 	hostID int,
 	url string,
+	originalURL string,
 	userAgent string,
 	clientIP string,
 	errorType string,
@@ -128,6 +130,7 @@ func BuildErrorEvent(
 		Host:         host,
 		HostID:       hostID,
 		URL:          url,
+		OriginalURL:  originalURL,
 		UserAgent:    userAgent,
 		ClientIP:     clientIP,
 		EventType:    EventTypeError,

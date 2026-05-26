@@ -204,6 +204,7 @@ func TestBuildRequestEvent_ContextFields(t *testing.T) {
 	assert.Equal(t, "example.com", event.Host)
 	assert.Equal(t, 1, event.HostID)
 	assert.Equal(t, "https://example.com/page", event.URL)
+	assert.Equal(t, "https://example.com/page?utm_source=x", event.OriginalURL)
 	assert.Equal(t, uint64(0xabc123), event.URLHash)
 	assert.Equal(t, "desktop", event.Dimension)
 	assert.Equal(t, "Googlebot/2.1", event.UserAgent)
@@ -219,6 +220,7 @@ func TestBuildErrorEvent(t *testing.T) {
 		"example.com",
 		1,
 		"https://example.com/admin",
+		"https://example.com/admin?utm_source=x",
 		"Googlebot/2.1",
 		"",
 		"auth",
@@ -231,6 +233,7 @@ func TestBuildErrorEvent(t *testing.T) {
 	assert.Equal(t, "example.com", event.Host)
 	assert.Equal(t, 1, event.HostID)
 	assert.Equal(t, "https://example.com/admin", event.URL)
+	assert.Equal(t, "https://example.com/admin?utm_source=x", event.OriginalURL)
 	assert.Equal(t, "Googlebot/2.1", event.UserAgent)
 	assert.Equal(t, "", event.ClientIP)
 	assert.Equal(t, EventTypeError, event.EventType)
@@ -246,6 +249,7 @@ func TestBuildErrorEventWithClientIP(t *testing.T) {
 		"req-789",
 		"example.com",
 		1,
+		"https://example.com/page",
 		"https://example.com/page",
 		"Googlebot/2.1",
 		"203.0.113.50",
@@ -833,10 +837,11 @@ func createTestRenderContext() *edgectx.RenderContext {
 	ctx.Request.Header.SetUserAgent("Googlebot/2.1")
 
 	return &edgectx.RenderContext{
-		RequestID: "req-123",
-		HTTPCtx:   ctx,
-		TargetURL: "https://example.com/page",
-		URLHash:   0xabc123,
+		RequestID:   "req-123",
+		HTTPCtx:     ctx,
+		TargetURL:   "https://example.com/page",
+		OriginalURL: "https://example.com/page?utm_source=x",
+		URLHash:     0xabc123,
 		Host: &types.Host{
 			Domain: "example.com",
 			ID:     1,

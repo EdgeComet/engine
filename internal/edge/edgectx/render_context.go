@@ -29,6 +29,7 @@ type RenderContext struct {
 
 	// Request data
 	TargetURL          string
+	OriginalURL        string // Original client-requested URL, preserved before normalization
 	URLHash            uint64
 	Host               *types.Host
 	Dimension          string
@@ -62,6 +63,7 @@ func NewRenderContext(requestID string, httpCtx *fasthttp.RequestCtx, baseLogger
 // WithTargetURL enriches the context with target URL information (logs as origin_url)
 func (rc *RenderContext) WithTargetURL(targetURL string) *RenderContext {
 	rc.TargetURL = targetURL
+	rc.OriginalURL = targetURL
 	rc.Logger = rc.Logger.With(zap.String("origin_url", targetURL))
 	return rc
 }

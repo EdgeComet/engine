@@ -9,11 +9,12 @@ import (
 // RequestEvent contains all data for a single request event
 type RequestEvent struct {
 	// Identifiers
-	RequestID string `json:"request_id"`
-	Host      string `json:"host"`
-	HostID    int    `json:"host_id"`
-	URL       string `json:"url"`
-	URLHash   uint64 `json:"url_hash"`
+	RequestID   string `json:"request_id"`
+	Host        string `json:"host"`
+	HostID      int    `json:"host_id"`
+	URL         string `json:"url"`
+	OriginalURL string `json:"original_url"`
+	URLHash     uint64 `json:"url_hash"`
 
 	// Request metadata
 	EventType       string `json:"event_type"` // cache_hit, render, bypass, bypass_cache, precache, error
