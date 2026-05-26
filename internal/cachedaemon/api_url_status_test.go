@@ -281,4 +281,31 @@ func TestHandleURLStatusAPI(t *testing.T) {
 		require.NotNil(t, result.Queue.Priority)
 		assert.Equal(t, "high", *result.Queue.Priority, "should return highest priority")
 	})
+
+	t.Run("tracking params stripped before lookup", func(t *testing.T) {
+		daemon, mr := setupTestDaemon(t)
+
+		// Cache key written from the stripped URL (no tracking params present).
+		clean, err := daemon.normalizer.Normalize("https://example.com/tracked", nil)
+		require.NoError(t, err)
+		urlHash := daemon.normalizer.Hash(clean.NormalizedURL)
+
+		createdAt := now - 100
+		populateMetadataHash(mr, 1, 1, urlHash, map[string]string{
+			"url":         clean.NormalizedURL,
+			"created_at":  fmt.Sprintf("%d", createdAt),
+			"expires_at":  fmt.Sprintf("%d", now+3600),
+			"status_code": "200",
+			"source":      "render",
+		})
+
+		// Request with a default tracking param; lookup must resolve to the stripped key.
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/url-status?host_id=1&url=https://example.com/tracked%3Futm_source%3Dnewsletter")
+		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+
+		result := parseURLStatusResponse(t, ctx)
+		assert.True(t, result.Cache.Exists)
+		require.NotNil(t, result.Cache.CreatedAt)
+		assert.Equal(t, createdAt, *result.Cache.CreatedAt)
+	})
 }

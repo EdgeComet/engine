@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/pkg/types"
@@ -38,6 +40,26 @@ type URLQueueStatus struct {
 	Pending     bool    `json:"pending"`
 	Priority    *string `json:"priority"`
 	ScheduledAt *int64  `json:"scheduled_at"`
+}
+
+// URLEntriesResponse is the response for the url-entries endpoint: one cache entry
+// per dimension that has cache, resolved by direct key lookup (no listing index).
+type URLEntriesResponse struct {
+	URL     string         `json:"url"`
+	Entries []URLEntryItem `json:"entries"`
+}
+
+// URLEntryItem is a single dimension's cache entry for one URL.
+type URLEntryItem struct {
+	Dimension   string `json:"dimension"`
+	DimensionID int    `json:"dimension_id"`
+	CacheKey    string `json:"cache_key"`
+	Status      string `json:"status"`
+	StatusCode  int    `json:"status_code"`
+	CreatedAt   int64  `json:"created_at"`
+	ExpiresAt   int64  `json:"expires_at"`
+	CacheAge    int64  `json:"cache_age"`
+	Size        int64  `json:"size"`
 }
 
 // ServeHTTP is the main HTTP request handler for the cache daemon API
@@ -88,6 +110,8 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleCacheQueueSummaryAPI(ctx)
 	case method == "GET" && path == "/internal/cache/url-status":
 		d.handleURLStatusAPI(ctx)
+	case method == "GET" && path == "/internal/cache/url-entries":
+		d.handleURLEntriesAPI(ctx)
 	default:
 		httputil.JSONError(ctx, "not found", fasthttp.StatusNotFound)
 	}
@@ -1041,13 +1065,11 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	normalizedResult, err := d.normalizer.Normalize(rawURL, nil)
+	normalizedURL, urlHash, err := d.normalizeURLForHost(host, rawURL)
 	if err != nil {
 		httputil.JSONError(ctx, "invalid url", fasthttp.StatusBadRequest)
 		return
 	}
-	normalizedURL := normalizedResult.NormalizedURL
-	urlHash := d.normalizer.Hash(normalizedURL)
 
 	dimensionIDs, err := resolveDimensionIDs(host, nil)
 	if err != nil {
@@ -1059,50 +1081,18 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 	now := time.Now().UTC().Unix()
 	reqCtx := context.Background()
 
-	// Cache lookup: find the most recent entry across all dimensions
-	var bestCreatedAt int64
-	var bestStatus string
-	var bestStatusCode int
-	cacheFound := false
-
+	// Cache lookup: keep the most recently created entry across all dimensions.
+	var best *dimCacheMeta
 	for _, dimID := range dimensionIDs {
-		cacheKey := d.keyGenerator.GenerateCacheKey(hostID, dimID, urlHash)
-		metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
-
-		data, err := d.redis.HGetAll(reqCtx, metadataKey)
-		if err != nil {
-			d.logger.Error("Failed to get cache metadata",
-				zap.Int("host_id", hostID),
-				zap.Int("dimension_id", dimID),
-				zap.Error(err))
+		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, staleTTL, now)
+		if !ok {
 			continue
 		}
-		if len(data) == 0 {
-			continue
+		if best == nil || meta.CreatedAt > best.CreatedAt {
+			best = meta
 		}
-
-		createdAt, _ := strconv.ParseInt(data["created_at"], 10, 64)
-		if createdAt <= bestCreatedAt && cacheFound {
-			continue
-		}
-
-		expiresAt, _ := strconv.ParseInt(data["expires_at"], 10, 64)
-		statusCode, _ := strconv.Atoi(data["status_code"])
-
-		var status string
-		if now < expiresAt {
-			status = "active"
-		} else if staleTTL > 0 && now < expiresAt+staleTTL {
-			status = "stale"
-		} else {
-			status = "expired"
-		}
-
-		bestCreatedAt = createdAt
-		bestStatus = status
-		bestStatusCode = statusCode
-		cacheFound = true
 	}
+	cacheFound := best != nil
 
 	// Queue lookup: find highest priority match
 	priorities := []string{redis.PriorityHigh, redis.PriorityNormal, redis.PriorityAutorecache}
@@ -1145,9 +1135,9 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 	}
 
 	if cacheFound {
-		response.Cache.Status = &bestStatus
-		response.Cache.CreatedAt = &bestCreatedAt
-		response.Cache.StatusCode = &bestStatusCode
+		response.Cache.Status = &best.Status
+		response.Cache.CreatedAt = &best.CreatedAt
+		response.Cache.StatusCode = &best.StatusCode
 	}
 
 	if queueFound {
@@ -1156,6 +1146,166 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 	}
 
 	httputil.JSONData(ctx, response, fasthttp.StatusOK)
+}
+
+// handleURLEntriesAPI handles GET /internal/cache/url-entries. It resolves one cache
+// entry per host dimension (or a single dimension when dimension_id is given) by direct
+// key lookup, without consulting the listing index. A URL with no cached entries returns
+// 200 with an empty entries array.
+func (d *CacheDaemon) handleURLEntriesAPI(ctx *fasthttp.RequestCtx) {
+	host, hostID, ok := d.resolveHost(ctx)
+	if !ok {
+		return
+	}
+
+	rawURL := queryParamString(ctx, "url")
+	if rawURL == "" {
+		httputil.JSONError(ctx, "url is required", fasthttp.StatusBadRequest)
+		return
+	}
+
+	normalizedURL, urlHash, err := d.normalizeURLForHost(host, rawURL)
+	if err != nil {
+		httputil.JSONError(ctx, "invalid url", fasthttp.StatusBadRequest)
+		return
+	}
+
+	var requestedDims []int
+	if ctx.QueryArgs().Has("dimension_id") {
+		dimID, err := queryParamInt(ctx, "dimension_id", 0)
+		if err != nil {
+			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+			return
+		}
+		requestedDims = []int{dimID}
+	}
+
+	dimensionIDs, err := resolveDimensionIDs(host, requestedDims)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+
+	dimNames := dimensionIDToName(host)
+	staleTTL := d.getStaleTTL(host)
+	now := time.Now().UTC().Unix()
+	reqCtx := context.Background()
+
+	entries := make([]URLEntryItem, 0, len(dimensionIDs))
+	for _, dimID := range dimensionIDs {
+		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, staleTTL, now)
+		if !ok {
+			continue
+		}
+		cacheKey := d.keyGenerator.GenerateCacheKey(hostID, dimID, urlHash)
+		entries = append(entries, URLEntryItem{
+			Dimension:   dimNames[dimID],
+			DimensionID: dimID,
+			CacheKey:    cacheKey.String(),
+			Status:      meta.Status,
+			StatusCode:  meta.StatusCode,
+			CreatedAt:   meta.CreatedAt,
+			ExpiresAt:   meta.ExpiresAt,
+			CacheAge:    now - meta.CreatedAt,
+			Size:        meta.Size,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].DimensionID < entries[j].DimensionID
+	})
+
+	httputil.JSONData(ctx, URLEntriesResponse{URL: normalizedURL, Entries: entries}, fasthttp.StatusOK)
+}
+
+// dimCacheMeta is one dimension's cache metadata resolved from Redis.
+type dimCacheMeta struct {
+	CreatedAt  int64
+	ExpiresAt  int64
+	Size       int64
+	StatusCode int
+	Status     string // active | stale | expired
+}
+
+// readDimCacheMeta loads cache metadata for a single dimension. Returns false when no
+// entry exists for that dimension. Status (active/stale/expired) is computed from the
+// expiry and the host's stale TTL.
+func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, urlHash uint64, staleTTL, now int64) (*dimCacheMeta, bool) {
+	cacheKey := d.keyGenerator.GenerateCacheKey(hostID, dimID, urlHash)
+	metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
+
+	data, err := d.redis.HGetAll(ctx, metadataKey)
+	if err != nil {
+		d.logger.Error("Failed to get cache metadata",
+			zap.Int("host_id", hostID),
+			zap.Int("dimension_id", dimID),
+			zap.Error(err))
+		return nil, false
+	}
+	if len(data) == 0 {
+		return nil, false
+	}
+
+	createdAt, _ := strconv.ParseInt(data["created_at"], 10, 64)
+	expiresAt, _ := strconv.ParseInt(data["expires_at"], 10, 64)
+	size, _ := strconv.ParseInt(data["size"], 10, 64)
+	statusCode, _ := strconv.Atoi(data["status_code"])
+
+	var status string
+	switch {
+	case now < expiresAt:
+		status = "active"
+	case staleTTL > 0 && now < expiresAt+staleTTL:
+		status = "stale"
+	default:
+		status = "expired"
+	}
+
+	return &dimCacheMeta{
+		CreatedAt:  createdAt,
+		ExpiresAt:  expiresAt,
+		Size:       size,
+		StatusCode: statusCode,
+		Status:     status,
+	}, true
+}
+
+// normalizeURLForHost normalizes rawURL for the host and returns the normalized URL and
+// its hash. Tracking parameters are stripped exactly as the edge does when writing cache
+// keys (resolved global -> host -> URL-rule), so lookups match the keys that were stored.
+func (d *CacheDaemon) normalizeURLForHost(host *types.Host, rawURL string) (string, uint64, error) {
+	egConfig := d.configManager.GetConfig()
+	resolver := config.NewConfigResolver(
+		&egConfig.Render,
+		&egConfig.Bypass,
+		egConfig.TrackingParams,
+		egConfig.CacheSharding,
+		egConfig.BothitRecache,
+		egConfig.Headers,
+		egConfig.Storage.Compression,
+		host,
+	)
+	resolved := resolver.ResolveForURL(rawURL)
+
+	var stripPatterns []config.CompiledStripPattern
+	if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
+		stripPatterns = resolved.TrackingParams.CompiledPatterns
+	}
+
+	result, err := d.normalizer.Normalize(rawURL, stripPatterns)
+	if err != nil {
+		return "", 0, err
+	}
+	return result.NormalizedURL, d.normalizer.Hash(result.NormalizedURL), nil
+}
+
+// dimensionIDToName maps a host's dimension IDs to their configured names.
+func dimensionIDToName(host *types.Host) map[int]string {
+	names := make(map[int]string, len(host.Dimensions))
+	for name, dim := range host.Dimensions {
+		names[dim.ID] = name
+	}
+	return names
 }
 
 func queryParamInt(ctx *fasthttp.RequestCtx, name string, defaultValue int) (int, error) {
