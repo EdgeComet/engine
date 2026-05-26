@@ -478,6 +478,47 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.False(t, allResult.HasMore)
 	})
 
+	t.Run("pagination enumerates all keys without dropping", func(t *testing.T) {
+		// Regression: a SCAN batch larger than the page limit used to advance the
+		// cursor past keys it fetched but did not emit, silently dropping them.
+		// With 250 keys and a limit of 100, every key must still be reachable by
+		// following the cursor across pages.
+		cr, mr := setupTestCacheReader(t)
+
+		const total = 250
+		for i := 0; i < total; i++ {
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("bulk%d", i)), map[string]string{
+				"url":        fmt.Sprintf("https://example.com/bulk/%d", i),
+				"dimension":  "mobile",
+				"size":       "500",
+				"created_at": fmt.Sprintf("%d", now-100),
+				"expires_at": fmt.Sprintf("%d", now+3600),
+				"source":     "render",
+			})
+		}
+
+		seen := make(map[string]struct{})
+		cursor := "0"
+		for pages := 0; pages < 100; pages++ {
+			result, err := cr.ListURLs(CacheListParams{
+				HostID:   1,
+				Cursor:   cursor,
+				Limit:    100,
+				StaleTTL: 600,
+			})
+			require.NoError(t, err)
+			for _, item := range result.Items {
+				seen[item.URL] = struct{}{}
+			}
+			if !result.HasMore {
+				break
+			}
+			cursor = result.Cursor
+		}
+
+		assert.Len(t, seen, total, "every cached URL must be reachable across paginated listing")
+	})
+
 	t.Run("empty result", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 

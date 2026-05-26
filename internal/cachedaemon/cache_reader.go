@@ -59,8 +59,16 @@ local max_scan_iterations = 200
 local scan_iterations = 0
 local results = {}
 
+-- SCAN advances the cursor past every key in the returned batch, so the batch
+-- size (COUNT) must not exceed the page limit: any matching key we fetch but do
+-- not emit before stopping would be skipped permanently. We size each batch to
+-- the limit and only stop at a batch boundary so the returned cursor always
+-- matches what we emitted.
+local scan_count = limit
+if scan_count < 1 then scan_count = 1 end
+
 repeat
-    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", 500)
+    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", scan_count)
     cursor = res[1]
 
     for _, key in ipairs(res[2]) do
@@ -231,7 +239,6 @@ repeat
             hash["_status"] = status
             hash["_age"] = tostring(now - tonumber(hash["created_at"] or "0"))
             table.insert(results, cjson.encode(hash))
-            if #results >= limit then break end
         end
     end
 
