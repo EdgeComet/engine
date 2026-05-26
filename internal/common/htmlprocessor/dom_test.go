@@ -1068,6 +1068,84 @@ func TestIndexationStatus_GoQuery_MetaPriority(t *testing.T) {
 	})
 }
 
+func fragmentSelection(t *testing.T, fragment string) *goquery.Selection {
+	t.Helper()
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<div id=\"ec-frag\">" + fragment + "</div>"))
+	require.NoError(t, err)
+	return doc.Find("#ec-frag")
+}
+
+func TestCleanFragmentScripts(t *testing.T) {
+	t.Run("removes executable scripts", func(t *testing.T) {
+		sel := fragmentSelection(t, `<script>alert(1)</script><script type="text/javascript">x</script><p>hi</p>`)
+		removed := CleanFragmentScripts(sel)
+		assert.True(t, removed)
+		assert.Equal(t, 0, sel.Find("script").Length())
+		assert.Equal(t, "hi", sel.Find("p").Text())
+	})
+
+	t.Run("preserves ld+json byte for byte", func(t *testing.T) {
+		sel := fragmentSelection(t, `<script type="application/ld+json">{"@type":"Thing"}</script>`)
+		removed := CleanFragmentScripts(sel)
+		assert.False(t, removed)
+		scripts := sel.Find(`script[type="application/ld+json"]`)
+		require.Equal(t, 1, scripts.Length())
+		assert.Equal(t, `{"@type":"Thing"}`, scripts.Text())
+	})
+
+	t.Run("preserves other non-executable types", func(t *testing.T) {
+		sel := fragmentSelection(t, `<script type="application/json">{}</script><script type="text/template"><div></div></script><script type="importmap">{}</script>`)
+		removed := CleanFragmentScripts(sel)
+		assert.False(t, removed)
+		assert.Equal(t, 3, sel.Find("script").Length())
+	})
+
+	t.Run("removes script-bearing links keeps others", func(t *testing.T) {
+		sel := fragmentSelection(t, `<link rel="modulepreload" href="x"><link rel="import" href="y"><link rel="preload" as="script" href="z"><link rel="stylesheet" href="s.css"><link rel="preload" as="style" href="f">`)
+		removed := CleanFragmentScripts(sel)
+		assert.True(t, removed)
+		links := sel.Find("link")
+		assert.Equal(t, 2, links.Length())
+		assert.Equal(t, 1, sel.Find(`link[rel="stylesheet"]`).Length())
+		assert.Equal(t, 1, sel.Find(`link[rel="preload"][as="style"]`).Length())
+	})
+
+	t.Run("removes nested executable script", func(t *testing.T) {
+		sel := fragmentSelection(t, `<div><span><script>x</script></span></div>`)
+		removed := CleanFragmentScripts(sel)
+		assert.True(t, removed)
+		assert.Equal(t, 0, sel.Find("script").Length())
+		assert.Equal(t, 1, sel.Find("span").Length())
+	})
+
+	t.Run("returns false for clean fragment", func(t *testing.T) {
+		sel := fragmentSelection(t, `<p>hi</p><script type="application/ld+json">{}</script>`)
+		removed := CleanFragmentScripts(sel)
+		assert.False(t, removed)
+		assert.Equal(t, 1, sel.Find("script").Length())
+	})
+
+	t.Run("mixed removes only executable", func(t *testing.T) {
+		sel := fragmentSelection(t, `<script type="application/ld+json">{"@type":"X"}</script><script>evil()</script>`)
+		removed := CleanFragmentScripts(sel)
+		assert.True(t, removed)
+		scripts := sel.Find("script")
+		require.Equal(t, 1, scripts.Length())
+		assert.Equal(t, "application/ld+json", getSelectionAttr(scripts.First(), "type"))
+		assert.Equal(t, `{"@type":"X"}`, scripts.Text())
+	})
+
+	t.Run("removes script when it is the fragment root", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<script>x</script>`))
+		require.NoError(t, err)
+		root := doc.Find("script")
+		require.Equal(t, 1, root.Length())
+		removed := CleanFragmentScripts(root)
+		assert.True(t, removed)
+		assert.Equal(t, 0, doc.Find("script").Length())
+	})
+}
+
 func TestIndexationStatus_GoQuery_GooglebotPrecedence(t *testing.T) {
 	t.Run("googlebot allows overrides robots noindex", func(t *testing.T) {
 		htmlStr := `<!DOCTYPE html><html><head>

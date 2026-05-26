@@ -161,6 +161,44 @@ func (d *domDocument) CleanScripts() bool {
 	return removed > 0
 }
 
+// CleanFragmentScripts removes executable <script> elements and script-bearing
+// <link> elements from sel and its descendants, reusing the executableScriptTypes
+// classification so non-executable types (application/ld+json, application/json,
+// text/template, importmap, ...) are PRESERVED. It mirrors the script/link logic of
+// CleanScripts but scoped to a fragment, never the whole document. The caller passes
+// a container selection: both the container's matching descendants (via Find) and the
+// container's own roots (via Filter) are considered, so a fragment whose root IS a
+// <script> is handled. Returns true if anything was removed.
+func CleanFragmentScripts(sel *goquery.Selection) bool {
+	removed := 0
+
+	scripts := sel.Find("script").AddSelection(sel.Filter("script"))
+	scripts.Each(func(_ int, s *goquery.Selection) {
+		scriptType := strings.ToLower(strings.TrimSpace(getSelectionAttr(s, "type")))
+		if scriptType == "" || executableScriptTypes[scriptType] {
+			s.Remove()
+			removed++
+		}
+	})
+
+	links := sel.Find("link").AddSelection(sel.Filter("link"))
+	links.Each(func(_ int, s *goquery.Selection) {
+		rel := strings.ToLower(getSelectionAttr(s, "rel"))
+		switch rel {
+		case "import", "modulepreload":
+			s.Remove()
+			removed++
+		case "preload":
+			if strings.ToLower(getSelectionAttr(s, "as")) == "script" {
+				s.Remove()
+				removed++
+			}
+		}
+	})
+
+	return removed > 0
+}
+
 func (d *domDocument) HTML() []byte {
 	var buf bytes.Buffer
 	if len(d.doc.Nodes) == 0 {
