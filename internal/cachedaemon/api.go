@@ -195,10 +195,12 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 	score := float64(time.Now().UTC().Unix())
 	entriesEnqueued := 0
 	reqCtx := context.Background()
+	normalize := d.hostURLNormalizer(host)
 
 	for _, url := range req.URLs {
-		// Normalize URL before ZADD
-		normalizedResult, err := d.normalizer.Normalize(url, nil)
+		// Canonicalize the URL (strip tracking params) before ZADD so the queue is keyed
+		// the same way the cache is written and read.
+		normalizedURL, _, err := normalize(url)
 		if err != nil {
 			d.logger.Error("Invalid URL, skipping",
 				zap.String("url", url),
@@ -208,7 +210,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 
 		for _, dimensionID := range dimensionIDs {
 			member := types.RecacheMember{
-				URL:         normalizedResult.NormalizedURL,
+				URL:         normalizedURL,
 				DimensionID: dimensionID,
 			}
 			memberJSON, _ := json.Marshal(member)
@@ -216,7 +218,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 			if err := d.redis.ZAdd(reqCtx, queueKey, score, string(memberJSON)); err != nil {
 				d.logger.Error("Failed to add entry to ZSET",
 					zap.String("queue", queueKey),
-					zap.String("url", normalizedResult.NormalizedURL),
+					zap.String("url", normalizedURL),
 					zap.Int("dimension_id", dimensionID),
 					zap.Error(err))
 				continue
@@ -278,10 +280,12 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 	// Invalidate cache entries
 	entriesInvalidated := 0
 	reqCtx := context.Background()
+	normalize := d.hostURLNormalizer(host)
 
 	for _, url := range req.URLs {
-		// Normalize URL
-		normalizedResult, err := d.normalizer.Normalize(url, nil)
+		// Canonicalize the URL (strip tracking params) so invalidation targets the same
+		// key the cache was written under.
+		normalizedURL, urlHash, err := normalize(url)
 		if err != nil {
 			d.logger.Error("Invalid URL, skipping",
 				zap.String("url", url),
@@ -289,7 +293,6 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 			continue
 		}
 
-		urlHash := d.normalizer.Hash(normalizedResult.NormalizedURL)
 		urlDeleted := 0
 
 		for _, dimensionID := range dimensionIDs {
@@ -308,7 +311,7 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 
 		if urlDeleted == 0 {
 			d.logger.Warn("No cache metadata found for URL during invalidation",
-				zap.String("url", normalizedResult.NormalizedURL),
+				zap.String("url", normalizedURL),
 				zap.Uint64("url_hash", urlHash),
 				zap.Int("host_id", req.HostID))
 		}
@@ -1270,10 +1273,11 @@ func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, u
 	}, true
 }
 
-// normalizeURLForHost normalizes rawURL for the host and returns the normalized URL and
-// its hash. Tracking parameters are stripped exactly as the edge does when writing cache
-// keys (resolved global -> host -> URL-rule), so lookups match the keys that were stored.
-func (d *CacheDaemon) normalizeURLForHost(host *types.Host, rawURL string) (string, uint64, error) {
+// hostURLNormalizer returns a per-host normalizer that strips tracking parameters exactly as
+// the edge does when writing cache keys (resolved global -> host -> URL-rule). The config
+// resolver is per-host, so callers that normalize many URLs (recache, invalidate) build it once
+// and reuse the returned closure across the batch.
+func (d *CacheDaemon) hostURLNormalizer(host *types.Host) func(rawURL string) (string, uint64, error) {
 	egConfig := d.configManager.GetConfig()
 	resolver := config.NewConfigResolver(
 		&egConfig.Render,
@@ -1285,18 +1289,26 @@ func (d *CacheDaemon) normalizeURLForHost(host *types.Host, rawURL string) (stri
 		egConfig.Storage.Compression,
 		host,
 	)
-	resolved := resolver.ResolveForURL(rawURL)
 
-	var stripPatterns []config.CompiledStripPattern
-	if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
-		stripPatterns = resolved.TrackingParams.CompiledPatterns
-	}
+	return func(rawURL string) (string, uint64, error) {
+		resolved := resolver.ResolveForURL(rawURL)
 
-	result, err := d.normalizer.Normalize(rawURL, stripPatterns)
-	if err != nil {
-		return "", 0, err
+		var stripPatterns []config.CompiledStripPattern
+		if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
+			stripPatterns = resolved.TrackingParams.CompiledPatterns
+		}
+
+		result, err := d.normalizer.Normalize(rawURL, stripPatterns)
+		if err != nil {
+			return "", 0, err
+		}
+		return result.NormalizedURL, d.normalizer.Hash(result.NormalizedURL), nil
 	}
-	return result.NormalizedURL, d.normalizer.Hash(result.NormalizedURL), nil
+}
+
+// normalizeURLForHost normalizes a single rawURL for the host (see hostURLNormalizer).
+func (d *CacheDaemon) normalizeURLForHost(host *types.Host, rawURL string) (string, uint64, error) {
+	return d.hostURLNormalizer(host)(rawURL)
 }
 
 // dimensionIDToName maps a host's dimension IDs to their configured names.
