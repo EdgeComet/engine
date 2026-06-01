@@ -25,6 +25,8 @@ var securityHeadersDenyList = map[string]bool{
 // but can be served to clients if explicitly configured in safe_response
 const headerSetCookie = "set-cookie"
 
+const headerContentType = "Content-Type"
+
 // isRedirectStatusCode checks if the status code is a redirect (3xx)
 func isRedirectStatusCode(statusCode int) bool {
 	return statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308
@@ -40,6 +42,25 @@ func getHeaderCaseInsensitive(headers map[string][]string, name string) ([]strin
 		}
 	}
 	return nil, false
+}
+
+// isHTMLContentTypeValue reports whether a Content-Type value indicates an HTML body.
+// An empty value is treated as HTML, since both origins and the renderer default
+// to text/html when no Content-Type is present.
+func isHTMLContentTypeValue(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	return strings.Contains(contentType, contentTypeHTML)
+}
+
+// isHTMLContentType reports whether response headers indicate an HTML body.
+func isHTMLContentType(headers map[string][]string) bool {
+	ct, ok := getHeaderCaseInsensitive(headers, headerContentType)
+	if !ok || len(ct) == 0 {
+		return true
+	}
+	return isHTMLContentTypeValue(ct[0])
 }
 
 // FilterHeaders filters headers to only include those in the safe headers list

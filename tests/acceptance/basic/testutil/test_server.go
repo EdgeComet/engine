@@ -804,6 +804,18 @@ func (ts *TestServer) Start() error {
 		w.Write([]byte(contentBuilder.String()))
 	})
 
+	// HTML 404 - non-existent page that responds with an HTML content type so the
+	// engine runs indexation extraction (the FileServer 404 returns text/plain).
+	mux.HandleFunc("/indexation/not-found.html", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head><title>Page Not Found</title></head>
+<body><h1>404 - Not Found</h1></body>
+</html>`))
+	})
+
 	// Default handler for everything else - handles PDFs, JSONs, and generic pages
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path

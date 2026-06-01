@@ -651,34 +651,42 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		}, nil
 	}
 
-	// Content processing: script cleaning, SEO extraction, and optional content processor
-	procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
-	defer procCancel()
+	// Content processing: script cleaning, SEO extraction, and optional content processor.
+	// Only HTML responses are processed (mirrors the bypass path content-type guard).
+	html := renderResult.HTML
+	var processed *ProcessedContent
+	var pageSEO *types.PageSEO
 
-	stripScripts := renderCtx.ResolvedConfig.Render.StripScripts
-	processed := ProcessContent(
-		procCtx,
-		renderResult.HTML,
-		statusCode,
-		renderCtx.TargetURL,
-		stripScripts,
-		renderCtx.Host.ID,
-		ro.contentProcessor,
-		renderCtx.Logger,
-	)
-	html := processed.HTML
+	if isHTMLContentType(renderResult.Headers) {
+		procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
+		defer procCancel()
 
-	// Handle content processor override (e.g., redirect or status change)
-	if processed.Override != nil {
-		return ro.serveOverride(renderCtx, processed, overrideParams{
-			source:       ServedFromRender,
-			cacheSource:  cache.SourceRender,
-			cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
-			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
-			cacheEnabled: true, // render cache has no separate Enabled flag
-			startTime:    renderStart,
-			serviceID:    reservation.ServiceID,
-		})
+		stripScripts := renderCtx.ResolvedConfig.Render.StripScripts
+		processed = ProcessContent(
+			procCtx,
+			renderResult.HTML,
+			statusCode,
+			renderCtx.TargetURL,
+			stripScripts,
+			renderCtx.Host.ID,
+			ro.contentProcessor,
+			renderCtx.Logger,
+		)
+		html = processed.HTML
+		pageSEO = processed.PageSEO
+
+		// Handle content processor override (e.g., redirect or status change)
+		if processed.Override != nil {
+			return ro.serveOverride(renderCtx, processed, overrideParams{
+				source:       ServedFromRender,
+				cacheSource:  cache.SourceRender,
+				cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
+				staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
+				cacheEnabled: true, // render cache has no separate Enabled flag
+				startTime:    renderStart,
+				serviceID:    reservation.ServiceID,
+			})
+		}
 	}
 
 	// Check if status code is cacheable (configurable)
@@ -689,7 +697,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 	if shouldCache {
 		// Use processed HTML (scripts stripped) for cache, not raw RS HTML
 		renderResult.HTML = html
-		if err := ro.cacheCoord.SaveRenderCache(renderCtx, renderResult, processed.PageSEO); err != nil {
+		if err := ro.cacheCoord.SaveRenderCache(renderCtx, renderResult, pageSEO); err != nil {
 			renderCtx.Logger.Error("Failed to save render to cache", zap.Error(err))
 			// Continue - we can still serve the response to client
 		}
@@ -743,21 +751,28 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		redirectTo = renderResult.RedirectLocation
 	}
 
+	var ruleIDs []uint32
+	var originalPageSEO *types.PageSEO
+	if processed != nil {
+		ruleIDs = processed.RuleIDs
+		originalPageSEO = processed.OriginalPageSEO
+	}
+
 	result := &RenderResult{
 		Source:          ServedFromRender,
 		ServiceID:       reservation.ServiceID,
 		Duration:        duration,
 		BytesServed:     int64(len(html)),
 		StatusCode:      renderResult.StatusCode,
-		PageSEO:         processed.PageSEO,
+		PageSEO:         pageSEO,
 		Metrics:         &renderResult.Metrics,
 		ChromeID:        renderResult.ChromeID,
 		RenderTime:      renderResult.RenderTime,
 		ErrorType:       errorType,
 		ErrorMessage:    errorMessage,
 		RedirectTo:      redirectTo,
-		RuleIDs:         processed.RuleIDs,
-		OriginalPageSEO: processed.OriginalPageSEO,
+		RuleIDs:         ruleIDs,
+		OriginalPageSEO: originalPageSEO,
 	}
 
 	// Lock and tab will be released by defer AFTER cache write and serving complete
@@ -1280,7 +1295,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	var pageSEO *types.PageSEO
 	var processed *ProcessedContent
 
-	if strings.Contains(bypassResp.ContentType, contentTypeHTML) {
+	if isHTMLContentTypeValue(bypassResp.ContentType) {
 		procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
 		defer procCancel()
 
