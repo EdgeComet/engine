@@ -18,6 +18,11 @@ import (
 // header (render service uses its serviceID; the EG bypass path has no per-tab id).
 const edgeRenderSource = "edge-gateway"
 
+// bypassReadBufferSize sizes the fasthttp response read buffer. Origins can emit
+// large response headers (big CSP/NEL/Report-To blocks); fasthttp's 4 KB default
+// fails to read them and surfaces as a 502. 32 KB covers real-world header bloat.
+const bypassReadBufferSize = 32 * 1024
+
 // BypassResponse holds the fetched content from bypass request
 type BypassResponse struct {
 	StatusCode  int
@@ -42,8 +47,9 @@ func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *Bypas
 	}
 
 	client := &fasthttp.Client{
-		ReadTimeout:  timeout,
-		WriteTimeout: timeout,
+		ReadTimeout:    timeout,
+		WriteTimeout:   timeout,
+		ReadBufferSize: bypassReadBufferSize,
 	}
 
 	// Enable SSRF protection by default (blocks DNS rebinding to private IPs)
