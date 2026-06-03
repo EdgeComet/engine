@@ -70,9 +70,6 @@ func (rw *ResponseWriter) WriteRenderedResponse(renderCtx *edgectx.RenderContext
 		renderCtx.HTTPCtx.Response.Header.Set("X-Matched-Rule", renderCtx.ResolvedConfig.MatchedRuleID)
 	}
 
-	// Close connection to prevent client hang
-	renderCtx.HTTPCtx.Response.SetConnectionClose()
-
 	// Serve the content
 	renderCtx.HTTPCtx.Response.SetBody(html)
 
@@ -119,9 +116,6 @@ func (rw *ResponseWriter) WriteBypassResponse(renderCtx *edgectx.RenderContext, 
 	// Set content length
 	renderCtx.HTTPCtx.Response.Header.SetContentLength(len(bypassResp.Body))
 
-	// Close connection to prevent client hang
-	renderCtx.HTTPCtx.Response.SetConnectionClose()
-
 	// Set body
 	renderCtx.HTTPCtx.Response.SetBody(bypassResp.Body)
 
@@ -158,9 +152,6 @@ func (rw *ResponseWriter) WriteCacheResponse(renderCtx *edgectx.RenderContext, c
 			renderCtx.HTTPCtx.Response.Header.Add(name, value)
 		}
 	}
-
-	// Close connection to prevent client hang
-	renderCtx.HTTPCtx.Response.SetConnectionClose()
 
 	// Serve based on response type
 	if cacheResp.IsMemoryBased() {
@@ -230,8 +221,6 @@ func (rw *ResponseWriter) WriteCachedMetadataResponse(renderCtx *edgectx.RenderC
 		renderCtx.HTTPCtx.Response.SetBodyString(fasthttp.StatusMessage(cacheEntry.StatusCode))
 	}
 
-	renderCtx.HTTPCtx.Response.SetConnectionClose()
-
 	return nil
 }
 
@@ -284,8 +273,6 @@ func (rw *ResponseWriter) WriteStatusResponse(renderCtx *edgectx.RenderContext, 
 		// For other status codes (should not happen with validation), use status text
 		renderCtx.HTTPCtx.Response.SetBodyString(fasthttp.StatusMessage(statusConfig.Code))
 	}
-
-	renderCtx.HTTPCtx.Response.SetConnectionClose()
 
 	return nil
 }
