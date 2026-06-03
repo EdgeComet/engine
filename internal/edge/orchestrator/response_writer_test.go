@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/pkg/types"
@@ -317,5 +318,64 @@ func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
 		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
 		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
 		assert.Empty(t, string(renderCtx.HTTPCtx.Response.Body()))
+	})
+}
+
+// TestResponseWriters_KeepAliveEnabled guards against re-introducing the forced
+// Connection: close that previously prevented client/proxy connection reuse.
+// Every write path sets a definite body length, so keep-alive is safe.
+func TestResponseWriters_KeepAliveEnabled(t *testing.T) {
+	rw := NewResponseWriter()
+
+	t.Run("rendered response", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		err := rw.WriteRenderedResponse(renderCtx, []byte("<html>ok</html>"), 200, "", "rs-1", nil)
+		assert.NoError(t, err)
+		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "rendered response must not force Connection: close")
+	})
+
+	t.Run("bypass response", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		err := rw.WriteBypassResponse(renderCtx, &bypass.BypassResponse{
+			StatusCode:  200,
+			Body:        []byte("<html>ok</html>"),
+			ContentType: "text/html; charset=utf-8",
+			Headers:     map[string][]string{},
+		})
+		assert.NoError(t, err)
+		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "bypass response must not force Connection: close")
+	})
+
+	t.Run("cache response", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 200,
+			ExpiresAt:  time.Now().UTC().Add(time.Hour),
+			CreatedAt:  time.Now().UTC(),
+		}
+		err := rw.WriteCacheResponse(renderCtx, entry, &cache.CacheResponse{Content: []byte("<html>ok</html>")})
+		assert.NoError(t, err)
+		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "cache response must not force Connection: close")
+	})
+
+	t.Run("cached metadata response", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 404,
+			ExpiresAt:  time.Now().UTC().Add(time.Hour),
+			CreatedAt:  time.Now().UTC(),
+		}
+		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
+		assert.NoError(t, err)
+		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "cached metadata response must not force Connection: close")
+	})
+
+	t.Run("status response", func(t *testing.T) {
+		renderCtx := newTestRenderContext(&config.ResolvedConfig{})
+		err := rw.WriteStatusResponse(renderCtx, config.ResolvedStatusConfig{Code: 404, Reason: "gone"})
+		assert.NoError(t, err)
+		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "status response must not force Connection: close")
 	})
 }
