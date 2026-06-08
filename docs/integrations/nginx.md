@@ -129,7 +129,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Request-ID $request_id;
+        proxy_set_header EC-Request-ID $request_id;
 
         # Timeouts should exceed EG render timeout
         proxy_connect_timeout 10s;
@@ -158,7 +158,7 @@ curl -v \
 ```
 
 Check response headers:
-- `X-Render-Source: rendered` or `X-Render-Source: cache` confirms EG processed the request.
+- `EC-Source: render` or `EC-Source: render_cache` confirms EG processed the request.
 
 ### Test regular user
 
@@ -170,7 +170,7 @@ curl -v \
   "http://example.com/"
 ```
 
-Request should go directly to origin with no `X-Render-*` headers in response.
+Request should go directly to origin with no `EC-*` headers in response.
 
 ### Debug crawler detection
 
@@ -207,8 +207,8 @@ add_header X-EC-Should-Render $ec_should_render;
 
 ### Cache not working
 
-- Verify `X-Render-Source` header shows `cache` on repeat requests.
-- Check `X-Cache-Age` header for cache duration.
+- Verify `EC-Source` header shows `render_cache` on repeat requests.
+- Check `EC-Cache-Age` header for cache duration.
 - Review EG cache configuration and storage permissions.
 - Ensure nginx itself is not agressively caching the render endpoint (unless configured to respect Vary headers).
 

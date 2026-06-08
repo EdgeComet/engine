@@ -56,7 +56,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=config_rf0", "config-rf0-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains only eg1 (no replication)")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -101,7 +101,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=config_rf1", "config-rf1-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains only eg1")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -147,7 +147,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=config_rf3", "config-rf3-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains all 3 EGs")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -193,7 +193,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=config_rf10", "config-rf10-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains exactly 3 EGs (capped at cluster size)")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -250,7 +250,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/lazy-replication.html?test=config_no_push", "config-no-push-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains only eg1 (no push occurred)")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -262,7 +262,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response2 := testEnv.RequestViaEG2("/static/lazy-replication.html?test=config_no_push", "config-no-push-eg2")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should pull from eg1")
 
 			By("Waiting for eg_ids update after pull")
@@ -310,7 +310,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=config_no_replicate", "config-no-replicate-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Getting initial eg_ids (should have 2 EGs from push)")
 			initialEgIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -347,7 +347,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			By("Verifying request succeeded via pull")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should pull from cluster")
 
 			By("Verifying eg_ids is unchanged (proxy mode)")
@@ -370,7 +370,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			By("Verifying subsequent request still works (pulls again)")
 			Expect(response3.Error).To(BeNil())
 			Expect(response3.StatusCode).To(Equal(200))
-			Expect(response3.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response3.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should pull again (no local storage)")
 
 			if os.Getenv("DEBUG") != "" {
@@ -462,7 +462,7 @@ var _ = Describe("Configuration Variations", Serial, func() {
 			response3 := testEnv.RequestViaEG3("/static/test.html?test=config_mixed", "config-mixed-eg3")
 			Expect(response3.Error).To(BeNil())
 			Expect(response3.StatusCode).To(Equal(200))
-			Expect(response3.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response3.Headers.Get("EC-Source")).To(Equal("render"))
 
 			if os.Getenv("DEBUG") != "" {
 				fmt.Printf("EG3 successfully operating in standalone mode\n")

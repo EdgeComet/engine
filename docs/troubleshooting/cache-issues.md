@@ -8,7 +8,7 @@ description: Diagnose and fix caching problems
 ## Cache misses when expecting hits
 
 ### Symptoms
-- `X-Render-Source: rendered` instead of `cache`
+- `EC-Source: render` instead of `render_cache`
 - Every request triggers new render
 
 ### Causes
@@ -18,9 +18,9 @@ description: Diagnose and fix caching problems
 - Cache file missing
 
 ### Diagnosis
-- Check `X-Render-Cache` header
+- Check the `EC-Source` header: `render_cache`/`bypass_cache` indicate a fresh cache hit, `render_stale`/`bypass_stale` indicate stale content, `render`/`bypass` indicate no cache was used
 - Compare cache keys in logs
-- Verify dimension matching with `X-Unmatched-Dimension`
+- Verify dimension matching in the logs (the dimension fallback signal is recorded in logs and metrics)
 
 ### Solutions
 - Review URL normalization settings
@@ -31,7 +31,7 @@ description: Diagnose and fix caching problems
 
 ### Symptoms
 - Old content returned after site updates
-- `X-Cache-Age` showing long duration
+- `EC-Cache-Age` showing long duration
 
 ### Causes
 - TTL too long

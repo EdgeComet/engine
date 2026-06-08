@@ -137,7 +137,6 @@ func TestHandleDimensionBlock(t *testing.T) {
 	assert.Error(t, err, "Should return error")
 	assert.Equal(t, fasthttp.StatusForbidden, ctx.Response.StatusCode())
 	assert.Contains(t, string(ctx.Response.Body()), "Forbidden")
-	assert.Equal(t, "", string(ctx.Response.Header.Peek("X-Unmatched-Dimension")))
 }
 
 func TestHandleUnmatchedBlock(t *testing.T) {

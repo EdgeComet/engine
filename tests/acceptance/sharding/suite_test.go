@@ -680,9 +680,9 @@ func (te *TestEnvironment) requestViaEG(targetURL string, egBaseURL string, requ
 	req.Header.Set("X-Render-Key", te.Config.Test.ValidAPIKey)
 	req.Header.Set("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
 
-	// Set X-Request-ID header if provided for debugging
+	// Set EC-Request-ID header if provided for debugging
 	if len(requestID) > 0 && requestID[0] != "" {
-		req.Header.Set("X-Request-ID", requestID[0])
+		req.Header.Set("EC-Request-ID", requestID[0])
 	}
 
 	start := time.Now()
@@ -732,9 +732,9 @@ func (te *TestEnvironment) requestViaEGNoRedirect(targetURL string, egBaseURL st
 	req.Header.Set("X-Render-Key", te.Config.Test.ValidAPIKey)
 	req.Header.Set("User-Agent", "Googlebot/2.1 (+http://www.google.com/bot.html)")
 
-	// Set X-Request-ID header if provided for debugging
+	// Set EC-Request-ID header if provided for debugging
 	if len(requestID) > 0 && requestID[0] != "" {
-		req.Header.Set("X-Request-ID", requestID[0])
+		req.Header.Set("EC-Request-ID", requestID[0])
 	}
 
 	// Create HTTP client that doesn't follow redirects

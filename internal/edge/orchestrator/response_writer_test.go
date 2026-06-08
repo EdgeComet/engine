@@ -54,7 +54,7 @@ func TestWriteCacheResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCacheResponse(renderCtx, entry, resp)
 		assert.NoError(t, err)
-		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceRenderStale, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
 	t.Run("bypass cache entry uses bypass stale TTL", func(t *testing.T) {
@@ -86,10 +86,10 @@ func TestWriteCacheResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCacheResponse(renderCtx, entry, resp)
 		assert.NoError(t, err)
-		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassStale, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
-	t.Run("bypass cache entry without bypass stale TTL returns hit", func(t *testing.T) {
+	t.Run("bypass cache entry without bypass stale TTL is fresh", func(t *testing.T) {
 		renderCtx := newTestRenderContext(&config.ResolvedConfig{
 			Cache: config.ResolvedCacheConfig{
 				Expired: types.CacheExpiredConfig{
@@ -118,10 +118,10 @@ func TestWriteCacheResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCacheResponse(renderCtx, entry, resp)
 		assert.NoError(t, err)
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
-	t.Run("bypass cache entry expired beyond stale TTL returns hit", func(t *testing.T) {
+	t.Run("bypass cache entry expired beyond stale TTL is fresh", func(t *testing.T) {
 		renderCtx := newTestRenderContext(&config.ResolvedConfig{
 			Bypass: config.ResolvedBypassConfig{
 				Cache: config.ResolvedBypassCacheConfig{
@@ -145,7 +145,7 @@ func TestWriteCacheResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCacheResponse(renderCtx, entry, resp)
 		assert.NoError(t, err)
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 }
 
@@ -173,7 +173,7 @@ func TestWriteCachedMetadataResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
-		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceRenderStale, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
 	t.Run("bypass redirect uses bypass stale TTL", func(t *testing.T) {
@@ -204,10 +204,10 @@ func TestWriteCachedMetadataResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
-		assert.Equal(t, "stale", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassStale, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
-	t.Run("bypass redirect without bypass stale TTL returns hit", func(t *testing.T) {
+	t.Run("bypass redirect without bypass stale TTL is fresh", func(t *testing.T) {
 		renderCtx := newTestRenderContext(&config.ResolvedConfig{
 			Cache: config.ResolvedCacheConfig{
 				Expired: types.CacheExpiredConfig{
@@ -235,7 +235,7 @@ func TestWriteCachedMetadataResponse_StaleDetection(t *testing.T) {
 
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 }
 
@@ -255,12 +255,10 @@ func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, 404, renderCtx.HTTPCtx.Response.StatusCode())
-		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
-		assert.NotEmpty(t, string(renderCtx.HTTPCtx.Response.Header.Peek("X-Cache-Age")))
+		assert.Equal(t, types.SourceRenderCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
+		assert.NotEmpty(t, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderCacheAge)))
 		assert.Contains(t, string(renderCtx.HTTPCtx.Response.Body()), "Not Found")
 		assert.Equal(t, "text/plain; charset=utf-8", string(renderCtx.HTTPCtx.Response.Header.Peek("Content-Type")))
-		assert.Empty(t, string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Action")))
 	})
 
 	t.Run("410 override from render cache", func(t *testing.T) {
@@ -276,8 +274,7 @@ func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, 410, renderCtx.HTTPCtx.Response.StatusCode())
-		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceRenderCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 		assert.Contains(t, string(renderCtx.HTTPCtx.Response.Body()), "Gone")
 	})
 
@@ -294,8 +291,7 @@ func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
 		err := rw.WriteCachedMetadataResponse(renderCtx, entry)
 		assert.NoError(t, err)
 		assert.Equal(t, 404, renderCtx.HTTPCtx.Response.StatusCode())
-		assert.Equal(t, "bypass_cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceBypassCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 	})
 
 	t.Run("301 redirect still has Location and empty body", func(t *testing.T) {
@@ -315,8 +311,7 @@ func TestWriteCachedMetadataResponse_StatusOverrides(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 301, renderCtx.HTTPCtx.Response.StatusCode())
 		assert.Equal(t, "https://example.com/new", string(renderCtx.HTTPCtx.Response.Header.Peek("Location")))
-		assert.Equal(t, "cache", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Source")))
-		assert.Equal(t, "hit", string(renderCtx.HTTPCtx.Response.Header.Peek("X-Render-Cache")))
+		assert.Equal(t, types.SourceRenderCache, string(renderCtx.HTTPCtx.Response.Header.Peek(types.HeaderSource)))
 		assert.Empty(t, string(renderCtx.HTTPCtx.Response.Body()))
 	})
 }

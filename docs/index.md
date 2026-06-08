@@ -46,14 +46,14 @@ flowchart TD
     URL -->|Render| CacheCheck{Cache Check}:::decision
     URL -->|Bypass| Origin[Origin]:::direct
 
-    CacheCheck -->|Hit| ReturnCache[Return HTML<br/>X-Render-Source: cache]:::success
+    CacheCheck -->|Hit| ReturnCache[Return HTML<br/>EC-Source: render_cache]:::success
     CacheCheck -->|Miss| Lock[Distributed Lock]:::process
 
     Lock --> Render[Render Service]:::process
     Render --> Chrome[Acquire Chrome]:::process
     Chrome --> Exec[Execute JS]:::process
     Exec --> Store[Store in Cache]:::process
-    Store --> ReturnRender[Return HTML<br/>X-Render-Source: rendered]:::success
+    Store --> ReturnRender[Return HTML<br/>EC-Source: render]:::success
 ```
 
 ## System requirements

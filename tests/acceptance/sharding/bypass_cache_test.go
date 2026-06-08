@@ -36,8 +36,8 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 			Expect(response1.Error).To(BeNil(), "Request should not have network errors")
 			Expect(response1.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
-			By("Verifying X-Render-Source header indicates bypass")
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			By("Verifying EC-Source header indicates bypass")
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"First request should be bypass (not rendered)")
 
 			By("Verifying bypass cache metadata exists in Redis")
@@ -92,8 +92,8 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 			Expect(response2.Error).To(BeNil(), "Pull request should succeed")
 			Expect(response2.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
-			By("Verifying X-Render-Source indicates bypass_cache (pulled)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"),
+			By("Verifying EC-Source indicates bypass_cache (pulled)")
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("bypass_cache"),
 				"Should be served from bypass cache (pulled from cluster)")
 
 			By("Verifying pulled content matches original response")
@@ -149,9 +149,9 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 
 			By("Verifying EG2 response source")
 			// EG2 should either:
-			// 1. Fetch fresh from origin (X-Render-Source: bypass), OR
-			// 2. Pull from eg1 if configured (X-Render-Source: bypass_cache)
-			renderSource := response2.Headers.Get("X-Render-Source")
+			// 1. Fetch fresh from origin (EC-Source: bypass), OR
+			// 2. Pull from eg1 if configured (EC-Source: bypass_cache)
+			renderSource := response2.Headers.Get("EC-Source")
 			Expect(renderSource).To(BeElementOf([]string{"bypass", "bypass_cache"}),
 				"EG2 should either fetch fresh or pull from cluster")
 		})
@@ -174,7 +174,7 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 			response200 := testEnv.RequestViaEG1(testURL200, testName200)
 			Expect(response200.Error).To(BeNil())
 			Expect(response200.StatusCode).To(Equal(200))
-			Expect(response200.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(response200.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying status 200 response is cached")
 			metadata200, err := testEnv.GetRedisMetadata(cacheKey200)
@@ -202,7 +202,7 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 			response404 := testEnv.RequestViaEG1(testURL404, testName404)
 			Expect(response404.Error).To(BeNil())
 			Expect(response404.StatusCode).To(Equal(404))
-			Expect(response404.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(response404.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying status 404 response is cached")
 			metadata404, err := testEnv.GetRedisMetadata(cacheKey404)
@@ -230,7 +230,7 @@ var _ = Describe("Bypass Cache Sharding", Serial, func() {
 			response500 := testEnv.RequestViaEG1(testURL500, testName500)
 			Expect(response500.Error).To(BeNil())
 			Expect(response500.StatusCode).To(Equal(500))
-			Expect(response500.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(response500.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying status 500 response is NOT cached")
 			metadata500, err := testEnv.GetRedisMetadata(cacheKey500)

@@ -65,7 +65,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=eg_offline", "eg-offline-test-render")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Getting eg_ids to determine cache distribution")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -86,8 +86,8 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			Expect(response2.Body).To(ContainSubstring("Sharding Test Page"))
 
 			// Client should get valid response regardless of source
-			renderSource := response2.Headers.Get("X-Render-Source")
-			Expect(renderSource).To(BeElementOf([]string{"cache", "rendered"}),
+			renderSource := response2.Headers.Get("EC-Source")
+			Expect(renderSource).To(BeElementOf([]string{"render_cache", "render"}),
 				"Should be either cache (pulled) or rendered (fallback)")
 
 			if os.Getenv("DEBUG") != "" {
@@ -111,7 +111,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=partial_push", "partial-push-test")
 			Expect(response1.Error).To(BeNil(), "Client should not see push failures")
 			Expect(response1.StatusCode).To(Equal(200), "Should return 200 OK")
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids excludes stopped EG2")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -158,7 +158,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=all_push_fail", "all-push-fail-test")
 			Expect(response1.Error).To(BeNil(), "Client should not be affected by push failures")
 			Expect(response1.StatusCode).To(Equal(200), "Should return 200 OK")
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying eg_ids contains only eg1 (under-replicated)")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -173,7 +173,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response2 := testEnv.RequestViaEG2("/static/test.html?test=all_push_fail", "all-push-fail-recovery")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should pull from eg1")
 
 			By("Verifying eg_ids updated after pull")
@@ -254,7 +254,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			// Count how many responses claim to be "rendered"
 			renderedCount := 0
 			for _, resp := range responses {
-				if resp.Headers.Get("X-Render-Source") == "rendered" {
+				if resp.Headers.Get("EC-Source") == "render" {
 					renderedCount++
 				}
 			}
@@ -299,11 +299,11 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			Expect(response2.StatusCode).To(Equal(200))
 
 			By("Verifying EG1 performed the render")
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"),
 				"EG1 should have rendered (acquired lock)")
 
 			By("Verifying EG2 served from cache (pulled after lock released)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"EG2 should have pulled from cache (lock prevented duplicate render)")
 
 			By("Verifying content matches")
@@ -351,7 +351,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=ttl_expire", "ttl-expire-test-initial")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying cache exists with eg_ids")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -387,7 +387,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			Expect(response2.StatusCode).To(Equal(200))
 
 			By("Verifying EG3 rendered fresh (didn't pull expired cache)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render"),
 				"Should render fresh when cache is expired")
 
 			newEgIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -410,7 +410,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=stale_file", "stale-file-test-initial")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying cache metadata exists")
 			metadata, err := testEnv.GetRedisMetadata(cacheKey)
@@ -433,7 +433,7 @@ var _ = Describe("Failure Scenarios", Serial, func() {
 			Expect(response2.StatusCode).To(Equal(200))
 
 			By("Verifying EG1 re-rendered (ignored orphaned file)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render"),
 				"Should re-render when metadata is missing (orphaned file ignored)")
 
 			newMetadata, err := testEnv.GetRedisMetadata(cacheKey)

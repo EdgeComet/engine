@@ -365,7 +365,7 @@ func TestFilterSafeHeaders_RealWorldScenarios(t *testing.T) {
 				"Content-Type":          {"application/json"},
 				"X-RateLimit-Limit":     {"1000"},
 				"X-RateLimit-Remaining": {"999"},
-				"X-Request-ID":          {"abc-123-def"},
+				"EC-Request-ID":         {"abc-123-def"},
 			},
 			safeHeaders: []string{"Content-Type", "X-RateLimit-Limit", "X-RateLimit-Remaining"},
 			expected: map[string][]string{

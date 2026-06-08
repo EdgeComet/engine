@@ -34,7 +34,7 @@ var _ = Describe("Replication Factor Enforcement", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=replication_limit")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying cache exists with replication factor = 2")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -73,7 +73,7 @@ var _ = Describe("Replication Factor Enforcement", Serial, func() {
 			Expect(response2.Body).To(ContainSubstring("Sharding Test Page"))
 
 			By("Verifying cache is served (pull to memory worked)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should serve from cache (pulled to memory)")
 
 			By("Waiting briefly for any potential metadata update")
@@ -111,8 +111,8 @@ var _ = Describe("Replication Factor Enforcement", Serial, func() {
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
 
-			By("Verifying X-Render-Source indicates bypass")
-			source := response1.Headers.Get("X-Render-Source")
+			By("Verifying EC-Source indicates bypass")
+			source := response1.Headers.Get("EC-Source")
 			Expect(source).To(Or(Equal("bypass"), Equal("bypass_cache")),
 				"Should be served via bypass mode")
 

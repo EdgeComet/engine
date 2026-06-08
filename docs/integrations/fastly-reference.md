@@ -255,12 +255,12 @@ For production monitoring, configure a logging endpoint (S3, BigQuery, Datadog, 
 
 ```vcl
 # In vcl_deliver
-if (resp.http.X-Render-Source) {
+if (resp.http.EC-Source) {
     log {"syslog "} req.service_id {" eg-logging :: "}
         {"{"}
             {""url": ""} req.url {"", "}
-            {""render_source": ""} resp.http.X-Render-Source {"", "}
-            {""cache_age": ""} resp.http.X-Cache-Age {"", "}
+            {""render_source": ""} resp.http.EC-Source {"", "}
+            {""cache_age": ""} resp.http.EC-Cache-Age {"", "}
             {""user_agent": ""} req.http.User-Agent {"", "}
             {""client_ip": ""} client.ip {"" "}
         {"}"};

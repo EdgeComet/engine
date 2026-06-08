@@ -18,14 +18,13 @@ var _ = Describe("Stale Cache Behavior", func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 2: Request again immediately - should serve fresh cache")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Step 3: Verify response content matches cached version")
 			Expect(resp2.Body).To(ContainSubstring("Stale Cache Test Page"))
@@ -40,7 +39,7 @@ var _ = Describe("Stale Cache Behavior", func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 			originalBody := resp1.Body
 
 			By("Step 2: Get cache key for this URL")
@@ -63,8 +62,7 @@ var _ = Describe("Stale Cache Behavior", func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_stale"))
 
 			By("Step 7: Verify content matches original cache")
 			Expect(resp2.Body).To(Equal(originalBody))
@@ -100,13 +98,13 @@ var _ = Describe("Stale Cache Behavior", func() {
 
 			By("Step 6: Should serve stale cache (not 500 error)")
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_stale"))
 			Expect(resp2.Body).To(Equal(originalBody))
 		})
 	})
 
 	Context("Response Headers Validation", func() {
-		It("should set X-Render-Cache: hit for fresh cache", func() {
+		It("should set EC-Source: render_cache for fresh cache", func() {
 			url := "/stale-test/simple.html?test=fresh-headers"
 
 			By("Step 1: Create fresh cache")
@@ -116,15 +114,14 @@ var _ = Describe("Stale Cache Behavior", func() {
 			By("Step 2: Request again - should be fresh cache")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
-			By("Step 3: Verify X-Cache-Age header is present and reasonable")
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			By("Step 3: Verify EC-Cache-Age header is present and reasonable")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 		})
 
-		It("should set X-Render-Cache: stale when serving stale cache", func() {
+		It("should set EC-Source: render_stale when serving stale cache", func() {
 			url := "/stale-test/default?test=stale-headers"
 
 			By("Step 1: Create fresh cache")
@@ -147,15 +144,14 @@ var _ = Describe("Stale Cache Behavior", func() {
 			By("Step 5: Request again - should serve stale with correct headers")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_stale"))
 
-			By("Step 5: Verify X-Cache-Age header is present")
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			By("Step 5: Verify EC-Cache-Age header is present")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 		})
 
-		It("should calculate X-Cache-Age correctly for stale cache", func() {
+		It("should calculate EC-Cache-Age correctly for stale cache", func() {
 			url := "/stale-test/default?test=cache-age"
 
 			By("Step 1: Create fresh cache")
@@ -178,9 +174,9 @@ var _ = Describe("Stale Cache Behavior", func() {
 			By("Step 4: Request and verify cache age reflects time passed")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_stale"))
 
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 			// Age should be a valid duration in integer seconds
 			Expect(cacheAge).To(MatchRegexp(`^[0-9]+$`))
@@ -208,8 +204,7 @@ var _ = Describe("Stale Cache Behavior", func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("rendered"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("new"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render"))
 		})
 
 		It("should handle redirect status codes with stale cache", func() {
@@ -239,7 +234,7 @@ var _ = Describe("Stale Cache Behavior", func() {
 			resp2 := testEnv.RequestRenderNoRedirect(urlWith301)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(301))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_stale"))
 		})
 	})
 
@@ -357,7 +352,7 @@ var _ = Describe("Stale Cache Edge Cases", func() {
 			By("Step 2: Request immediately - verify cache age is small")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 			// Age should be very small (0 seconds)
 			Expect(cacheAge).To(MatchRegexp(`^0$`))
@@ -392,7 +387,7 @@ var _ = Describe("Stale Cache Edge Cases", func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			// Should bypass since there's no stale cache and render failed
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 		})
 	})
 })
@@ -406,15 +401,14 @@ var _ = Describe("Stale Cache - Integration Tests", func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
 			Expect(err).To(BeNil())
 
 			By("Phase 2: Fresh cache serving (< 2s)")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Phase 3: Stale period (2s < t < 12s)")
 			err = testEnv.MakeCacheStale(cacheKey, 3*time.Second)
@@ -428,8 +422,7 @@ var _ = Describe("Stale Cache - Integration Tests", func() {
 			By("Phase 3b: Request should serve stale cache")
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Error).To(BeNil())
-			Expect(resp3.Headers.Get("X-Render-Cache")).To(Equal("stale"))
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_stale"))
 
 			testEnv.RestoreRenderServiceHealth()
 
@@ -441,7 +434,7 @@ var _ = Describe("Stale Cache - Integration Tests", func() {
 			By("Phase 5: Fresh render required (no cache)")
 			resp4 := testEnv.RequestRender(url)
 			Expect(resp4.Error).To(BeNil())
-			Expect(resp4.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp4.Headers.Get("EC-Source")).To(Equal("render"))
 		})
 	})
 
@@ -475,7 +468,7 @@ var _ = Describe("Stale Cache - Integration Tests", func() {
 			Expect(resp1.Error).To(BeNil())
 
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
 			Expect(err).To(BeNil())
@@ -490,7 +483,7 @@ var _ = Describe("Stale Cache - Integration Tests", func() {
 			Expect(err).To(BeNil())
 
 			resp3 := testEnv.RequestRender(url)
-			Expect(resp3.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_stale"))
 
 			testEnv.RestoreRenderServiceHealth()
 

@@ -51,8 +51,8 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("Sharding Test Page"))
 			Expect(response.Body).To(ContainSubstring("This is a test page for sharding acceptance tests"))
 
-			By("Verifying X-Render-Source header indicates fresh render")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			By("Verifying EC-Source header indicates fresh render")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"),
 				"First request should be freshly rendered")
 
 			By("Verifying cache metadata exists in Redis")
@@ -86,20 +86,16 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=basic_local_cache")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Making second request via EG1 (should hit cache)")
 			response2 := testEnv.RequestViaEG1("/static/test.html?test=basic_local_cache")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
 
-			By("Verifying X-Render-Source indicates cache hit")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			By("Verifying EC-Source indicates cache hit")
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Second request should be served from cache")
-
-			By("Verifying X-Render-Cache header")
-			Expect(response2.Headers.Get("X-Render-Cache")).To(Equal("hit"),
-				"Cache header should indicate hit")
 
 			By("Verifying response content matches original render")
 			Expect(response2.Body).To(Equal(response1.Body),
@@ -122,7 +118,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=basic_remote_pull")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Getting eg_ids to determine which EG has the cache")
 			egIDs, err := testEnv.GetEGIDs(cacheKey)
@@ -160,8 +156,8 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			Expect(response2.Error).To(BeNil(), "Pull request should succeed")
 			Expect(response2.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
-			By("Verifying X-Render-Source indicates cache (pulled from remote)")
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			By("Verifying EC-Source indicates cache (pulled from remote)")
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should be served from cache (pulled from remote EG)")
 
 			By("Verifying pulled content matches original render")
@@ -228,7 +224,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/test.html?test=basic_push_no_pull", "test-push-initial")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying content is from standard test page")
 			Expect(response1.Body).To(ContainSubstring("Sharding Test Page"))
@@ -262,7 +258,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			By("Verifying request served from local cache (not pulled)")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should be served from cache (local file from push)")
 
 			By("Verifying content matches original render")
@@ -336,7 +332,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Request should be served from cache (pulled)")
 
 			By("Verifying eg_ids is unchanged")
@@ -370,7 +366,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			response1 := testEnv.RequestViaEG1("/static/proxy-mode.html?test=basic_proxy_mode", "proxy-mode-initial-eg1")
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying content is from proxy-mode test page")
 			Expect(response1.Body).To(ContainSubstring("Proxy Mode Test Page"))
@@ -410,7 +406,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			By("Verifying request succeeded via pull")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should be served from cache (pulled from remote)")
 
 			By("Verifying pulled content matches original render")
@@ -437,7 +433,7 @@ var _ = Describe("Basic Sharding Operations", Serial, func() {
 			By("Verifying subsequent request still works (pulls again)")
 			Expect(response3.Error).To(BeNil())
 			Expect(response3.StatusCode).To(Equal(200))
-			Expect(response3.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response3.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should still serve from cache (pulled again)")
 			Expect(response3.Body).To(Equal(response1.Body))
 

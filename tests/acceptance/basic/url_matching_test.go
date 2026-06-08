@@ -13,7 +13,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page content is present")
 			Expect(response.Body).To(ContainSubstring("Simple Fragment Test"))
@@ -26,7 +26,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page content is present")
 			Expect(response.Body).To(ContainSubstring("Simple Fragment Test"))
@@ -39,7 +39,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page content is present")
 			Expect(response.Body).To(ContainSubstring("Simple Fragment Test"))
@@ -52,7 +52,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying JavaScript executed")
 			Expect(response.Body).To(ContainSubstring(`data-fragment-test="complete"`))
@@ -67,7 +67,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying Unicode content is present")
 			Expect(response.Body).To(ContainSubstring("Unicode Content Test"))
@@ -145,7 +145,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page content is present")
 			Expect(response.Body).To(ContainSubstring("URL Encoding Test Page"))
@@ -184,7 +184,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page loaded correctly")
 			Expect(response.Body).To(ContainSubstring("Simple Fragment Test"))
@@ -198,7 +198,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying content is present")
 			Expect(response.Body).To(ContainSubstring("Unicode Content Test"))
@@ -210,7 +210,7 @@ var _ = Describe("URL Matching", Serial, func() {
 
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying page loaded correctly")
 			Expect(response.Body).To(ContainSubstring("URL Encoding Test Page"))

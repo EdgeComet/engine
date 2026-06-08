@@ -55,20 +55,9 @@ func (rw *ResponseWriter) WriteRenderedResponse(renderCtx *edgectx.RenderContext
 
 	// Set response headers
 	renderCtx.HTTPCtx.Response.Header.Set("Content-Type", "text/html; charset=utf-8")
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Source", "rendered")
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Service", serviceID)
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Cache", "new")
+	renderCtx.HTTPCtx.Response.Header.Set(types.HeaderSource, types.SourceRender)
 	renderCtx.HTTPCtx.Response.Header.SetContentLength(len(html))
-
-	// Set X-Unmatched-Dimension header if fallback dimension was used
-	if renderCtx.DimensionUnmatched {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Unmatched-Dimension", "true")
-	}
-
-	// Set matched rule header if available
-	if renderCtx.ResolvedConfig != nil && renderCtx.ResolvedConfig.MatchedRuleID != "" {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Matched-Rule", renderCtx.ResolvedConfig.MatchedRuleID)
-	}
+	rw.setMatchedRuleHeader(renderCtx)
 
 	// Serve the content
 	renderCtx.HTTPCtx.Response.SetBody(html)
@@ -84,14 +73,9 @@ func (rw *ResponseWriter) WriteBypassResponse(renderCtx *edgectx.RenderContext, 
 	// Set content type
 	renderCtx.HTTPCtx.Response.Header.Set("Content-Type", bypassResp.ContentType)
 
-	// Set bypass-specific headers
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Source", "bypass")
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Cache", "bypass")
-
-	// Set matched rule header if available
-	if renderCtx.ResolvedConfig != nil && renderCtx.ResolvedConfig.MatchedRuleID != "" {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Matched-Rule", renderCtx.ResolvedConfig.MatchedRuleID)
-	}
+	// Set bypass source header
+	renderCtx.HTTPCtx.Response.Header.Set(types.HeaderSource, types.SourceBypass)
+	rw.setMatchedRuleHeader(renderCtx)
 
 	// Always preserve Location for redirects (essential for proper redirect behavior)
 	// Case-insensitive lookup per RFC 7230 (origin may send "location" lowercase)
@@ -184,7 +168,7 @@ func (rw *ResponseWriter) WriteCacheResponse(renderCtx *edgectx.RenderContext, c
 
 // WriteCachedMetadataResponse writes a metadata-only cached response (no file on disk).
 // Handles both redirects (3xx with Location) and status overrides (404/410 from content processor).
-// Sets proper cache headers: X-Render-Source, X-Render-Cache, X-Cache-Age.
+// Sets the cache headers: EC-Source and EC-Cache-Age.
 func (rw *ResponseWriter) WriteCachedMetadataResponse(renderCtx *edgectx.RenderContext, cacheEntry *cache.CacheMetadata) error {
 	renderCtx.Logger.Debug("Serving cached metadata-only response",
 		zap.Int("status_code", cacheEntry.StatusCode),
@@ -235,12 +219,8 @@ func (rw *ResponseWriter) WriteStatusResponse(renderCtx *edgectx.RenderContext, 
 
 	// Set default headers
 	renderCtx.HTTPCtx.Response.Header.Set("Content-Type", "text/plain; charset=utf-8")
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Action", "status")
-
-	// Set matched rule header if available
-	if renderCtx.ResolvedConfig != nil && renderCtx.ResolvedConfig.MatchedRuleID != "" {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Matched-Rule", renderCtx.ResolvedConfig.MatchedRuleID)
-	}
+	renderCtx.HTTPCtx.Response.Header.Set(types.HeaderSource, types.SourceStatus)
+	rw.setMatchedRuleHeader(renderCtx)
 
 	// Apply custom headers (can override defaults including Content-Type)
 	for key, value := range statusConfig.Headers {
@@ -277,30 +257,40 @@ func (rw *ResponseWriter) WriteStatusResponse(renderCtx *edgectx.RenderContext, 
 	return nil
 }
 
-// setCacheHeaders sets common cache response headers: X-Render-Source, X-Render-Cache (hit/stale),
-// X-Cache-Age, and X-Matched-Rule.
+// setCacheHeaders sets the cache response headers: EC-Source (fresh vs stale per
+// source) and EC-Cache-Age.
 func (rw *ResponseWriter) setCacheHeaders(renderCtx *edgectx.RenderContext, cacheEntry *cache.CacheMetadata, cacheAge time.Duration) {
-	if cacheEntry.Source == "bypass" {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Render-Source", "bypass_cache")
-	} else {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Render-Source", "cache")
-	}
-
-	cacheStatus := "hit"
+	isStale := false
 	if cacheEntry.IsExpired() {
 		expiredConfig := getExpiredConfigForSource(renderCtx, cacheEntry.Source)
 		if expiredConfig.StaleTTL != nil {
 			staleTTL := time.Duration(*expiredConfig.StaleTTL)
 			if cacheEntry.IsStale(staleTTL) {
-				cacheStatus = "stale"
+				isStale = true
 			}
 		}
 	}
-	renderCtx.HTTPCtx.Response.Header.Set("X-Render-Cache", cacheStatus)
-	renderCtx.HTTPCtx.Response.Header.Set("X-Cache-Age", fmt.Sprintf("%d", int(cacheAge.Seconds())))
 
+	var source string
+	switch {
+	case cacheEntry.Source == cache.SourceBypass && isStale:
+		source = types.SourceBypassStale
+	case cacheEntry.Source == cache.SourceBypass:
+		source = types.SourceBypassCache
+	case isStale:
+		source = types.SourceRenderStale
+	default:
+		source = types.SourceRenderCache
+	}
+	renderCtx.HTTPCtx.Response.Header.Set(types.HeaderSource, source)
+	renderCtx.HTTPCtx.Response.Header.Set(types.HeaderCacheAge, fmt.Sprintf("%d", int(cacheAge.Seconds())))
+	rw.setMatchedRuleHeader(renderCtx)
+}
+
+// setMatchedRuleHeader sets EC-Matched-Rule when the matched rule has an explicit ID.
+func (rw *ResponseWriter) setMatchedRuleHeader(renderCtx *edgectx.RenderContext) {
 	if renderCtx.ResolvedConfig != nil && renderCtx.ResolvedConfig.MatchedRuleID != "" {
-		renderCtx.HTTPCtx.Response.Header.Set("X-Matched-Rule", renderCtx.ResolvedConfig.MatchedRuleID)
+		renderCtx.HTTPCtx.Response.Header.Set(types.HeaderMatchedRule, renderCtx.ResolvedConfig.MatchedRuleID)
 	}
 }
 

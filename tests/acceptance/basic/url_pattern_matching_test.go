@@ -154,7 +154,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying bypass action was taken")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 		})
 	})
@@ -168,7 +168,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying bypass action for PDF")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 
 			By("Making request to PDF in nested directory")
@@ -178,7 +178,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying nested PDF also bypassed")
 			Expect(response2.Headers).NotTo(BeNil())
-			source2 := response2.Headers.Get("X-Render-Source")
+			source2 := response2.Headers.Get("EC-Source")
 			Expect(source2).To(Equal("bypass"))
 		})
 
@@ -223,7 +223,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 			// Cache is cleared before each test, so first request is always bypass
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 		})
 
@@ -235,7 +235,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying bypass for deeply nested PDF")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 		})
 	})
@@ -340,7 +340,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying bypass action from /api/* rule")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 		})
 
@@ -356,7 +356,7 @@ var _ = Describe("URL Pattern Matching", Serial, func() {
 
 			By("Verifying bypass action")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 		})
 

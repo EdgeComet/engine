@@ -15,10 +15,10 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule header is present and indicates query match")
+			By("Verifying EC-Matched-Rule header is present and indicates query match")
 			Expect(response.Headers).NotTo(BeNil())
-			matchedRule := response.Headers.Get("X-Matched-Rule")
-			Expect(matchedRule).NotTo(BeEmpty(), "X-Matched-Rule header should be set")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
+			Expect(matchedRule).NotTo(BeEmpty(), "EC-Matched-Rule header should be set")
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/exact-match"), "Rule should match exact-match pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Rule should indicate query parameter matching")
 		})
@@ -35,8 +35,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Both render successfully, but different rules matched
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback to wildcard rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback to wildcard rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -53,8 +53,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 			Expect(response.Body).To(ContainSubstring("No query parameters"))
 
-			By("Verifying X-Matched-Rule indicates fallback to wildcard rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback to wildcard rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -71,8 +71,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Exact matching is case-insensitive: "Tech" matches "tech"
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates exact match rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates exact match rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/exact-match"), "Should match exact-match pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Rule should indicate query parameter matching")
@@ -88,8 +88,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/wildcard-required"), "Should match wildcard-required pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -106,8 +106,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 			Expect(response.Body).To(ContainSubstring("No query parameters"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -124,8 +124,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Falls back to generic rule
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -148,7 +148,7 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 
 			By("Verifying all matched the query-specific rule")
 			for _, resp := range []*TestResponse{response1, response2, response3} {
-				matchedRule := resp.Headers.Get("X-Matched-Rule")
+				matchedRule := resp.Headers.Get("EC-Matched-Rule")
 				Expect(matchedRule).NotTo(BeEmpty())
 				Expect(matchedRule).To(ContainSubstring("/qparam-test/wildcard-required"), "Should match wildcard-required pattern")
 				Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -165,8 +165,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/array-or"), "Should match array-or pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -180,8 +180,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/array-or"), "Should match array-or pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -195,8 +195,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/array-or"), "Should match array-or pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -213,8 +213,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Falls back to generic rule
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -230,8 +230,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying rule did not match")
 			Expect(response.Body).To(ContainSubstring("No query parameters"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -247,8 +247,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/multi-and"), "Should match multi-and pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -262,8 +262,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/multi-and"), "Should match multi-and pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -280,8 +280,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Falls back to generic rule
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -297,8 +297,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying AND logic rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -314,8 +314,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying AND logic rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -331,8 +331,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying wildcard condition failed on empty value")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -348,8 +348,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/regexp-sensitive"), "Should match regexp-sensitive pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -365,8 +365,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying regexp rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -393,7 +393,7 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 
 			By("Verifying all matched the query-specific rule")
 			for _, resp := range []*TestResponse{response1, response2, response3} {
-				matchedRule := resp.Headers.Get("X-Matched-Rule")
+				matchedRule := resp.Headers.Get("EC-Matched-Rule")
 				Expect(matchedRule).NotTo(BeEmpty())
 				Expect(matchedRule).To(ContainSubstring("/qparam-test/regexp-insensitive"), "Should match regexp-insensitive pattern")
 				Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -410,8 +410,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying regexp rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -427,8 +427,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/complex"), "Should match complex pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -442,8 +442,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/complex"), "Should match complex pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -459,8 +459,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying complex rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -476,8 +476,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying regexp validation failed")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -493,8 +493,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying wildcard condition failed")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -526,8 +526,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 			Expect(response.Body).To(ContainSubstring("No query parameters"))
 
-			By("Verifying X-Matched-Rule indicates path-only rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates path-only rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/priority"), "Should match priority path pattern")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Path-only rule has no query matching")
@@ -543,8 +543,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying path-only fallback rule matched")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates path-only rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates path-only rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/priority"), "Should match priority path pattern")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Path-only rule has no query matching")
@@ -580,11 +580,11 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 
 			By("Verifying bypass action was taken")
 			Expect(response.Headers).NotTo(BeNil())
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			Expect(source).To(Equal("bypass"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/api-call"), "Should match api-call pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching for format=json")
@@ -600,8 +600,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying fallback rule rendered instead of bypass")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -617,8 +617,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/regexp-special"), "Should match regexp-special pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -632,8 +632,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/regexp-special"), "Should match regexp-special pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -649,8 +649,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying email regexp rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -666,8 +666,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying email regexp rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 		})
@@ -682,8 +682,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying email regexp rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 		})
@@ -698,8 +698,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/mixed"), "Should match mixed pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -713,8 +713,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/mixed"), "Should match mixed pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -730,8 +730,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying mixed rule did not match due to scalar mismatch")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -747,8 +747,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying mixed rule did not match due to array value mismatch")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -768,9 +768,9 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response1.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 			Expect(response2.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback for both")
+			By("Verifying EC-Matched-Rule indicates fallback for both")
 			for _, resp := range []*TestResponse{response1, response2} {
-				matchedRule := resp.Headers.Get("X-Matched-Rule")
+				matchedRule := resp.Headers.Get("EC-Matched-Rule")
 				Expect(matchedRule).NotTo(BeEmpty())
 				Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 				Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -787,8 +787,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/non-empty"), "Should match non-empty pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -806,7 +806,7 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 
 			By("Verifying all matched the non-empty rule")
 			for _, resp := range []*TestResponse{response1, response2, response3} {
-				matchedRule := resp.Headers.Get("X-Matched-Rule")
+				matchedRule := resp.Headers.Get("EC-Matched-Rule")
 				Expect(matchedRule).NotTo(BeEmpty())
 				Expect(matchedRule).To(ContainSubstring("/qparam-test/non-empty"), "Should match non-empty pattern")
 				Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -823,8 +823,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying wildcard rejected empty value")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -840,8 +840,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying wildcard rule requires parameter presence")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -857,8 +857,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/exact-multi"), "Should match exact-multi pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -874,8 +874,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying exact match rule did not match")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -892,8 +892,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Parameter names should match exactly (case-sensitive)
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/case-sensitive"), "Should match case-sensitive pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -910,8 +910,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			// Config has "Code", request has "code" → no match
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying X-Matched-Rule indicates fallback rule")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying EC-Matched-Rule indicates fallback rule")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/*"), "Should match fallback wildcard rule")
 			Expect(matchedRule).NotTo(ContainSubstring("?..."), "Fallback rule has no query matching")
@@ -925,8 +925,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/wildcard-required"), "Should match wildcard-required pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -944,8 +944,8 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 			By("Verifying first value was used for matching")
 			Expect(response.Body).To(ContainSubstring("QPARAM_TEST_PAGE"))
 
-			By("Verifying correct rule matched via X-Matched-Rule header")
-			matchedRule := response.Headers.Get("X-Matched-Rule")
+			By("Verifying correct rule matched via EC-Matched-Rule header")
+			matchedRule := response.Headers.Get("EC-Matched-Rule")
 			Expect(matchedRule).NotTo(BeEmpty())
 			Expect(matchedRule).To(ContainSubstring("/qparam-test/array-or"), "Should match array-or pattern")
 			Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")
@@ -965,7 +965,7 @@ var _ = Describe("Query Parameter Matching", Serial, func() {
 
 			By("Verifying both matched the same rule")
 			for _, resp := range []*TestResponse{response1, response2} {
-				matchedRule := resp.Headers.Get("X-Matched-Rule")
+				matchedRule := resp.Headers.Get("EC-Matched-Rule")
 				Expect(matchedRule).NotTo(BeEmpty())
 				Expect(matchedRule).To(ContainSubstring("/qparam-test/multi-and"), "Should match multi-and pattern")
 				Expect(matchedRule).To(ContainSubstring("?..."), "Should indicate query matching")

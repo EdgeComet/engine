@@ -1,11 +1,14 @@
 ---
 title: Diagnostic headers
-description: X- headers for tracking request processing and troubleshooting
+description: EC- headers for tracking request processing and troubleshooting
 ---
 
 # Diagnostic headers
 
-For each request, Edge Gateway exposes several X- headers that help track URL processing and diagnose issues.
+For each request, Edge Gateway exposes a small set of `EC-` headers that help track URL
+processing and diagnose issues. EdgeComet's own informational headers use the `EC-` prefix;
+functional and internal headers (`X-Render-Key`, `X-Edge-Render`, `X-Internal-Auth`) keep the
+`X-` prefix.
 
 ## Request headers
 
@@ -20,7 +23,7 @@ Authentication token for host authorization.
 | Required | Yes |
 | Value | Render key from host configuration |
 
-### X-Request-ID
+### EC-Request-ID
 
 Custom request ID for distributed tracing.
 
@@ -30,77 +33,49 @@ Custom request ID for distributed tracing.
 | Default | Auto-generated UUID |
 | Max length | 36 characters |
 
-If provided, Edge Gateway sanitizes and uses this ID for request tracking throughout the system. If absent, a UUID is generated automatically.
+If provided, Edge Gateway sanitizes and uses this ID for request tracking throughout the
+system. If absent, a UUID is generated automatically. Only `EC-Request-ID` is read on the
+way in; an inbound `X-Request-ID` is ignored.
 
-Providing a custom request ID allows you to easily debug request processing in high traffic environments.
+Providing a custom request ID allows you to easily debug request processing in high traffic
+environments.
 
 ## Response headers
 
-Headers Edge Gateway returns in every response.
+EdgeComet adds at most these informational headers to a response.
 
-### X-Request-ID
+### EC-Request-ID
 
 Request tracing identifier. Always present in responses.
 
 Returns either your custom ID (with a 5-character random prefix) or the auto-generated UUID.
 
-### X-Render-Source
+### EC-Source
 
-Indicates the source of the served content.
+Indicates how the response was produced. Present on every served response.
 
 | Value | Description |
 |-------|-------------|
-| `rendered` | Freshly rendered by Chrome |
-| `cache` | Served from render cache |
+| `render` | Freshly rendered by Chrome |
 | `bypass` | Direct fetch from origin (no rendering) |
-| `bypass_cache` | Served from bypass cache |
+| `render_cache` | Fresh content from the render cache |
+| `bypass_cache` | Fresh content from the bypass cache |
+| `render_stale` | Expired render cache served within stale TTL |
+| `bypass_stale` | Expired bypass cache served within stale TTL |
+| `status` | A configured status action (3xx/4xx/5xx rule) produced the response |
 
-### X-Render-Cache
-
-Cache operation status.
-
-| Value | Description |
-|-------|-------------|
-| `new` | Freshly rendered content (not from cache) |
-| `hit` | Cache found and valid |
-| `stale` | Cache expired but served within stale TTL |
-| `bypass` | Cache was bypassed |
-
-### X-Render-Service
-
-Render service instance that processed the request.
-
-Only present when `X-Render-Source: rendered`.
-
-### X-Cache-Age
+### EC-Cache-Age
 
 Time in seconds since content was cached.
 
-Only present when serving from cache (`X-Render-Source: cache` or `bypass_cache`).
+Only present when serving from cache (`EC-Source: render_cache`, `bypass_cache`,
+`render_stale`, or `bypass_stale`).
 
-### X-Matched-Rule
+### EC-Matched-Rule
 
 ID of the URL pattern rule that matched the request.
 
 Only present when the request matched a configured URL rule with an ID.
-
-### X-Unmatched-Dimension
-
-Set to `true` when the User-Agent didn't match any configured dimension and a fallback was applied.
-
-Only present when fallback behavior is triggered.
-
-### X-Render-Action
-
-Set to `status` when a status action (3xx, 4xx, 5xx) was performed.
-
-Only present for status action responses.
-
-### X-Processed-URL
-
-Normalized URL after tracking parameter stripping.
-
-Only present when tracking parameter removal is enabled and parameters were stripped.
 
 ## Troubleshooting with headers
 
@@ -108,7 +83,7 @@ Use these headers to diagnose issues without accessing logs.
 
 ### Verify content source
 
-Check `X-Render-Source` to confirm whether content came from cache or was freshly rendered:
+Check `EC-Source` to confirm whether content came from cache or was freshly rendered:
 
 ```bash
 curl -I -H "X-Render-Key: your-key" https://edge.example.com/page
@@ -116,29 +91,25 @@ curl -I -H "X-Render-Key: your-key" https://edge.example.com/page
 
 ### Check cache freshness
 
-Combine `X-Render-Cache` and `X-Cache-Age` to understand cache state:
+Read `EC-Source` together with `EC-Cache-Age` to understand cache state:
 
-- `X-Render-Cache: hit` with low `X-Cache-Age` = fresh cache
-- `X-Render-Cache: stale` = expired but within stale TTL
-- `X-Render-Cache: new` = cache miss, freshly rendered
+- `EC-Source: render_cache` (or `bypass_cache`) with low `EC-Cache-Age` = fresh cache
+- `EC-Source: render_stale` (or `bypass_stale`) = expired but served within stale TTL
+- `EC-Source: render` = cache miss, freshly rendered
 
 ### Trace requests
 
-Use `X-Request-ID` to correlate logs across Edge Gateway and Render Service:
+Use `EC-Request-ID` to correlate logs across Edge Gateway and Render Service:
 
 ```bash
 curl -H "X-Render-Key: your-key" \
-     -H "X-Request-ID: my-trace-123" \
+     -H "EC-Request-ID: my-trace-123" \
      https://edge.example.com/page
 ```
 
 ### Identify matched rules
 
-Check `X-Matched-Rule` to verify which URL pattern configuration applied to the request.
-
-### Debug dimension matching
-
-If `X-Unmatched-Dimension: true` appears, the User-Agent didn't match any configured dimension. Review your dimension patterns or check that the correct User-Agent was sent.
+Check `EC-Matched-Rule` to verify which URL pattern configuration applied to the request.
 
 ## Internal headers
 

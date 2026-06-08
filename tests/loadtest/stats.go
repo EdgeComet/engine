@@ -142,12 +142,12 @@ func (gs *GlobalStats) RecordRequest(result *RequestResult) {
 		}
 
 		switch result.RenderSource {
-		case "cache":
+		case "render_cache", "render_stale":
 			atomic.AddInt64(&gs.CacheHits, 1)
 			gs.histogramMu.Lock()
 			gs.ResponseTimesCache.RecordValue(result.Duration.Milliseconds())
 			gs.histogramMu.Unlock()
-		case "rendered":
+		case "render":
 			atomic.AddInt64(&gs.Rendered, 1)
 			gs.histogramMu.Lock()
 			gs.ResponseTimesRendered.RecordValue(result.Duration.Milliseconds())
@@ -157,7 +157,7 @@ func (gs *GlobalStats) RecordRequest(result *RequestResult) {
 			gs.histogramMu.Lock()
 			gs.ResponseTimesBypass.RecordValue(result.Duration.Milliseconds())
 			gs.histogramMu.Unlock()
-		case "bypass_cache":
+		case "bypass_cache", "bypass_stale":
 			atomic.AddInt64(&gs.BypassCache, 1)
 			gs.histogramMu.Lock()
 			gs.ResponseTimesBypassCache.RecordValue(result.Duration.Milliseconds())
@@ -224,13 +224,13 @@ func (gs *GlobalStats) recordHostStats(result *RequestResult) {
 		}
 
 		switch result.RenderSource {
-		case "cache":
+		case "render_cache", "render_stale":
 			atomic.AddInt64(&hostStats.CacheHits, 1)
-		case "rendered":
+		case "render":
 			atomic.AddInt64(&hostStats.Rendered, 1)
 		case "bypass":
 			atomic.AddInt64(&hostStats.Bypass, 1)
-		case "bypass_cache":
+		case "bypass_cache", "bypass_stale":
 			atomic.AddInt64(&hostStats.BypassCache, 1)
 		}
 

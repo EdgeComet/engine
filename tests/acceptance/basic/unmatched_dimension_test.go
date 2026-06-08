@@ -12,7 +12,7 @@ import (
 
 var _ = Describe("Unmatched Dimension Handling", Serial, func() {
 	Context("Matched Dimension - No Fallback", func() {
-		It("should NOT set X-Unmatched-Dimension header when User-Agent matches", func() {
+		It("should render content when User-Agent matches a dimension", func() {
 			By("Making request with Googlebot User-Agent")
 			response := makeRequestWithCustomUA("/test-unmatched/desktop/", "Googlebot/2.1 (+http://www.google.com/bot.html)")
 
@@ -20,12 +20,8 @@ var _ = Describe("Unmatched Dimension Handling", Serial, func() {
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
-			By("Verifying X-Unmatched-Dimension header is NOT set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty(),
-				"X-Unmatched-Dimension header should NOT be set when dimension matches")
-
 			By("Verifying content was rendered")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"),
 				"Content should be rendered")
 		})
 	})
@@ -39,12 +35,8 @@ var _ = Describe("Unmatched Dimension Handling", Serial, func() {
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
-			By("Verifying X-Unmatched-Dimension header is set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set to 'true'")
-
-			By("Verifying X-Render-Source indicates bypass (host default)")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			By("Verifying EC-Source indicates bypass (host default)")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"Should bypass rendering (host default unmatched_dimension: bypass)")
 		})
 	})

@@ -146,10 +146,8 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 			Expect(resp2.Error).To(BeNil())
 
 			By("Verifying cache hit headers")
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Second request should be served from cache")
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"),
-				"Cache header should indicate hit")
 
 			By("Verifying Location header preserved")
 			locationHeader2 := resp2.Headers.Get("Location")
@@ -157,7 +155,7 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 				"Location header should be preserved from cache")
 
 			By("Verifying cache age header present")
-			Expect(resp2.Headers.Get("X-Cache-Age")).NotTo(BeEmpty(),
+			Expect(resp2.Headers.Get("EC-Cache-Age")).NotTo(BeEmpty(),
 				"Cache age should be set for cached redirects")
 		})
 
@@ -173,7 +171,7 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 			Expect(resp2.Error).To(BeNil())
 
 			By("Verifying cache hit")
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 
 		PIt("should update last_access timestamp on cache hit", func() {
@@ -323,7 +321,7 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 			resp3 := testEnv.RequestRender(contentURL2)
 			Expect(resp3.Error).To(BeNil())
 			Expect(resp3.StatusCode).To(Equal(200))
-			Expect(resp3.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Verifying all requests completed successfully")
 			Expect(resp1.Error).To(BeNil())

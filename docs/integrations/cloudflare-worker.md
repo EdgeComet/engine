@@ -330,7 +330,7 @@ curl -v \
 ```
 
 Check response headers:
-- `X-Render-Source: rendered` or `X-Render-Source: cache` confirms Edge Gateway processed the request
+- `EC-Source: render` or `EC-Source: render_cache` confirms Edge Gateway processed the request
 
 Test regular user traffic goes directly to origin:
 
@@ -340,7 +340,7 @@ curl -v \
   "https://example.com/"
 ```
 
-Request should have no `X-Render-*` headers in response.
+Request should have no `EC-*` headers in response.
 
 ## Worker requests
 
@@ -405,8 +405,8 @@ The Worker script provided in this guide works without modification. Most issues
 
 ### Cache not working
 
-- Verify `X-Render-Source` header shows `cache` on repeat crawler requests
-- Check `X-Cache-Age` header for cache duration
+- Verify `EC-Source` header shows `render_cache` on repeat crawler requests
+- Check `EC-Cache-Age` header for cache duration
 - Review Edge Gateway cache configuration
 
 ## Related documentation

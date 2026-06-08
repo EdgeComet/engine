@@ -79,12 +79,12 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200), "Should return HTTP 200 OK")
 
 			By("Verifying response headers")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty(), "Should include X-Request-ID")
-			Expect(response.Headers.Get("X-Render-Source")).To(Or(
-				Equal("rendered"),
-				Equal("cache"),
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty(), "Should include EC-Request-ID")
+			Expect(response.Headers.Get("EC-Source")).To(Or(
+				Equal("render"),
+				Equal("render_cache"),
 				Equal("bypass"),
-			), "Should include X-Render-Source header")
+			), "Should include EC-Source header")
 
 			By("Verifying content is returned")
 			Expect(response.Body).To(ContainSubstring("Static Content"), "Body should contain expected content")
@@ -100,8 +100,8 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying response headers indicate mobile bot")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
-			Expect(response.Headers.Get("X-Render-Source")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Source")).NotTo(BeEmpty())
 		})
 
 		It("should match Googlebot desktop with Chrome version via alias regexp pattern", func() {
@@ -114,7 +114,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying bot was recognized via regexp pattern")
-			Expect(response.Headers.Get("X-Render-Source")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Source")).NotTo(BeEmpty())
 		})
 
 		It("should match Google AdsBot via alias", func() {
@@ -127,7 +127,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying AdsBot was recognized")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Google AdsBot Mobile via alias", func() {
@@ -152,8 +152,8 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying Bingbot was recognized")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
-			Expect(response.Headers.Get("X-Render-Source")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Source")).NotTo(BeEmpty())
 		})
 
 		It("should match Bingbot mobile dimension via alias", func() {
@@ -166,7 +166,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying mobile Bingbot was recognized")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Bingbot with Chrome/Edge version via alias regexp pattern", func() {
@@ -179,7 +179,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying Bingbot regexp pattern matched")
-			Expect(response.Headers.Get("X-Render-Source")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Source")).NotTo(BeEmpty())
 		})
 	})
 
@@ -194,7 +194,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying ChatGPT bot was recognized")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match GPTBot training bot via alias with version", func() {
@@ -207,7 +207,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying GPTBot was recognized via regexp pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Perplexity bot via alias with version", func() {
@@ -220,7 +220,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying PerplexityBot was recognized")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Anthropic ClaudeBot via alias", func() {
@@ -233,7 +233,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying ClaudeBot was recognized via wildcard pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match OpenAI SearchBot via alias", func() {
@@ -246,7 +246,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying OAI-SearchBot was recognized via wildcard pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match OpenAI AdsBot via alias with version", func() {
@@ -259,7 +259,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying OAI-AdsBot was recognized via regexp pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Google-Agent desktop bot via alias with Chrome version", func() {
@@ -272,7 +272,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying Google-Agent desktop was recognized via regexp pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Google-Agent mobile bot via alias with Chrome version", func() {
@@ -285,7 +285,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying Google-Agent mobile was recognized via regexp pattern")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 	})
 
@@ -332,7 +332,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response.StatusCode).To(Equal(200))
 
 			By("Verifying request completed successfully")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should handle regexp patterns in bot aliases correctly", func() {
@@ -367,7 +367,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			By("Verifying OAI-SearchBot with new version was recognized")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match ChatGPT-User with updated version", func() {
@@ -378,7 +378,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			By("Verifying ChatGPT-User with new version was recognized")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match ClaudeBot with updated version", func() {
@@ -389,7 +389,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			By("Verifying ClaudeBot with new version was recognized")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match Perplexity-User with updated version", func() {
@@ -400,7 +400,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			By("Verifying Perplexity-User with new version was recognized")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 	})
 
@@ -419,7 +419,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			))
 
 			By("Verifying request was processed")
-			Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should not match Safari mobile to bot dimensions", func() {
@@ -466,8 +466,8 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response2.StatusCode).To(Equal(200))
 
 			By("Verifying both matched successfully")
-			Expect(response1.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
-			Expect(response2.Headers.Get("X-Request-ID")).NotTo(BeEmpty())
+			Expect(response1.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
+			Expect(response2.Headers.Get("EC-Request-ID")).NotTo(BeEmpty())
 		})
 
 		It("should match bot aliases combined with exact patterns", func() {
@@ -488,7 +488,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			firstSource := response1.Headers.Get("X-Render-Source")
+			firstSource := response1.Headers.Get("EC-Source")
 
 			By("Making second request with same bot User-Agent")
 			response2 := requestRenderWithUserAgent("/static/with-meta.html", userAgent, testEnv.Config.Test.ValidAPIKey)
@@ -497,9 +497,9 @@ var _ = Describe("Bot Aliases", Serial, func() {
 			Expect(response2.StatusCode).To(Equal(200))
 
 			By("Verifying second request was served from cache")
-			secondSource := response2.Headers.Get("X-Render-Source")
-			if firstSource == "rendered" || firstSource == "bypass" {
-				Expect(secondSource).To(Or(Equal("cache"), Equal("bypass_cache")), "Second request should be cached")
+			secondSource := response2.Headers.Get("EC-Source")
+			if firstSource == "render" || firstSource == "bypass" {
+				Expect(secondSource).To(Or(Equal("render_cache"), Equal("bypass_cache")), "Second request should be cached")
 			}
 		})
 
@@ -520,7 +520,7 @@ var _ = Describe("Bot Aliases", Serial, func() {
 
 				Expect(response.Error).To(BeNil(), "Request for "+bot.name+" should succeed")
 				Expect(response.StatusCode).To(Equal(200), bot.name+" should get 200 OK")
-				Expect(response.Headers.Get("X-Request-ID")).NotTo(BeEmpty(), bot.name+" should have request ID")
+				Expect(response.Headers.Get("EC-Request-ID")).NotTo(BeEmpty(), bot.name+" should have request ID")
 			}
 		})
 	})

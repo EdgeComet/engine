@@ -32,11 +32,11 @@ var _ = Describe("HTTP Status Code Handling", Serial, func() {
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(404))
 
-			By("Verifying X-Render-Source header indicates rendered, not cached")
+			By("Verifying EC-Source header indicates rendered, not cached")
 			if response.Headers != nil {
-				source := response.Headers["X-Render-Source"]
+				source := response.Headers["EC-Source"]
 				if len(source) > 0 {
-					Expect(source[0]).NotTo(Equal("cache"))
+					Expect(source[0]).NotTo(Equal("render_cache"))
 				}
 			}
 		})
@@ -109,12 +109,12 @@ var _ = Describe("HTTP Status Code Handling", Serial, func() {
 			Expect(response2.Body).To(ContainSubstring("Static Content"))
 
 			By("Verifying second request may be served from cache")
-			// Check X-Render-Source header if available
+			// Check EC-Source header if available
 			if response2.Headers != nil {
-				source := response2.Headers["X-Render-Source"]
-				// Source can be "cache" or "rendered" depending on timing
+				source := response2.Headers["EC-Source"]
+				// Source can be "render_cache" or "render" depending on timing
 				if len(source) > 0 {
-					Expect(source[0]).To(BeElementOf("cache", "rendered"))
+					Expect(source[0]).To(BeElementOf("render_cache", "render"))
 				}
 			}
 		})

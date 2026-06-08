@@ -85,13 +85,13 @@ func NewServer(
 
 func (s *Server) HandleRequest(ctx *fasthttp.RequestCtx) {
 	// Extract custom request ID from header (if provided)
-	customRequestID := string(ctx.Request.Header.Peek("X-Request-ID"))
+	customRequestID := string(ctx.Request.Header.Peek(types.HeaderRequestID))
 
 	// Generate request ID (with custom ID if provided, otherwise UUID)
 	requestID := requestid.GenerateRequestID(customRequestID)
 
 	// Add request ID to response headers for tracing
-	ctx.Response.Header.Set("X-Request-ID", requestID)
+	ctx.Response.Header.Set(types.HeaderRequestID, requestID)
 
 	logger := s.logger.With(zap.String("request_id", requestID))
 
@@ -252,9 +252,6 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 		s.handleRequestError(ctx, renderCtx, err, reqErr, duration)
 		return err
 	}
-
-	// Set X-Processed-URL header
-	renderCtx.HTTPCtx.Response.Header.Set("X-Processed-URL", normalizeResult.NormalizedURL)
 
 	// Log if tracking parameters were stripped
 	if normalizeResult.WasModified {

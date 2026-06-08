@@ -132,7 +132,7 @@ Send these headers with each request to Edge Gateway:
 | `User-Agent` | Yes | Original crawler User-Agent, passed through unchanged. Edge Gateway uses this for dimension matching. |
 | `X-Forwarded-For` | Recommended | Original client IP address. |
 | `X-Forwarded-Proto` | Recommended | Original request protocol (`http` or `https`). |
-| `X-Request-ID` | Optional | Request tracing identifier. Edge Gateway generates one automatically if absent. |
+| `EC-Request-ID` | Optional | Request tracing identifier. Edge Gateway generates one automatically if absent. |
 
 ## Error handling
 
@@ -161,7 +161,7 @@ curl -v \
 ```
 
 Check the response headers:
-- `X-Render-Source: rendered` or `X-Render-Source: cache` confirms Edge Gateway processed the request.
+- `EC-Source: render` or `EC-Source: render_cache` confirms Edge Gateway processed the request.
 
 ### Test regular user routing
 
@@ -173,7 +173,7 @@ curl -v \
   "http://example.com/"
 ```
 
-The request should go directly to origin with no `X-Render-*` headers in the response.
+The request should go directly to origin with no `EC-*` headers in the response.
 
 ### Test with jsbug
 

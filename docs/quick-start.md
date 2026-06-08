@@ -198,9 +198,8 @@ curl -v \
 ### Verify Response Headers
 
 The first request should return these headers:
-- `X-Request-ID`: Request tracing identifier (auto-generated)
-- `X-Render-Source: rendered`: Content was freshly rendered by Chrome
-- `X-Render-Service: rs-1`: Which Render Service handled the request
+- `EC-Request-ID`: Request tracing identifier (auto-generated)
+- `EC-Source: render`: Content was freshly rendered by Chrome
 
 ### Make Second Request (Cache Hit)
 
@@ -212,9 +211,8 @@ curl -v \
 ```
 
 The second request should return these headers:
-- `X-Render-Source: cache`: Served from render cache
-- `X-Render-Cache: hit`: Cache hit
-- `X-Cache-Age: <duration>`: How long content has been cached (e.g., "5s", "2m30s")
+- `EC-Source: render_cache`: Served from render cache
+- `EC-Cache-Age: <seconds>`: How long content has been cached (in seconds)
 
 The response should be instant (no Chrome rendering, served from filesystem cache).
 
@@ -275,7 +273,7 @@ curl -v \
   "http://localhost:10070/render?url=https://example.com/image.png"
 ```
 
-Should return header: `X-Render-Source: bypass` (direct fetch, no rendering)
+Should return header: `EC-Source: bypass` (direct fetch, no rendering)
 
 ## Step 6: Verify System Health
 
@@ -309,8 +307,8 @@ Watch Render Service logs for Chrome activity:
 Wait for TTL to expire (1 hour with default config) or change `render.cache.ttl` to shorter duration (e.g., `30s`) for testing.
 
 After TTL expires, the next request should show:
-- `X-Render-Source: rendered` (fresh render)
-- No `X-Cache-Age` header
+- `EC-Source: render` (fresh render)
+- No `EC-Cache-Age` header
 
 ## Troubleshooting
 
@@ -335,7 +333,7 @@ After TTL expires, the next request should show:
 
 ### Cache Issues
 
-#### "Cache not working" (Always X-Render-Source: rendered)
+#### "Cache not working" (Always EC-Source: render)
 - Check `storage.base_path` directory exists and is writable
 - Verify sufficient disk space (check `cache.max_size`)
 - Review Edge Gateway logs for cache write errors
@@ -348,7 +346,7 @@ After TTL expires, the next request should show:
   redis-cli FLUSHDB
   rm -rf cache/*
   ```
-- Check cache timestamp in `X-Cache-Age` header
+- Check cache timestamp in `EC-Cache-Age` header
 
 #### "Permission denied" writing cache files
 - Check filesystem permissions on `storage.base_path` directory

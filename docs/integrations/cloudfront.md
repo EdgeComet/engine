@@ -141,7 +141,7 @@ curl -i \
   "http://localhost:10070/render?url=https://yourdomain.com/"
 ```
 
-Expected response header: `X-Render-Source: rendered`
+Expected response header: `EC-Source: render`
 
 ## 2. Nginx reverse proxy + SSL
 
@@ -227,8 +227,7 @@ Expected:
 
 ```
 HTTP/1.1 200 OK
-X-Render-Source: rendered
-X-Render-Service: rs-1
+EC-Source: render
 ```
 
 Do not proceed until this test passes. If you see an SSL handshake error, confirm the certificate was issued for `render.yourdomain.com` and that Nginx has been reloaded.
@@ -544,12 +543,10 @@ Expected response headers:
 
 ```
 HTTP/1.1 200 OK
-X-Render-Source: rendered
-X-Render-Service: rs-1
-X-Render-Cache: new
+EC-Source: render
 ```
 
-A second request to the same URL should return `X-Render-Source: cache`.
+A second request to the same URL should return `EC-Source: render_cache`.
 
 ### Test regular user request
 

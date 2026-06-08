@@ -66,11 +66,10 @@ curl -I "https://example.com/page" \
 
 | Header | Values | Meaning |
 |--------|--------|---------|
-| `X-Render-Source` | `rendered`, `cache`, `bypass`, `bypass_cache` | How the response was generated |
-| `X-Cache-Age` | Duration (e.g., `2m30s`) | Time since content was cached |
-| `X-Unmatched-Dimension` | `true` | User-Agent did not match any dimension, fallback was applied |
+| `EC-Source` | `render`, `bypass`, `render_cache`, `bypass_cache`, `render_stale`, `bypass_stale`, `status` | How the response was generated |
+| `EC-Cache-Age` | Seconds since content was cached | Time since content was cached (cache serves only) |
 
-If `X-Render-Source` shows `bypass` when you expect `rendered`, check your dimension configuration. The `X-Unmatched-Dimension` header indicates the User-Agent did not match any configured dimension patterns.
+If `EC-Source` shows `bypass` when you expect `render`, check your dimension configuration. When a User-Agent does not match any configured dimension pattern, EdgeComet applies a fallback dimension; this no longer surfaces in a response header, but the signal is recorded in the logs and metrics.
 
 ## Step 4: Adjust render parameters
 

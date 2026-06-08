@@ -52,15 +52,13 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 	})
 
 	Context("Block Dimension Headers", func() {
-		It("should NOT set X-Unmatched-Dimension header", func() {
+		It("should return 403 for matched block dimension", func() {
 			By("Making request with blocked User-Agent")
 			response := makeRequestWithCustomUA("/blog/test", "SemrushBot/7.0")
 
-			By("Verifying X-Unmatched-Dimension is not set")
+			By("Verifying blocked UA returns 403")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(403))
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty(),
-				"X-Unmatched-Dimension header should NOT be set for matched block dimension")
 		})
 	})
 
@@ -72,8 +70,6 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying normal response")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200), "Googlebot should not be blocked")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty(),
-				"X-Unmatched-Dimension should not be set for matched render dimension")
 		})
 	})
 
@@ -85,10 +81,8 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying bypass response")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"Unmatched UA should default to bypass dimension")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"X-Unmatched-Dimension header should be set for unmatched UA")
 		})
 	})
 
@@ -100,10 +94,8 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying dimension without action field renders normally")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"),
 				"Dimension without action field should default to render")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty(),
-				"Should not set X-Unmatched-Dimension for matched dimension")
 		})
 	})
 
@@ -113,7 +105,7 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			renderResp := makeRequestWithCustomUA("/static/simple.html", "Googlebot/2.1 (+http://www.google.com/bot.html)")
 			Expect(renderResp.Error).To(BeNil())
 			Expect(renderResp.StatusCode).To(Equal(200))
-			Expect(renderResp.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(renderResp.Headers.Get("EC-Source")).To(Equal("render"),
 				"Desktop dimension should render")
 
 			By("Requesting with SemrushBot (scrapers dimension, action=block)")
@@ -126,10 +118,8 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			bypassResp := makeRequestWithCustomUA("/static/simple.html", "UnknownBot/1.0")
 			Expect(bypassResp.Error).To(BeNil())
 			Expect(bypassResp.StatusCode).To(Equal(200))
-			Expect(bypassResp.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			Expect(bypassResp.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"Unmatched UA should fall back to bypass dimension")
-			Expect(bypassResp.Headers.Get("X-Unmatched-Dimension")).To(Equal("true"),
-				"Unmatched UA should set X-Unmatched-Dimension header")
 		})
 	})
 
@@ -141,7 +131,7 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying URL rule overrides bypass dimension to render")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"),
 				"URL rule action=render should override bypass dimension default")
 		})
 
@@ -152,7 +142,7 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying URL rule overrides render dimension to bypass")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"URL rule action=bypass should override render dimension default")
 		})
 
@@ -163,7 +153,7 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying bypass dimension default applies")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("bypass"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("bypass"),
 				"Bypass dimension default should apply when no URL rule matches")
 		})
 
@@ -174,7 +164,7 @@ var _ = Describe("Dimension Block Action", Serial, func() {
 			By("Verifying render dimension default applies")
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(200))
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"),
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"),
 				"Render dimension default should apply when no URL rule matches")
 		})
 	})

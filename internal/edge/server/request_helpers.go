@@ -77,7 +77,6 @@ func (s *Server) handleUnmatchedBlock(ctx *fasthttp.RequestCtx, renderCtx *edgec
 	renderCtx.Logger.Warn("Blocking request - User-Agent not supported",
 		zap.String("user_agent", string(ctx.UserAgent())))
 
-	ctx.Response.Header.Set("X-Unmatched-Dimension", "true")
 	s.writeError(ctx, fasthttp.StatusForbidden, "User-Agent not supported for rendering")
 	s.metricsCollector.RecordRequest(renderCtx.Host.Domain, "", "unmatched_blocked", duration)
 	s.metricsCollector.RecordError("unmatched_user_agent", renderCtx.Host.Domain)

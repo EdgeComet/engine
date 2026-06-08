@@ -69,8 +69,8 @@ curl -H "X-Render-Key: your-render-key" \
      "http://localhost:10070/render?url=https://example.com/your-page"
 ```
 
-- `X-Render-Source: rendered` - Freshly rendered by Chrome
-- `X-Render-Source: cache` - Served from cache
+- `EC-Source: render` - Freshly rendered by Chrome
+- `EC-Source: render_cache` - Served from cache
 
 For a step-by-step walkthrough, see the [Quick Start guide](https://edgecomet.com/docs/quick-start.html).
 

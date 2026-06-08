@@ -18,7 +18,7 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 			originalBody := resp1.Body
 
 			By("Getting cache key and making it stale")
@@ -40,8 +40,7 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_stale"))
 
 			By("Verifying response body matches original cached content")
 			Expect(resp2.Body).To(Equal(originalBody))
@@ -54,7 +53,7 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Making cache stale")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -66,7 +65,7 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying new cache entry was created")
 			Expect(testEnv.CacheExists(cacheKey)).To(BeTrue())
@@ -108,7 +107,7 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Making cache stale")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -151,11 +150,10 @@ var _ = Describe("Bypass Stale Cache", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("stale"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_stale"))
 
-			By("Verifying X-Cache-Age header is present and reasonable")
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			By("Verifying EC-Cache-Age header is present and reasonable")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 			Expect(cacheAge).To(MatchRegexp(`^[0-9]+$`))
 		})

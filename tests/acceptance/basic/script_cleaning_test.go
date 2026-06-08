@@ -18,7 +18,7 @@ var _ = Describe("Script Cleaning", Serial, func() {
 			By("Verifying request succeeded")
 			Expect(resp.Error).To(BeNil())
 			Expect(resp.StatusCode).To(Equal(200))
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying executable inline scripts are removed")
 			Expect(resp.Body).NotTo(ContainSubstring("console.log('Executable script in head')"))
@@ -163,15 +163,14 @@ var _ = Describe("Script Cleaning", Serial, func() {
 			By("Step 1: First request - renders and cleans scripts")
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 			Expect(resp1.Body).NotTo(ContainSubstring("console.log"))
 			Expect(resp1.Body).To(ContainSubstring(`type="application/ld+json"`))
 
 			By("Step 2: Second request - served from cache")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Step 3: Verify cached content still has scripts cleaned")
 			Expect(resp2.Body).NotTo(ContainSubstring("console.log"))
@@ -188,7 +187,7 @@ var _ = Describe("Script Cleaning", Serial, func() {
 			By("Verifying request succeeded")
 			Expect(resp.Error).To(BeNil())
 			Expect(resp.StatusCode).To(Equal(200))
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying executable scripts are preserved")
 			Expect(resp.Body).To(ContainSubstring("console.log"))

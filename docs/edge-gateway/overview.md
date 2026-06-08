@@ -99,7 +99,7 @@ This simplifies dimension configuration and ensures comprehensive bot coverage w
 
 EG exposes Prometheus metrics on a dedicated port for monitoring request rates, cache hit ratios, render latencies, 
 and service health. 
-Each response includes diagnostic headers: `X-Request-ID` for tracing, `X-Render-Source` indicating content origin (`rendered`, `cache`, `bypass`, `bypass_cache`),
-and `X-Cache-Age` showing time since caching.
+Each response includes diagnostic headers: `EC-Request-ID` for tracing, `EC-Source` indicating how the response was produced (`render`, `render_cache`, `bypass`, `bypass_cache`),
+and `EC-Cache-Age` showing seconds since caching.
 
 These headers enable debugging without log access. Operators can trace request flow, identify cache behavior, and diagnose rendering issues directly from HTTP responses.

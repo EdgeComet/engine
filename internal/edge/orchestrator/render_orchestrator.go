@@ -1401,9 +1401,6 @@ func (ro *RenderOrchestrator) ServeUnmatchedBypass(renderCtx *edgectx.RenderCont
 		return nil, err
 	}
 
-	// Set unmatched dimension header
-	renderCtx.HTTPCtx.Response.Header.Set("X-Unmatched-Dimension", "true")
-
 	return result, nil
 }
 

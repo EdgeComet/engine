@@ -73,7 +73,7 @@ var _ = Describe("Cache Compression", Serial, func() {
 			Expect(secondResponse.StatusCode).To(Equal(200))
 
 			// Verify cache hit
-			Expect(secondResponse.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(secondResponse.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			// Verify content is correctly decompressed
 			Expect(secondResponse.Body).To(ContainSubstring("Compression Test Page"))
@@ -177,7 +177,7 @@ var _ = Describe("Cache Compression", Serial, func() {
 
 			Expect(legacyResponse.Error).To(BeNil())
 			Expect(legacyResponse.StatusCode).To(Equal(200))
-			Expect(legacyResponse.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(legacyResponse.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			// Content should be served correctly (uncompressed file works)
 			Expect(legacyResponse.Body).To(ContainSubstring("Compression Test Page"))

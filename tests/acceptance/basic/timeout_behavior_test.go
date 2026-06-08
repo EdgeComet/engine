@@ -21,7 +21,7 @@ var _ = Describe("Timeout Behavior", func() {
 			Expect(response.Duration).To(BeNumerically("<", 7*time.Second), "Should complete in under 7s")
 
 			By("Verifying render occurred (not bypassed)")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying immediate content is present")
 			Expect(response.Body).To(ContainSubstring("Immediate Content"))
@@ -45,7 +45,7 @@ var _ = Describe("Timeout Behavior", func() {
 			Expect(response.Duration).To(BeNumerically(">", 4*time.Second), "Should take at least 4s to hit timeout")
 
 			By("Verifying render occurred")
-			Expect(response.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Verifying immediate content is present")
 			Expect(response.Body).To(ContainSubstring("Immediate Content"))

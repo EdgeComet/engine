@@ -27,8 +27,8 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			Expect(resp.Error).To(BeNil(), "Request should not error")
 			Expect(resp.StatusCode).To(Equal(200), "Status code should be 200")
 
-			By("Verifying X-Render-Source is rendered")
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("rendered"), "Should be freshly rendered")
+			By("Verifying EC-Source is rendered")
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("render"), "Should be freshly rendered")
 
 			By("Verifying allowed response headers are present with correct values")
 			Expect(resp.Headers.Get("Content-Type")).To(HavePrefix("text/html"), "Content-Type should be text/html")
@@ -77,7 +77,7 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil(), "Initial request should not error")
 			Expect(resp1.StatusCode).To(Equal(200), "Status code should be 200")
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"), "Should be freshly rendered")
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"), "Should be freshly rendered")
 
 			By("Step 2: Verify safe headers in initial response")
 			Expect(resp1.Headers.Get("Content-Type")).To(HavePrefix("text/html"), "Content-Type should be text/html")
@@ -88,7 +88,7 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil(), "Cache request should not error")
 			Expect(resp2.StatusCode).To(Equal(200), "Status code should be 200")
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"), "Should be served from cache")
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"), "Should be served from cache")
 
 			By("Step 4: Verify safe headers are served from cache with same values")
 			Expect(resp2.Headers.Get("Content-Type")).To(HavePrefix("text/html"), "Cached Content-Type should be text/html")
@@ -116,7 +116,7 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil(), "Cache request should not error")
 			Expect(resp2.StatusCode).To(Equal(200), "Status code should be 200")
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"), "Should be served from cache")
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"), "Should be served from cache")
 
 			By("Step 4: Verify non-safe headers not in cached response")
 			Expect(resp2.Headers.Get("X-Secret-Header")).To(BeEmpty(), "X-Secret-Header should not be in cache")
@@ -156,8 +156,8 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			Expect(resp.Error).To(BeNil(), "Request should not error")
 			Expect(resp.StatusCode).To(Equal(200), "Status code should be 200")
 
-			By("Verifying X-Render-Source is bypass")
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("bypass"), "Should be bypass response")
+			By("Verifying EC-Source is bypass")
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("bypass"), "Should be bypass response")
 
 			By("Verifying allowed response headers are present with correct values")
 			Expect(resp.Headers.Get("Content-Type")).To(HavePrefix("text/html"), "Content-Type should be text/html")
@@ -190,7 +190,7 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil(), "Initial request should not error")
 			Expect(resp1.StatusCode).To(Equal(200), "Status code should be 200")
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"), "Should be bypass response")
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"), "Should be bypass response")
 
 			By("Step 2: Verify safe headers in initial response")
 			Expect(resp1.Headers.Get("X-Custom-Header")).To(Equal("custom-value-123"), "X-Custom-Header value mismatch")
@@ -199,7 +199,7 @@ var _ = Describe("Headers - Response Header Filtering", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil(), "Cache request should not error")
 			Expect(resp2.StatusCode).To(Equal(200), "Status code should be 200")
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"), "Should be from bypass cache")
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"), "Should be from bypass cache")
 
 			By("Step 4: Verify safe headers in cached bypass response")
 			Expect(resp2.Headers.Get("Content-Type")).To(HavePrefix("text/html"), "Cached Content-Type should be text/html")

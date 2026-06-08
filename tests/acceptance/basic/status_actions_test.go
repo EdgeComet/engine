@@ -23,8 +23,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying custom reason is included")
 			Expect(response.Body).To(ContainSubstring("Admin areas not available for bots"))
 
-			By("Verifying X-Render-Action header is present")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 
 			By("Verifying Content-Type is text/plain")
 			Expect(response.Headers.Get("Content-Type")).To(ContainSubstring("text/plain"))
@@ -41,8 +41,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying response body contains Forbidden")
 			Expect(response.Body).To(ContainSubstring("Forbidden"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should return 404 Not Found for status_404 action", func() {
@@ -60,8 +60,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			// The first /removed/* pattern (line 119) matches
 			Expect(response.Body).To(ContainSubstring("removed"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should return 410 Gone for status_410 action", func() {
@@ -78,8 +78,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying custom reason is included")
 			Expect(response.Body).To(ContainSubstring("Product permanently discontinued"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 	})
 
@@ -100,8 +100,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying body is empty or minimal for redirect")
 			Expect(len(response.Body)).To(BeNumerically("<=", 100))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should return 302 Temporary Redirect with Location header", func() {
@@ -153,8 +153,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying custom reason is included")
 			Expect(response.Body).To(ContainSubstring("Invalid request parameters"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should return 401 Unauthorized with optional WWW-Authenticate header", func() {
@@ -191,8 +191,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			retryAfter := response.Headers.Get("Retry-After")
 			Expect(retryAfter).To(Equal("3600"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 	})
 
@@ -208,8 +208,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying response body contains Internal Server Error")
 			Expect(response.Body).To(ContainSubstring("Internal Server Error"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should return 503 Service Unavailable with Retry-After header", func() {
@@ -228,8 +228,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			retryAfter := response.Headers.Get("Retry-After")
 			Expect(retryAfter).To(Equal("7200"))
 
-			By("Verifying X-Render-Action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 	})
 
@@ -278,8 +278,8 @@ var _ = Describe("Status Actions", Serial, func() {
 				Expect(contentType).NotTo(Equal("text/plain; charset=utf-8"))
 			}
 
-			By("Verifying X-Render-Action header is always present")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is always status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should handle multiple custom headers", func() {
@@ -289,8 +289,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying status code")
 			Expect(response.StatusCode).To(Equal(410))
 
-			By("Verifying X-Render-Action header is present")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 	})
 
@@ -308,10 +308,10 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying fast response time (< 5 seconds)")
 			Expect(duration).To(BeNumerically("<", 5*time.Second))
 
-			By("Verifying X-Render-Source is not 'rendered'")
-			source := response.Headers.Get("X-Render-Source")
+			By("Verifying EC-Source is not 'render'")
+			source := response.Headers.Get("EC-Source")
 			if source != "" {
-				Expect(source).NotTo(Equal("rendered"))
+				Expect(source).NotTo(Equal("render"))
 			}
 		})
 
@@ -336,9 +336,9 @@ var _ = Describe("Status Actions", Serial, func() {
 			response2 := testEnv.RequestRender("/blocked/admin-area")
 			Expect(response2.StatusCode).To(Equal(403))
 
-			source := response2.Headers.Get("X-Render-Source")
+			source := response2.Headers.Get("EC-Source")
 			if source != "" {
-				Expect(source).NotTo(Equal("cache"))
+				Expect(source).NotTo(Equal("render_cache"))
 			}
 		})
 
@@ -351,7 +351,7 @@ var _ = Describe("Status Actions", Serial, func() {
 			Expect(response.StatusCode).To(Equal(403))
 
 			By("Verifying no bypass occurred")
-			source := response.Headers.Get("X-Render-Source")
+			source := response.Headers.Get("EC-Source")
 			if source != "" {
 				Expect(source).NotTo(Equal("bypass"))
 			}
@@ -436,8 +436,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			// The first /removed/* pattern matches (line 119 in hosts.yaml)
 			Expect(response.Body).To(Or(ContainSubstring("Content has been removed"), ContainSubstring("Content removed")))
 
-			By("Verifying response has status action header")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying response has status action source")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should handle multiple patterns with same action but different configs", func() {
@@ -476,8 +476,8 @@ var _ = Describe("Status Actions", Serial, func() {
 			By("Verifying default Content-Type is applied")
 			Expect(response.Headers.Get("Content-Type")).To(ContainSubstring("text/plain"))
 
-			By("Verifying X-Render-Action header is always present")
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
+			By("Verifying EC-Source is always status")
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should handle empty reason string", func() {
@@ -520,10 +520,7 @@ var _ = Describe("Status Actions", Serial, func() {
 			Expect(response.Error).To(BeNil())
 			Expect(response.StatusCode).To(Equal(403))
 			Expect(response.Body).To(ContainSubstring("Forbidden"))
-			Expect(response.Headers.Get("X-Render-Action")).To(Equal("status"))
-
-			By("Verifying no unmatched dimension header is set")
-			Expect(response.Headers.Get("X-Unmatched-Dimension")).To(BeEmpty())
+			Expect(response.Headers.Get("EC-Source")).To(Equal("status"))
 		})
 
 		It("should handle concurrent requests to status actions", func() {

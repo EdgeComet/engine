@@ -36,7 +36,7 @@ func buildRequest(gateway string, targetURL string, renderKey string, userAgent 
 
 	req.Header.Set("X-Render-Key", renderKey)
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("X-Request-ID", uuid.New().String())
+	req.Header.Set("EC-Request-ID", uuid.New().String())
 
 	return req, nil
 }
@@ -66,15 +66,15 @@ func executeRequest(client *http.Client, req *http.Request, expectedStatus int, 
 			Error:          "body_read_error",
 			Duration:       elapsed,
 			StatusCode:     resp.StatusCode,
-			RequestID:      resp.Header.Get("X-Request-ID"),
+			RequestID:      resp.Header.Get("EC-Request-ID"),
 			ExpectedStatus: expectedStatus,
 			Host:           host,
 			URL:            targetURL,
 		}
 	}
 
-	renderSource := resp.Header.Get("X-Render-Source")
-	requestID := resp.Header.Get("X-Request-ID")
+	renderSource := resp.Header.Get("EC-Source")
+	requestID := resp.Header.Get("EC-Request-ID")
 
 	isMismatch := false
 	if expectedStatus > 0 && expectedStatus != resp.StatusCode {

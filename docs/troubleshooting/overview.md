@@ -58,10 +58,10 @@ Each request has a request ID that appears in both Edge Gateway and Render Servi
 grep "abc123-request-id" /var/log/edgecomet/*.log
 ```
 
-To identify your test requests, add a custom `X-Request-ID` header:
+To identify your test requests, add a custom `EC-Request-ID` header:
 
 ```bash
-curl -H "X-Request-ID: my-test-001" https://example.com/page
+curl -H "EC-Request-ID: my-test-001" https://example.com/page
 ```
 
 ## Key metrics to monitor

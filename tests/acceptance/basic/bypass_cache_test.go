@@ -23,7 +23,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying cache entry created")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -34,9 +34,8 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
-			Expect(resp2.Headers.Get("X-Cache-Age")).NotTo(BeEmpty())
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Cache-Age")).NotTo(BeEmpty())
 		})
 
 		It("should only cache status 200 by default", func() {
@@ -92,7 +91,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			resp2 := testEnv.RequestRenderNoRedirect("/bypass-test/with-redirects?status=301")
 			Expect(resp2.StatusCode).To(Equal(301))
 			Expect(resp2.Headers.Get("Location")).To(Equal(resp301.Headers.Get("Location")))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 
 		It("should respect TTL expiration", func() {
@@ -105,12 +104,12 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Second request after 2s - still cached")
 			time.Sleep(2 * time.Second)
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 
 			By("Third request after 6s total - cache expired, new fetch")
 			time.Sleep(4 * time.Second)
 			resp3 := testEnv.RequestRender(url)
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("bypass"))
 		})
 
 		It("should not cache when disabled", func() {
@@ -126,7 +125,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Second request - fetches from origin again")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 		})
 
 		It("should not cache when TTL is zero", func() {
@@ -141,7 +140,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 			By("Second request - fetches from origin again")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 		})
 	})
 
@@ -244,7 +243,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Second request with b=2&a=1 - should be cache hit")
 			resp2 := testEnv.RequestRender(url2)
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 
 		It("should handle origin server errors gracefully", func() {
@@ -270,7 +269,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Second request - served from cache with 404 status")
 			resp2 := testEnv.RequestRender("/bypass-test/multi-status?status=404")
 			Expect(resp2.StatusCode).To(Equal(404))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 	})
 
@@ -331,9 +330,9 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 			By("Requesting cached entry")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 
-			cacheAge := resp2.Headers.Get("X-Cache-Age")
+			cacheAge := resp2.Headers.Get("EC-Cache-Age")
 			Expect(cacheAge).NotTo(BeEmpty())
 			// Cache age should be approximately 2 seconds (allowing tolerance)
 			Expect(cacheAge).To(MatchRegexp(`^[2-3]`))
@@ -350,7 +349,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 			By("Second request - cache hit")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 			contentType2 := resp2.Headers.Get("Content-Type")
 			Expect(contentType2).To(Equal(contentType1))
 		})
@@ -370,7 +369,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Second request - cache hit")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 			Expect(resp2.Error).To(BeNil())
 
 			By("Verifying both requests completed successfully")
@@ -416,7 +415,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 			By("Second request - served from cache")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 			Expect(resp2.Headers.Get("Content-Type")).To(Equal("application/pdf"))
 		})
 	})
@@ -430,7 +429,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			By("Making request to bypass action URL")
 			resp := testEnv.RequestRender(url)
 			Expect(resp.StatusCode).To(Equal(200))
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Verifying bypass cache was created")
 			cacheKey, _ := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -471,7 +470,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 
 			By("Second request - should be cache hit")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 
 		It("should handle empty response body", func() {

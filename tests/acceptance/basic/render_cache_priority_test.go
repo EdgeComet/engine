@@ -20,7 +20,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 2: Verify cache entry exists with source=render")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -59,8 +59,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 
 		It("should NOT overwrite render cache with bypass cache (different status codes)", func() {
@@ -110,7 +109,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp := testEnv.RequestRender(url)
 			Expect(resp.Error).To(BeNil())
 			Expect(resp.StatusCode).To(Equal(200))
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Step 3: Verify bypass cache created with source=bypass")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -125,8 +124,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
-			Expect(resp2.Headers.Get("X-Render-Cache")).To(Equal("hit"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 	})
 
@@ -247,7 +245,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
 			Expect(err).To(BeNil())
@@ -266,7 +264,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 
 			By("Step 4: Verify timestamp unchanged (served from cache)")
 			timestamp2, err := testEnv.GetCacheTimestamp(cacheKey)
@@ -286,7 +284,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
 			Expect(err).To(BeNil())
@@ -306,7 +304,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(renderURL)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 3: Verify render cache created")
 			source2, err := testEnv.GetCacheSource(renderCacheKey)
@@ -316,7 +314,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			By("Step 4: Verify render cache serves on subsequent requests")
 			resp3 := testEnv.RequestRender(renderURL)
 			Expect(resp3.Error).To(BeNil())
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 	})
 
@@ -375,19 +373,19 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 2: Second request serves from cache")
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Step 3: Third request also serves from cache")
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Error).To(BeNil())
 			Expect(resp3.StatusCode).To(Equal(200))
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Step 4: Verify cache source remains render throughout")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -455,7 +453,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 
 				Expect(resp.Error).To(BeNil())
 				Expect(resp.StatusCode).To(Equal(200))
-				Expect(resp.Headers.Get("X-Render-Source")).To(Equal("cache"))
+				Expect(resp.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 				totalDuration += duration
 			}
@@ -485,7 +483,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 2: Verify render cache exists")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -508,7 +506,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Step 5: Verify render cache unchanged (no bypass fallback)")
 			source2, err := testEnv.GetCacheSource(cacheKey)
@@ -525,7 +523,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Error).To(BeNil())
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 
 		It("should NOT create bypass cache after RS failure (preserve render cache slot)", func() {
@@ -542,7 +540,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp1 := testEnv.RequestRender(url)
 			Expect(resp1.Error).To(BeNil())
 			Expect(resp1.StatusCode).To(Equal(200))
-			Expect(resp1.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp1.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Step 3: Verify NO cache created (slot reserved for render)")
 			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
@@ -555,7 +553,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 
 			resp2 := testEnv.RequestRender(url)
 			Expect(resp2.Error).To(BeNil())
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 5: Verify render cache now exists")
 			Expect(testEnv.CacheExists(cacheKey)).To(BeTrue())
@@ -566,7 +564,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			By("Step 6: Verify subsequent requests serve from render cache")
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Error).To(BeNil())
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 		It("should handle capacity exhaustion with bypass fallback", func() {
 			url := "/priority-test/dual-mode?test=capacity"
@@ -589,7 +587,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			resp2 := testEnv.RequestRender(url2)
 			Expect(resp2.Error).To(BeNil())
 			Expect(resp2.StatusCode).To(Equal(200))
-			Expect(resp2.Headers.Get("X-Render-Source")).To(Equal("bypass"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 
 			By("Step 4: Restore capacity")
 			err = testEnv.RestoreRenderServiceCapacity()
@@ -598,7 +596,7 @@ var _ = Describe("Render Cache Priority - Core Feature Validation", Serial, func
 			By("Step 5: Verify original render cache still serves")
 			resp3 := testEnv.RequestRender(url)
 			Expect(resp3.Error).To(BeNil())
-			Expect(resp3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(resp3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 		})
 	})
 

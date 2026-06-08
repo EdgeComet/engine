@@ -44,7 +44,7 @@ var _ = Describe("Indexation Extraction", Serial, func() {
 			resp := testEnv.RequestRender(url)
 			Expect(resp.Error).To(BeNil())
 			Expect(resp.StatusCode).To(Equal(200))
-			Expect(resp.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Step 2: Verify cache metadata has correct indexation data")
 			indexStatus, title, err := getIndexationMetadata(url)

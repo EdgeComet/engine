@@ -195,7 +195,7 @@ curl -v \
 ```
 
 Check response headers:
-- `X-Render-Source: rendered` or `X-Render-Source: cache` confirms Edge Gateway processed the request
+- `EC-Source: render` or `EC-Source: render_cache` confirms Edge Gateway processed the request
 
 ### Test regular user
 
@@ -207,7 +207,7 @@ curl -v \
   "http://example.com/"
 ```
 
-The request should go directly to origin with no `X-Render-*` headers in response.
+The request should go directly to origin with no `EC-*` headers in response.
 
 ### Debug crawler detection
 
@@ -239,8 +239,8 @@ http-response set-header X-Debug-Crawler %[var(txn.is_crawler)]
 
 ### Cache not working
 
-1. Verify `X-Render-Source` header shows `cache` on repeat requests
-2. Check `X-Cache-Age` header for cache duration
+1. Verify `EC-Source` header shows `render_cache` on repeat requests
+2. Check `EC-Cache-Age` header for cache duration
 3. Review Edge Gateway cache configuration and storage permissions
 
 ## Related documentation

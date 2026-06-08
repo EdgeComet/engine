@@ -181,7 +181,7 @@ map $http_x_edge_render $ec_should_render {
 | `X-Real-IP` | Original client IP address for logging and rate limiting. |
 | `X-Forwarded-For` | Client IP chain for proxied requests. |
 | `X-Forwarded-Proto` | Original request protocol (http/https). |
-| `X-Request-ID` | Custom request ID for distributed tracing. |
+| `EC-Request-ID` | Custom request ID for distributed tracing. |
 
 ### Recommended timeouts
 
@@ -200,10 +200,9 @@ Add a custom log format to track rendering:
 ```nginx
 log_format rendering '$remote_addr [$time_local] "$request" $status '
                      'ua="$http_user_agent" '
-                     'render_src=$upstream_http_x_render_source '
-                     'cache=$upstream_http_x_render_cache '
-                     'age=$upstream_http_x_cache_age '
-                     'req_id=$upstream_http_x_request_id';
+                     'render_src=$upstream_http_ec_source '
+                     'age=$upstream_http_ec_cache_age '
+                     'req_id=$upstream_http_ec_request_id';
 
 access_log /var/log/nginx/rendering.log rendering;
 ```

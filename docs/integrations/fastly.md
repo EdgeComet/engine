@@ -243,7 +243,7 @@ curl -v \
 ```
 
 Check response headers:
-- `X-Render-Source: rendered` or `X-Render-Source: cache` confirms Edge Gateway processed the request
+- `EC-Source: render` or `EC-Source: render_cache` confirms Edge Gateway processed the request
 
 Test regular user traffic goes directly to origin:
 
@@ -253,7 +253,7 @@ curl -v \
   "https://example.com/"
 ```
 
-The request should have no `X-Render-*` headers in response.
+The request should have no `EC-*` headers in response.
 
 ## Troubleshooting
 
@@ -283,8 +283,8 @@ The request should have no `X-Render-*` headers in response.
 
 ### Cache not working
 
-- Verify `X-Render-Source` header shows `cache` on repeat crawler requests
-- Check `X-Cache-Age` header for cache duration
+- Verify `EC-Source` header shows `render_cache` on repeat crawler requests
+- Check `EC-Cache-Age` header for cache duration
 - Review Edge Gateway cache configuration and storage permissions
 - Ensure Fastly's own caching does not interfere -- the `return(pass)` in the recv snippet bypasses Fastly's cache for crawler requests
 

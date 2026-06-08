@@ -29,7 +29,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 			Expect(response1.Body).To(ContainSubstring("Compression Test Page"))
 			Expect(response1.Body).To(ContainSubstring("COMPRESSION_TEST_PAGE"))
 
@@ -80,7 +80,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should serve from cache (local file from push)")
 
 			By("Verifying decompressed content matches original")
@@ -131,7 +131,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 
 			Expect(response1.Error).To(BeNil())
 			Expect(response1.StatusCode).To(Equal(200))
-			Expect(response1.Headers.Get("X-Render-Source")).To(Equal("rendered"))
+			Expect(response1.Headers.Get("EC-Source")).To(Equal("render"))
 
 			By("Computing cache key")
 			result, err := normalizer.Normalize(testURL, nil)
@@ -156,7 +156,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"),
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"),
 				"Should serve from cache (pulled from EG1)")
 
 			By("Verifying decompressed content matches original")
@@ -198,7 +198,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 			response2 := testEnv.RequestViaEG2("/compression-pull-only/pull-disk", "compression-pull-disk-eg2")
 			Expect(response2.Error).To(BeNil())
 			Expect(response2.StatusCode).To(Equal(200))
-			Expect(response2.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(response2.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Waiting for EG2 to replicate locally")
 			Eventually(func() []string {
@@ -269,7 +269,7 @@ var _ = Describe("Compression Replication", Serial, func() {
 
 			Expect(response3.Error).To(BeNil())
 			Expect(response3.StatusCode).To(Equal(200))
-			Expect(response3.Headers.Get("X-Render-Source")).To(Equal("cache"))
+			Expect(response3.Headers.Get("EC-Source")).To(Equal("render_cache"))
 
 			By("Verifying pulled content matches original")
 			Expect(response3.Body).To(Equal(response1.Body))
