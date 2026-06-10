@@ -420,3 +420,35 @@ func TestGetConfigPath(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config file does not exist")
 }
+
+func TestNewRSConfigManagerFromBytes(t *testing.T) {
+	configYAML := `
+server:
+  id: "rs-bytes-1"
+  listen: "0.0.0.0:8081"
+
+redis:
+  addr: "localhost:6380"
+
+chrome:
+  pool_size: "2"
+  warmup:
+    url: "https://test.com/"
+    timeout: 15s
+  render:
+    max_timeout: 30s
+
+log:
+  level: "info"
+  console:
+    enabled: true
+    format: "json"
+`
+	manager, err := NewRSConfigManagerFromBytes([]byte(configYAML), zaptest.NewLogger(t))
+	require.NoError(t, err)
+	assert.Equal(t, "rs-bytes-1", manager.GetConfig().Server.ID)
+
+	_, err = NewRSConfigManagerFromBytes([]byte("unknown_key: true"), zaptest.NewLogger(t))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse config")
+}

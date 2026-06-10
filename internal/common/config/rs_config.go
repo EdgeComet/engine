@@ -105,6 +105,20 @@ func NewRSConfigManager(configPath string, logger *zap.Logger) (*RSConfigManager
 	return cm, nil
 }
 
+// NewRSConfigManagerFromBytes creates a RS config manager from already-loaded
+// config data, for callers that pre-process the config file before parsing
+func NewRSConfigManagerFromBytes(data []byte, logger *zap.Logger) (*RSConfigManager, error) {
+	cm := &RSConfigManager{
+		logger: logger,
+	}
+
+	if err := cm.loadConfigBytes(data); err != nil {
+		return nil, err
+	}
+
+	return cm, nil
+}
+
 // LoadConfig loads configuration from file
 func (cm *RSConfigManager) LoadConfig() error {
 	data, err := os.ReadFile(cm.configPath)
@@ -112,6 +126,10 @@ func (cm *RSConfigManager) LoadConfig() error {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
+	return cm.loadConfigBytes(data)
+}
+
+func (cm *RSConfigManager) loadConfigBytes(data []byte) error {
 	var cfg RSConfig
 	if err := yamlutil.UnmarshalStrict(data, &cfg); err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
