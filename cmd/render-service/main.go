@@ -13,6 +13,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/configtypes"
+	"github.com/edgecomet/engine/internal/common/httputil"
 	logutil "github.com/edgecomet/engine/internal/common/logger"
 	"github.com/edgecomet/engine/internal/common/metricsserver"
 	"github.com/edgecomet/engine/internal/common/redis"
@@ -151,7 +152,7 @@ func main() {
 
 	// Configure FastHTTP server
 	server := &fasthttp.Server{
-		Handler:      httpHandler,
+		Handler:      httputil.RecoverHandler(httpHandler, logger),
 		ReadTimeout:  serverTimeout,
 		WriteTimeout: serverTimeout,
 		IdleTimeout:  serverTimeout,

@@ -66,7 +66,7 @@ func (s *InternalServer) Start(address string) error {
 	s.address = address
 
 	s.server = &fasthttp.Server{
-		Handler: s.Handler(),
+		Handler: httputil.RecoverHandler(s.Handler(), s.logger),
 		Name:    "EdgeGateway-Internal",
 	}
 

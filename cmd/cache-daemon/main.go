@@ -16,6 +16,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/cachedaemon"
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/logger"
 	"github.com/edgecomet/engine/internal/common/redis"
 )
@@ -92,7 +93,7 @@ func main() {
 	// Setup HTTP server
 	if daemonConfig.HTTPApi.Enabled {
 		httpServer := &fasthttp.Server{
-			Handler:                      daemon.ServeHTTP,
+			Handler:                      httputil.RecoverHandler(daemon.ServeHTTP, zapLogger),
 			Name:                         "CacheDaemon/1.0",
 			ReadTimeout:                  time.Duration(daemonConfig.HTTPApi.RequestTimeout),
 			WriteTimeout:                 time.Duration(daemonConfig.HTTPApi.RequestTimeout),

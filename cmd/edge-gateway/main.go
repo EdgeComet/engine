@@ -18,6 +18,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/cachedaemon"
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/logger"
 	"github.com/edgecomet/engine/internal/common/metricsserver"
 	"github.com/edgecomet/engine/internal/common/redis"
@@ -282,8 +283,10 @@ func main() {
 	serverErrors := make(chan error, 2)
 
 	// Create and start HTTP server
+	requestHandler := httputil.RecoverHandler(srv.HandleRequest, egLogger)
+
 	httpLifecycle := &serverLifecycle{
-		server:  newFastHTTPServer(srv.HandleRequest, time.Duration(cfg.Server.Timeout)),
+		server:  newFastHTTPServer(requestHandler, time.Duration(cfg.Server.Timeout)),
 		name:    "HTTP",
 		address: cfg.Server.Listen,
 		logger:  egLogger,
@@ -294,7 +297,7 @@ func main() {
 	var httpsLifecycle *serverLifecycle
 	if cfg.Server.TLS.Enabled {
 		httpsLifecycle = &serverLifecycle{
-			server:   newFastHTTPServer(srv.HandleRequest, time.Duration(cfg.Server.Timeout)),
+			server:   newFastHTTPServer(requestHandler, time.Duration(cfg.Server.Timeout)),
 			listener: tlsListener,
 			name:     "HTTPS",
 			address:  cfg.Server.TLS.Listen,
