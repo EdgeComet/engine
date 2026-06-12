@@ -12,6 +12,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// interEgMaxAttempts caps fasthttp call attempts for inter-EG requests:
+// the initial attempt plus one retry on transient connection errors.
+const interEgMaxAttempts = 2
+
 // PullRequest represents a request to pull cache from another EG
 type PullRequest struct {
 	HostID      int    `json:"host_id"`
@@ -93,7 +97,16 @@ func NewFastHTTPClient(registry Registry, authKey string, protocol string, timeo
 			ReadTimeout:  timeout,
 			WriteTimeout: timeout,
 
-			MaxIdleConnDuration: 500 * time.Millisecond,
+			MaxIdleConnDuration:       500 * time.Millisecond,
+			MaxIdemponentCallAttempts: interEgMaxAttempts,
+			// All inter-EG operations (pull/push/status) are idempotent: a push
+			// rewrites the same content under the same cache key. Allow fasthttp
+			// to retry POST on transient connection errors (e.g. peer closed a
+			// stale keep-alive connection), not only GET. resetTimeout=false keeps
+			// retries within the original DoTimeout deadline.
+			RetryIfErr: func(req *fasthttp.Request, attempts int, err error) (resetTimeout bool, retry bool) {
+				return false, true
+			},
 		},
 		logger: logger,
 	}
