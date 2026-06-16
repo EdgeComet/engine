@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -192,6 +193,7 @@ type RenderResult struct {
 	RedirectTo      string             // Redirect target URL (Location header value for 3xx)
 	RuleIDs         []uint32           // Content processor rule IDs
 	OriginalPageSEO *types.PageSEO     // PageSEO before content processing (nil when unmodified)
+	Extraction      json.RawMessage    // Custom extraction output (opaque JSON; populated by EE content processor)
 }
 
 // RenderOrchestrator coordinates rendering requests, service selection, and fallback handling
@@ -753,9 +755,11 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 
 	var ruleIDs []uint32
 	var originalPageSEO *types.PageSEO
+	var extraction json.RawMessage
 	if processed != nil {
 		ruleIDs = processed.RuleIDs
 		originalPageSEO = processed.OriginalPageSEO
+		extraction = processed.Extraction
 	}
 
 	result := &RenderResult{
@@ -773,6 +777,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		RedirectTo:      redirectTo,
 		RuleIDs:         ruleIDs,
 		OriginalPageSEO: originalPageSEO,
+		Extraction:      extraction,
 	}
 
 	// Lock and tab will be released by defer AFTER cache write and serving complete
@@ -1155,6 +1160,13 @@ func processedOriginalPageSEO(p *ProcessedContent) *types.PageSEO {
 	return p.OriginalPageSEO
 }
 
+func processedExtraction(p *ProcessedContent) json.RawMessage {
+	if p == nil {
+		return nil
+	}
+	return p.Extraction
+}
+
 // overrideParams captures the differences between render and bypass override handling.
 type overrideParams struct {
 	source       ResponseSource
@@ -1212,6 +1224,7 @@ func (ro *RenderOrchestrator) serveOverride(
 		PageSEO:         processed.PageSEO,
 		RuleIDs:         processed.RuleIDs,
 		OriginalPageSEO: processed.OriginalPageSEO,
+		Extraction:      processed.Extraction,
 	}, nil
 }
 
@@ -1361,6 +1374,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 		RedirectTo:      redirectTo,
 		RuleIDs:         processedRuleIDs(processed),
 		OriginalPageSEO: processedOriginalPageSEO(processed),
+		Extraction:      processedExtraction(processed),
 	}, nil
 }
 

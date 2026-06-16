@@ -2,6 +2,7 @@ package recache
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	neturl "net/url"
 	"strconv"
@@ -315,7 +316,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	renderResult.HTML = processed.HTML
 
 	totalDuration := time.Since(startTime)
-	if err := rs.saveToCache(ctx, renderCtx, renderResult, processed.PageSEO, processed.RuleIDs, processed.OriginalPageSEO, reservation.ServiceID, totalDuration); err != nil {
+	if err := rs.saveToCache(ctx, renderCtx, renderResult, processed.PageSEO, processed.RuleIDs, processed.OriginalPageSEO, processed.Extraction, reservation.ServiceID, totalDuration); err != nil {
 		return fmt.Errorf("failed to save to cache: %w", err)
 	}
 
@@ -335,6 +336,7 @@ func (rs *RecacheService) saveToCache(
 	pageSEO *types.PageSEO,
 	ruleIDs []uint32,
 	originalPageSEO *types.PageSEO,
+	extraction json.RawMessage,
 	serviceID string,
 	totalDuration time.Duration,
 ) error {
@@ -364,6 +366,7 @@ func (rs *RecacheService) saveToCache(
 			PageSEO:         pageSEO,
 			RuleIDs:         ruleIDs,
 			OriginalPageSEO: originalPageSEO,
+			Extraction:      extraction,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)
@@ -422,6 +425,7 @@ func (rs *RecacheService) saveOverrideToCache(
 			PageSEO:         processed.PageSEO,
 			RuleIDs:         processed.RuleIDs,
 			OriginalPageSEO: processed.OriginalPageSEO,
+			Extraction:      processed.Extraction,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)
@@ -506,6 +510,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 			PageSEO:         pageSEO,
 			RuleIDs:         processed.RuleIDs,
 			OriginalPageSEO: processed.OriginalPageSEO,
+			Extraction:      processed.Extraction,
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)

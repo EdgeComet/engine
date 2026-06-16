@@ -70,6 +70,7 @@ func ProcessContent(
 	}
 
 	result.RuleIDs = output.RuleIDs
+	result.Extraction = output.Extraction
 
 	if output.Override != nil {
 		result.Override = output.Override

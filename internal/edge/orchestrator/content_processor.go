@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/edgecomet/engine/internal/common/htmlprocessor"
 	"github.com/edgecomet/engine/pkg/types"
@@ -23,10 +24,11 @@ type ContentInput struct {
 }
 
 type ContentOutput struct {
-	HTML     []byte
-	RuleIDs  []uint32
-	Override *ResponseOverride
-	Modified bool
+	HTML       []byte
+	RuleIDs    []uint32
+	Override   *ResponseOverride
+	Modified   bool
+	Extraction json.RawMessage
 }
 
 type ResponseOverride struct {
@@ -40,4 +42,5 @@ type ProcessedContent struct {
 	RuleIDs         []uint32
 	Override        *ResponseOverride
 	OriginalPageSEO *types.PageSEO
+	Extraction      json.RawMessage
 }

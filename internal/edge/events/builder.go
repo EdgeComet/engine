@@ -106,6 +106,9 @@ func BuildRequestEvent(
 		if result.OriginalPageSEO != nil {
 			event.PageSEOOriginal = convertPageSEO(result.OriginalPageSEO)
 		}
+		if len(result.Extraction) > 0 {
+			event.Extraction = result.Extraction
+		}
 	}
 
 	// Override EventType for precache requests
