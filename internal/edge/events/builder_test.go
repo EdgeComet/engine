@@ -216,6 +216,7 @@ func TestBuildRequestEvent_ContextFields(t *testing.T) {
 
 func TestBuildErrorEvent(t *testing.T) {
 	event := BuildErrorEvent(
+		nil,
 		"req-456",
 		"example.com",
 		1,
@@ -246,6 +247,7 @@ func TestBuildErrorEvent(t *testing.T) {
 
 func TestBuildErrorEventWithClientIP(t *testing.T) {
 	event := BuildErrorEvent(
+		nil,
 		"req-789",
 		"example.com",
 		1,
@@ -260,6 +262,88 @@ func TestBuildErrorEventWithClientIP(t *testing.T) {
 	)
 
 	assert.Equal(t, "203.0.113.50", event.ClientIP)
+}
+
+func TestBuildRequestEvent_CapturesHeaders(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.HTTPCtx.Request.Header.Set("Referer", "https://google.com")
+	renderCtx.HTTPCtx.Request.Header.Add("X-Multi", "a")
+	renderCtx.HTTPCtx.Request.Header.Add("X-Multi", "b")
+	renderCtx.HTTPCtx.Response.Header.Set("Content-Type", "text/html")
+	renderCtx.HTTPCtx.Response.Header.Set("Cache-Control", "no-store")
+
+	event := BuildRequestEvent(renderCtx, nil, 50*time.Millisecond, "eg-1")
+
+	assert.Equal(t, []string{"https://google.com"}, event.RequestHeaders["Referer"])
+	assert.Equal(t, []string{"a", "b"}, event.RequestHeaders["X-Multi"])
+	assert.Equal(t, []string{"text/html"}, event.ResponseHeaders["Content-Type"])
+	assert.Equal(t, []string{"no-store"}, event.ResponseHeaders["Cache-Control"])
+}
+
+func TestBuildRequestEvent_HeadersCopiedFromPooledContext(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.HTTPCtx.Request.Header.Set("Referer", "https://google.com")
+
+	event := BuildRequestEvent(renderCtx, nil, 50*time.Millisecond, "eg-1")
+
+	renderCtx.HTTPCtx.Request.Header.Reset()
+	renderCtx.HTTPCtx.Request.Header.Set("Referer", "https://changed.example")
+
+	assert.Equal(t, []string{"https://google.com"}, event.RequestHeaders["Referer"])
+}
+
+func TestBuildRequestEvent_NilHTTPCtx(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.HTTPCtx = nil
+
+	event := BuildRequestEvent(renderCtx, nil, 50*time.Millisecond, "eg-1")
+
+	assert.Nil(t, event.RequestHeaders)
+	assert.Nil(t, event.ResponseHeaders)
+}
+
+func TestBuildErrorEvent_CapturesHeaders(t *testing.T) {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.Set("Referer", "https://google.com")
+	ctx.Response.Header.Set("Content-Type", "text/plain")
+
+	event := BuildErrorEvent(
+		ctx,
+		"req-456",
+		"example.com",
+		1,
+		"https://example.com/admin",
+		"https://example.com/admin",
+		"Googlebot/2.1",
+		"",
+		"auth",
+		"invalid API key",
+		403,
+		"eg-1",
+	)
+
+	assert.Equal(t, []string{"https://google.com"}, event.RequestHeaders["Referer"])
+	assert.Equal(t, []string{"text/plain"}, event.ResponseHeaders["Content-Type"])
+}
+
+func TestBuildErrorEvent_NilHTTPCtx(t *testing.T) {
+	event := BuildErrorEvent(
+		nil,
+		"req-456",
+		"example.com",
+		1,
+		"https://example.com/admin",
+		"https://example.com/admin",
+		"Googlebot/2.1",
+		"",
+		"auth",
+		"invalid API key",
+		403,
+		"eg-1",
+	)
+
+	assert.Nil(t, event.RequestHeaders)
+	assert.Nil(t, event.ResponseHeaders)
 }
 
 func TestBuildRequestEvent_NilContext(t *testing.T) {

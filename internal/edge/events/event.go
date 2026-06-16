@@ -24,6 +24,11 @@ type RequestEvent struct {
 	ClientIP        string `json:"client_ip"`
 	MatchedRule     string `json:"matched_rule"`
 
+	// HTTP headers (client request and final response); not written by the
+	// file emitter, captured for downstream emitters
+	RequestHeaders  map[string][]string `json:"request_headers,omitempty"`
+	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
+
 	// Response
 	StatusCode int     `json:"status_code"`
 	PageSize   int64   `json:"page_size"`

@@ -1,7 +1,10 @@
 package events
 
 import (
+	"iter"
 	"time"
+
+	"github.com/valyala/fasthttp"
 
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/orchestrator"
@@ -51,6 +54,8 @@ func BuildRequestEvent(
 		event.Dimension = renderCtx.Dimension
 		if renderCtx.HTTPCtx != nil {
 			event.UserAgent = string(renderCtx.HTTPCtx.UserAgent())
+			event.RequestHeaders = copyHeaders(renderCtx.HTTPCtx.Request.Header.All())
+			event.ResponseHeaders = copyHeaders(renderCtx.HTTPCtx.Response.Header.All())
 		}
 		event.ClientIP = renderCtx.ClientIP
 		event.DimensionAction = renderCtx.DimensionAction
@@ -111,8 +116,10 @@ func BuildRequestEvent(
 	return event
 }
 
-// BuildErrorEvent creates an error event for early failures (auth, validation, etc.)
+// BuildErrorEvent creates an error event for early failures (auth, validation, etc.).
+// httpCtx may be nil; when set, request and response headers are captured from it.
 func BuildErrorEvent(
+	httpCtx *fasthttp.RequestCtx,
 	requestID string,
 	host string,
 	hostID int,
@@ -125,7 +132,7 @@ func BuildErrorEvent(
 	statusCode int,
 	egInstanceID string,
 ) *RequestEvent {
-	return &RequestEvent{
+	event := &RequestEvent{
 		RequestID:    requestID,
 		Host:         host,
 		HostID:       hostID,
@@ -140,6 +147,27 @@ func BuildErrorEvent(
 		CreatedAt:    time.Now().UTC(),
 		EGInstanceID: egInstanceID,
 	}
+
+	if httpCtx != nil {
+		event.RequestHeaders = copyHeaders(httpCtx.Request.Header.All())
+		event.ResponseHeaders = copyHeaders(httpCtx.Response.Header.All())
+	}
+
+	return event
+}
+
+// copyHeaders copies header key/value pairs out of a pooled fasthttp context.
+// Returns nil when there are no headers.
+func copyHeaders(headers iter.Seq2[[]byte, []byte]) map[string][]string {
+	var result map[string][]string
+	for key, value := range headers {
+		if result == nil {
+			result = make(map[string][]string)
+		}
+		name := string(key)
+		result[name] = append(result[name], string(value))
+	}
+	return result
 }
 
 // mapResponseSource converts orchestrator.ResponseSource to event type and source strings

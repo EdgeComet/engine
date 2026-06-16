@@ -54,6 +54,7 @@ func (s *Server) handleRequestError(ctx *fasthttp.RequestCtx, renderCtx *edgectx
 			eventClientIP = clientip.Extract(ctx, globalHeaders)
 		}
 		event := events.BuildErrorEvent(
+			ctx,
 			renderCtx.RequestID,
 			domain,
 			hostID,
@@ -84,6 +85,7 @@ func (s *Server) handleUnmatchedBlock(ctx *fasthttp.RequestCtx, renderCtx *edgec
 	// Emit error event for access logging
 	if s.eventEmitter != nil {
 		event := events.BuildErrorEvent(
+			ctx,
 			renderCtx.RequestID,
 			renderCtx.Host.Domain,
 			renderCtx.Host.ID,
@@ -116,6 +118,7 @@ func (s *Server) handleDimensionBlock(ctx *fasthttp.RequestCtx, renderCtx *edgec
 
 	if s.eventEmitter != nil {
 		event := events.BuildErrorEvent(
+			ctx,
 			renderCtx.RequestID,
 			renderCtx.Host.Domain,
 			renderCtx.Host.ID,
