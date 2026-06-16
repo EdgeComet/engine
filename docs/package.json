@@ -1,6 +1,8 @@
 {
   "devDependencies": {
-    "vitepress": "^2.0.0-alpha.13"
+    "mermaid": "^11.0.0",
+    "vitepress": "^2.0.0-alpha.13",
+    "vitepress-plugin-mermaid": "^2.0.17"
   },
   "overrides": {
     "rollup": ">=4.59.0"

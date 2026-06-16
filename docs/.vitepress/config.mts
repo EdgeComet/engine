@@ -12,12 +12,14 @@ export default withMermaid(defineConfig({
         languages: [vclGrammar as any]
     },
     head: [
-        ['link', {rel: 'icon', type: 'image/png', href: '/docs/images/favicon.png'}]
+        ['link', {rel: 'icon', type: 'image/svg+xml', href: '/docs/images/favicon.svg'}],
+        ['link', {rel: 'icon', type: 'image/png', sizes: '512x512', href: '/docs/images/favicon-512.png'}],
+        ['link', {rel: 'apple-touch-icon', href: '/docs/images/apple-touch-icon.png'}]
     ],
     themeConfig: {
         logo: {
-            light: '/images/logo_black_150x30.png',
-            dark: '/images/logo_white_150x30.png',
+            light: '/images/logo-light.svg',
+            dark: '/images/logo-dark.svg',
         },
         siteTitle: false,
         // https://vitepress.dev/reference/default-theme-config
