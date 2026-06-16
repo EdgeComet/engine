@@ -1,4 +1,12 @@
+---
+title: What is Render Service
+description: The rendering component of the open-source EdgeComet engine - headless Chrome rendering, with caching and pre-caching handled by the other components.
+---
+
 # What is Render Service
+
+Render Service is the rendering component of the open-source EdgeComet engine. Rendering is one job among several: caching, pre-caching, and request coordination happen in the Edge Gateway and Cache Daemon, while Render Service focuses solely on producing rendered HTML.
+
 Render Service (RS) is a daemon dedicated to rendering HTML pages by loading them in headless Chrome and executing their JavaScript. It manages Chrome instances, waits for pages to fully load, and captures the final rendered HTML with all dynamically generated content visible to search engine bots and AI crawlers.
 
 RS does not store or retrieve cache. Its single responsibility is rendering: receive a URL from EG, open it in Chrome, wait for completion, and return the HTML. All caching, sharding, and request coordination happen in EG.

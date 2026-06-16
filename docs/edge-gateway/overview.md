@@ -1,4 +1,11 @@
+---
+title: Edge Gateway
+description: The in-path core of the open-source EdgeComet engine - bot detection, caching, sharding, and routing to rendering.
+---
+
 # Edge Gateway
+
+Edge Gateway is the in-path core of the open-source EdgeComet engine. Caching is its central job: it sits in the bot request path, serves prepared HTML from the filesystem, and only routes to rendering when a fresh render is needed. It also handles bot detection, URL rules, device dimensions, cache sharding, and bypass.
 
 
 

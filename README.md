@@ -2,27 +2,31 @@
 
 [![CI](https://github.com/EdgeComet/engine/actions/workflows/ci.yml/badge.svg)](https://github.com/EdgeComet/engine/actions/workflows/ci.yml)
 
-Server-side rendering and caching system for JavaScript websites. Serves pre-rendered HTML to search engine bots (Googlebot, Bingbot) and AI crawlers (GPTBot, ClaudeBot, PerplexityBot).
+Open-source SEO infrastructure engine: caching, pre-caching, and JavaScript rendering for search engine bots (Googlebot, Bingbot) and AI crawlers (GPTBot, ClaudeBot, PerplexityBot).
 
 ## Overview
 
-EdgeComet acts as a middleware layer that makes JavaScript content crawlable. When a search engine or AI crawler visits your site, EdgeComet intercepts the request, serving a rendered HTML snapshot from cache or executing the JavaScript using a managed pool of headless Chrome instances.
+EdgeComet sits in the bot request path as a layer between your site and crawler traffic. Caching is its core job: it serves prepared HTML in milliseconds, pre-renders JavaScript only for crawlers that cannot execute it, and refreshes that cache automatically so bots get complete, fast content without your origin rendering every page on every visit.
 
-This approach allows bots to see your content, metadata, and structured data as intended, without requiring changes to your frontend code. It works with React, Vue, Angular, or any JavaScript framework that renders client-side.
+This approach allows bots to see your content, metadata, and structured data as intended, without requiring changes to your frontend code. It works with React, Vue, Angular, or any JavaScript framework that renders client-side. The engine is open source under Apache-2.0, so you can self-host it or use the managed EdgeComet service.
 
 ### Features
 
 - **Caching**: Redis for distributed coordination and metadata, filesystem for HTML content. Cached pages served in milliseconds.
+- **Pre-caching**: Cache Daemon automatically recaches frequently crawled pages on idle capacity, keeping popular URLs fresh without re-rendering the whole site.
 - **Rendering**: Managed Chrome instance pool with automatic lifecycle handling, error recovery, and distributed locking to prevent duplicate renders.
 - **Configuration**: Rules defined globally, per-host, or per-URL pattern using exact matches, wildcards, or regex. Query parameter matching supported.
 - **Dimensions**: Separate cache entries for desktop, mobile, and tablet user agents.
 - **Monitoring**: Prometheus metrics, structured logging (Zap), stale-while-revalidate support.
+- **Open source**: Full engine published under Apache-2.0. Inspect, self-host, and extend it.
 
 ### Use cases
 
-**JavaScript rendering**: Bots receive fully rendered HTML while users get the client-side app. First render takes 2-5s, cached responses under 10ms. Supports device-specific dimensions (desktop, mobile, tablet).
+**Fast bot responses and crawl budget optimization**: Cache serves prepared HTML from the filesystem in milliseconds regardless of origin speed, on any stack. Bypass mode caches origin responses without rendering for pages that don't need JS execution. Reducing response time lets search and AI bots crawl more of your pages in the same window.
 
-**Crawl budget optimization**: Bypass mode caches origin responses without rendering. Reduces origin load and speeds up bot crawls for pages that don't need JS execution.
+**Automatic pre-caching**: The Cache Daemon keeps frequently crawled pages fresh in the background using only idle capacity, so popular URLs stay up to date without harming real-time performance.
+
+**JavaScript rendering**: Bots receive fully rendered HTML while users get the client-side app. First render takes 2-5s, cached responses under 10ms. Supports device-specific dimensions (desktop, mobile, tablet).
 
 **AI crawler support**: GPTBot, ClaudeBot, PerplexityBot receive complete HTML with structured data. Works the same as search engine bot rendering.
 
@@ -210,6 +214,11 @@ Structured logging with Zap provides detailed operational insights:
 ```
 
 Log levels: DEBUG, INFO, WARN, ERROR
+
+
+## Part of the broader EdgeComet platform
+
+This repository is the open-source core of EdgeComet: the Edge Gateway, Render Service, and Cache Daemon, which handle caching, pre-caching, and rendering in the bot request path. The managed platform builds on the same in-path layer and adds Edge SEO, Log Analyzer, Evergreen Crawl, Alerting, and Search Analytics. Run the engine yourself, or use [the managed service](https://edgecomet.com/) when you want these modules without operating the infrastructure.
 
 
 ## License

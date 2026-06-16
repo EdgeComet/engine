@@ -1,4 +1,11 @@
+---
+title: Cache Daemon - Overview
+description: Pre-caching for the open-source EdgeComet engine - automatic, bot-triggered recaching that keeps frequently crawled pages fresh on idle capacity.
+---
+
 # Cache Daemon - Overview
+
+Pre-caching is a first-class capability of the open-source EdgeComet engine, and the Cache Daemon provides it. Instead of rendering every page on every bot visit, it keeps frequently crawled pages fresh in the background, using only idle capacity so it never harms real-time performance.
 
 Introduction to the Cache Daemon and automatic recaching functionality.
 
