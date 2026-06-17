@@ -128,6 +128,7 @@ func buildBreadcrumbEntries(list map[string]interface{}, pageURL string) []types
 		if resolved == "" {
 			resolved = rawURL
 		}
+		resolved = normalizeAbsoluteURL(resolved)
 		name := readBreadcrumbName(p.item)
 		result = append(result, types.BreadcrumbEntry{
 			Name: truncateRunes(collapseWhitespace(name), types.MaxHeadingLength),

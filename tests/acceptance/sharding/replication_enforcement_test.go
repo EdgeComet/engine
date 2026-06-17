@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/edgecomet/engine/internal/edge/hash"
+	"github.com/edgecomet/engine/internal/common/hash"
 )
 
 var _ = Describe("Replication Factor Enforcement", Serial, func() {

@@ -17,7 +17,7 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 
 	canonicalRaw := extractCanonicalURL(d.doc)
 	if canonicalRaw != "" {
-		resolved := resolveCanonicalURL(canonicalRaw, pageURL)
+		resolved := normalizeAbsoluteURL(resolveCanonicalURL(canonicalRaw, pageURL))
 		seo.CanonicalURL = truncateRunes(resolved, types.MaxCanonicalURLLength)
 	}
 

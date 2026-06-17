@@ -23,7 +23,7 @@ func extractHreflang(doc *goquery.Document, pageURL string) []types.HreflangEntr
 		if resolved == "" {
 			resolved = href
 		}
-		resolved = truncateRunes(resolved, types.MaxHreflangURLLength)
+		resolved = truncateRunes(normalizeAbsoluteURL(resolved), types.MaxHreflangURLLength)
 		entries = append(entries, types.HreflangEntry{Lang: hreflang, URL: resolved})
 	})
 	if len(entries) == 0 {
@@ -36,7 +36,9 @@ func extractHreflangSelf(entries []types.HreflangEntry, pageURL string) string {
 	if len(entries) == 0 {
 		return ""
 	}
-	pageURLLower := strings.ToLower(pageURL)
+	// hreflang URLs are normalized at extraction, so normalize the page URL too for
+	// a like-for-like self comparison.
+	pageURLLower := strings.ToLower(normalizeAbsoluteURL(pageURL))
 	for _, entry := range entries {
 		if strings.ToLower(entry.URL) == pageURLLower {
 			return entry.Lang

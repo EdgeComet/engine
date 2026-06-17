@@ -11,9 +11,9 @@ import (
 
 	"github.com/edgecomet/engine/internal/cachedaemon/metrics"
 	"github.com/edgecomet/engine/internal/common/configtypes"
+	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/common/metricsserver"
 	"github.com/edgecomet/engine/internal/common/redis"
-	"github.com/edgecomet/engine/internal/edge/hash"
 	"github.com/edgecomet/engine/internal/edge/sharding"
 	"github.com/edgecomet/engine/internal/render/registry"
 	"github.com/edgecomet/engine/pkg/types"

@@ -286,5 +286,32 @@ func convertPageSEO(seo *types.PageSEO) *PageSEOEvent {
 		}
 	}
 
+	// Convert breadcrumbs (extracted today but previously dropped before the event)
+	if len(seo.Breadcrumbs) > 0 {
+		event.Breadcrumbs = make([]BreadcrumbEntryEvent, len(seo.Breadcrumbs))
+		for i, b := range seo.Breadcrumbs {
+			event.Breadcrumbs[i] = BreadcrumbEntryEvent{
+				Name: b.Name,
+				URL:  b.URL,
+			}
+		}
+	}
+
+	// Convert captured links
+	if len(seo.PageLinks) > 0 {
+		event.PageLinks = make([]PageLinkEvent, len(seo.PageLinks))
+		for i, l := range seo.PageLinks {
+			event.PageLinks[i] = PageLinkEvent{
+				Target:     l.Target,
+				Anchor:     l.Anchor,
+				IsInternal: l.IsInternal,
+				Nofollow:   l.Nofollow,
+				Sponsored:  l.Sponsored,
+				UGC:        l.UGC,
+				IsImage:    l.IsImage,
+			}
+		}
+	}
+
 	return event
 }

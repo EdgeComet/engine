@@ -107,6 +107,7 @@ func extractLinkMetrics(doc *goquery.Document, baseHref, pageURL string, seo *ty
 	}
 
 	externalDomains := make(map[string]int)
+	links := newLinkAccumulator()
 
 	doc.Find("body a").Each(func(_ int, s *goquery.Selection) {
 		href := getSelectionAttr(s, "href")
@@ -120,42 +121,107 @@ func extractLinkMetrics(doc *goquery.Document, baseHref, pageURL string, seo *ty
 		isNofollow := strings.Contains(rel, "nofollow")
 
 		resolved := resolveURL(href, effectiveBase)
-		parsed, err := url.Parse(resolved)
-		if err != nil {
+		parsed, parseErr := url.Parse(resolved)
+
+		isInternal := false
+		if parseErr != nil {
 			seo.LinksExternal++
 			if isNofollow {
 				seo.LinksNofollow++
 				seo.LinksNofollowExternal++
 			}
-			return
-		}
-
-		linkHost := parsed.Host
-		isInternal := linkHost == "" || urlutil.IsSameOrigin(pageOrigin, linkHost)
-
-		if isInternal {
-			seo.LinksInternal++
 		} else {
-			seo.LinksExternal++
-			hostname := urlutil.ExtractHostname(linkHost)
-			if hostname != "" {
-				externalDomains[hostname]++
+			linkHost := parsed.Host
+			isInternal = linkHost == "" || urlutil.IsSameOrigin(pageOrigin, linkHost)
+
+			if isInternal {
+				seo.LinksInternal++
+			} else {
+				seo.LinksExternal++
+				hostname := urlutil.ExtractHostname(linkHost)
+				if hostname != "" {
+					externalDomains[hostname]++
+				}
+			}
+
+			if isNofollow {
+				seo.LinksNofollow++
+				if isInternal {
+					seo.LinksNofollowInternal++
+				} else {
+					seo.LinksNofollowExternal++
+				}
 			}
 		}
 
-		if isNofollow {
-			seo.LinksNofollow++
-			if isInternal {
-				seo.LinksNofollowInternal++
-			} else {
-				seo.LinksNofollowExternal++
-			}
-		}
+		// Per-link capture: additive, never affects the aggregate counts above.
+		// Target stored as a normalized absolute string.
+		links.add(types.PageLink{
+			Target:     normalizeAbsoluteURL(resolved),
+			Anchor:     truncateRunes(collapseWhitespace(s.Text()), types.MaxAnchorLength),
+			IsInternal: isInternal,
+			Nofollow:   isNofollow,
+			Sponsored:  strings.Contains(rel, "sponsored"),
+			UGC:        strings.Contains(rel, "ugc"),
+			IsImage:    s.Find("img").Length() > 0,
+		})
 	})
 
 	if len(externalDomains) > 0 {
 		seo.ExternalDomains = topNDomains(externalDomains, types.MaxExternalDomains)
 	}
+
+	seo.PageLinks = links.result()
+	seo.PageLinksTruncated = links.truncated
+}
+
+// linkAccumulator dedupes captured links by normalized target within a page,
+// preserving first-seen order, ORing flags on collision and keeping the first
+// non-empty anchor. New distinct targets beyond MaxPageLinks are dropped (existing
+// targets still merge) and truncated is set.
+type linkAccumulator struct {
+	order     []string
+	byTarget  map[string]*types.PageLink
+	truncated bool
+}
+
+func newLinkAccumulator() *linkAccumulator {
+	return &linkAccumulator{byTarget: make(map[string]*types.PageLink)}
+}
+
+func (a *linkAccumulator) add(link types.PageLink) {
+	if link.Target == "" {
+		return
+	}
+	if existing, ok := a.byTarget[link.Target]; ok {
+		existing.IsInternal = existing.IsInternal || link.IsInternal
+		existing.Nofollow = existing.Nofollow || link.Nofollow
+		existing.Sponsored = existing.Sponsored || link.Sponsored
+		existing.UGC = existing.UGC || link.UGC
+		existing.IsImage = existing.IsImage || link.IsImage
+		if existing.Anchor == "" && link.Anchor != "" {
+			existing.Anchor = link.Anchor
+		}
+		return
+	}
+	if len(a.order) >= types.MaxPageLinks {
+		a.truncated = true
+		return
+	}
+	stored := link
+	a.byTarget[link.Target] = &stored
+	a.order = append(a.order, link.Target)
+}
+
+func (a *linkAccumulator) result() []types.PageLink {
+	if len(a.order) == 0 {
+		return nil
+	}
+	out := make([]types.PageLink, 0, len(a.order))
+	for _, target := range a.order {
+		out = append(out, *a.byTarget[target])
+	}
+	return out
 }
 
 // extractImageMetrics populates image metrics in the PageSEO struct.

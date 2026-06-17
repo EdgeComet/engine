@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/config"
-	"github.com/edgecomet/engine/internal/edge/hash"
+	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/edge/validate"
 	"github.com/edgecomet/engine/pkg/types"
 )

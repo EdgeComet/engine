@@ -108,28 +108,49 @@ type HreflangEntryEvent struct {
 	URL  string `json:"url"`
 }
 
+// BreadcrumbEntryEvent represents one breadcrumb item in events
+type BreadcrumbEntryEvent struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+// PageLinkEvent is one captured outbound link, carried folded inside the page_seo
+// event struct.
+type PageLinkEvent struct {
+	Target     string `json:"target"`
+	Anchor     string `json:"anchor,omitempty"`
+	IsInternal bool   `json:"is_internal,omitempty"`
+	Nofollow   bool   `json:"nofollow,omitempty"`
+	Sponsored  bool   `json:"sponsored,omitempty"`
+	UGC        bool   `json:"ugc,omitempty"`
+	IsImage    bool   `json:"is_image,omitempty"`
+}
+
 // PageSEOEvent contains SEO metadata for event logging
 type PageSEOEvent struct {
-	Title               string               `json:"title,omitempty"`
-	IndexStatus         int                  `json:"index_status,omitempty"`
-	MetaDescription     string               `json:"meta_description,omitempty"`
-	CanonicalURL        string               `json:"canonical_url,omitempty"`
-	MetaRobots          []string             `json:"meta_robots,omitempty"`
-	H1s                 []string             `json:"h1s,omitempty"`
-	H2s                 []string             `json:"h2s,omitempty"`
-	H3s                 []string             `json:"h3s,omitempty"`
-	LinksTotal          int                  `json:"links_total,omitempty"`
-	LinksInternal       int                  `json:"links_internal,omitempty"`
-	LinksExternal       int                  `json:"links_external,omitempty"`
-	ExternalDomains     map[string]int       `json:"external_domains,omitempty"`
-	ImagesTotal         int                  `json:"images_total,omitempty"`
-	ImagesInternal      int                  `json:"images_internal,omitempty"`
-	ImagesExternal      int                  `json:"images_external,omitempty"`
-	ImagesWithAlt       int                  `json:"images_with_alt,omitempty"`
-	ImagesWithoutAlt    int                  `json:"images_without_alt,omitempty"`
-	WordCount           int                  `json:"word_count,omitempty"`
-	PageMinHash         []uint64             `json:"page_minhash,omitempty"`
-	Hreflang            []HreflangEntryEvent `json:"hreflang,omitempty"`
-	HreflangSelf        string               `json:"hreflang_self,omitempty"`
-	StructuredDataTypes []string             `json:"structured_data_types,omitempty"`
+	Title               string                 `json:"title,omitempty"`
+	IndexStatus         int                    `json:"index_status,omitempty"`
+	MetaDescription     string                 `json:"meta_description,omitempty"`
+	CanonicalURL        string                 `json:"canonical_url,omitempty"`
+	MetaRobots          []string               `json:"meta_robots,omitempty"`
+	H1s                 []string               `json:"h1s,omitempty"`
+	H2s                 []string               `json:"h2s,omitempty"`
+	H3s                 []string               `json:"h3s,omitempty"`
+	LinksTotal          int                    `json:"links_total,omitempty"`
+	LinksInternal       int                    `json:"links_internal,omitempty"`
+	LinksExternal       int                    `json:"links_external,omitempty"`
+	ExternalDomains     map[string]int         `json:"external_domains,omitempty"`
+	ImagesTotal         int                    `json:"images_total,omitempty"`
+	ImagesInternal      int                    `json:"images_internal,omitempty"`
+	ImagesExternal      int                    `json:"images_external,omitempty"`
+	ImagesWithAlt       int                    `json:"images_with_alt,omitempty"`
+	ImagesWithoutAlt    int                    `json:"images_without_alt,omitempty"`
+	WordCount           int                    `json:"word_count,omitempty"`
+	PageMinHash         []uint64               `json:"page_minhash,omitempty"`
+	Hreflang            []HreflangEntryEvent   `json:"hreflang,omitempty"`
+	HreflangSelf        string                 `json:"hreflang_self,omitempty"`
+	StructuredDataTypes []string               `json:"structured_data_types,omitempty"`
+	Breadcrumbs         []BreadcrumbEntryEvent `json:"breadcrumbs,omitempty"`
+	// PageLinks carry the per-link outbound graph on the event.
+	PageLinks []PageLinkEvent `json:"page_links,omitempty"`
 }
