@@ -60,3 +60,26 @@ func TestIsHTMLContentType(t *testing.T) {
 		})
 	}
 }
+
+// IsHTMLContentTypeValue is exported for the recache service, which mirrors the bypass serve
+// path's content-type guard before content processing / extraction. Lock its contract.
+func TestIsHTMLContentTypeValue(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		expected    bool
+	}{
+		{"text/html", "text/html", true},
+		{"text/html with charset", "text/html; charset=utf-8", true},
+		{"empty defaults to html", "", true},
+		{"json is not html", "application/json", false},
+		{"pdf is not html", "application/pdf", false},
+		{"image is not html", "image/png", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsHTMLContentTypeValue(tt.contentType))
+		})
+	}
+}

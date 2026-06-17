@@ -467,12 +467,18 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("bypass cache save skipped: %s", reason)
 	}
 
-	processed := orchestrator.ProcessContent(
-		ctx, bypassResp.Body, bypassResp.StatusCode, url,
-		false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
-	)
+	// Only HTML responses are content-processed, mirroring the live bypass serve path
+	// (render_orchestrator serveBypass): non-HTML bodies (PDF, JSON, images) must not be
+	// parsed as HTML, run through SEO/EdgeSEO, or fed to extraction.
+	var processed *orchestrator.ProcessedContent
+	if orchestrator.IsHTMLContentTypeValue(bypassResp.ContentType) {
+		processed = orchestrator.ProcessContent(
+			ctx, bypassResp.Body, bypassResp.StatusCode, url,
+			false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
+		)
+	}
 
-	if processed.Override != nil {
+	if processed != nil && processed.Override != nil {
 		return rs.saveOverrideToCache(ctx, renderCtx, processed, url, startTime, overrideParams{
 			cacheSource: cache.SourceBypass,
 			cacheTTL:    renderCtx.ResolvedConfig.Bypass.Cache.TTL,
@@ -481,10 +487,12 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		})
 	}
 
-	pageSEO := processed.PageSEO
-
-	if processed.OriginalPageSEO != nil {
-		bypassResp.Body = processed.HTML
+	var pageSEO *types.PageSEO
+	if processed != nil {
+		pageSEO = processed.PageSEO
+		if processed.OriginalPageSEO != nil {
+			bypassResp.Body = processed.HTML
+		}
 	}
 
 	if err := rs.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
@@ -503,14 +511,16 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	// Emit recache event for access logging
 	if rs.eventEmitter != nil {
 		result := &orchestrator.RenderResult{
-			Source:          orchestrator.ServedFromBypass,
-			Duration:        totalDuration,
-			BytesServed:     int64(len(bypassResp.Body)),
-			StatusCode:      bypassResp.StatusCode,
-			PageSEO:         pageSEO,
-			RuleIDs:         processed.RuleIDs,
-			OriginalPageSEO: processed.OriginalPageSEO,
-			Extraction:      processed.Extraction,
+			Source:      orchestrator.ServedFromBypass,
+			Duration:    totalDuration,
+			BytesServed: int64(len(bypassResp.Body)),
+			StatusCode:  bypassResp.StatusCode,
+			PageSEO:     pageSEO,
+		}
+		if processed != nil {
+			result.RuleIDs = processed.RuleIDs
+			result.OriginalPageSEO = processed.OriginalPageSEO
+			result.Extraction = processed.Extraction
 		}
 		event := events.BuildRequestEvent(renderCtx, result, totalDuration, rs.instanceID)
 		rs.eventEmitter.Emit(event)

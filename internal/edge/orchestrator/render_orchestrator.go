@@ -1308,7 +1308,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	var pageSEO *types.PageSEO
 	var processed *ProcessedContent
 
-	if isHTMLContentTypeValue(bypassResp.ContentType) {
+	if IsHTMLContentTypeValue(bypassResp.ContentType) {
 		procCtx, procCancel := context.WithTimeout(context.Background(), contentProcessingTimeout)
 		defer procCancel()
 

@@ -44,10 +44,11 @@ func getHeaderCaseInsensitive(headers map[string][]string, name string) ([]strin
 	return nil, false
 }
 
-// isHTMLContentTypeValue reports whether a Content-Type value indicates an HTML body.
+// IsHTMLContentTypeValue reports whether a Content-Type value indicates an HTML body.
 // An empty value is treated as HTML, since both origins and the renderer default
-// to text/html when no Content-Type is present.
-func isHTMLContentTypeValue(contentType string) bool {
+// to text/html when no Content-Type is present. Exported so the recache service (separate
+// package) can mirror the bypass serve path's content-type guard exactly.
+func IsHTMLContentTypeValue(contentType string) bool {
 	if contentType == "" {
 		return true
 	}
@@ -60,7 +61,7 @@ func isHTMLContentType(headers map[string][]string) bool {
 	if !ok || len(ct) == 0 {
 		return true
 	}
-	return isHTMLContentTypeValue(ct[0])
+	return IsHTMLContentTypeValue(ct[0])
 }
 
 // FilterHeaders filters headers to only include those in the safe headers list
