@@ -15,7 +15,7 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-func setupTestQueueReader(t *testing.T) (*QueueReader, *miniredis.Miniredis, *InternalQueue) {
+func setupTestQueueReader(t *testing.T) (*QueueReader, *miniredis.Miniredis, *InternalQueue, *HostConcurrencyLimiter) {
 	mr, err := miniredis.Run()
 	require.NoError(t, err)
 	t.Cleanup(mr.Close)
@@ -28,8 +28,9 @@ func setupTestQueueReader(t *testing.T) (*QueueReader, *miniredis.Miniredis, *In
 
 	keyGen := redis.NewKeyGenerator()
 	iq := NewInternalQueue(100)
-	qr := NewQueueReader(redisClient, keyGen, iq, logger)
-	return qr, mr, iq
+	limiter := NewHostConcurrencyLimiter(nil, nil)
+	qr := NewQueueReader(redisClient, keyGen, iq, limiter, logger)
+	return qr, mr, iq, limiter
 }
 
 func addQueueMember(mr *miniredis.Miniredis, hostID int, priority string, url string, dimID int, scheduledAt float64) {
@@ -45,7 +46,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	}
 
 	t.Run("no priority filter returns all queues", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		addQueueMember(mr, 1, "high", "https://example.com/h1", 1, 1000)
 		addQueueMember(mr, 1, "normal", "https://example.com/n1", 1, 2000)
@@ -61,7 +62,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("priority filter high only", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		addQueueMember(mr, 1, "high", "https://example.com/h1", 1, 1000)
 		addQueueMember(mr, 1, "normal", "https://example.com/n1", 1, 2000)
@@ -79,7 +80,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("cursor pagination", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		for i := 0; i < 10; i++ {
 			addQueueMember(mr, 1, "normal", fmt.Sprintf("https://example.com/page%d", i), 1, float64(1000+i))
@@ -120,7 +121,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("dimension mapping", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		addQueueMember(mr, 1, "normal", "https://example.com/mob", 1, 1000)
 		addQueueMember(mr, 1, "normal", "https://example.com/desk", 2, 2000)
@@ -142,7 +143,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("unknown dimension_id", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		addQueueMember(mr, 1, "normal", "https://example.com/unknown", 99, 1000)
 
@@ -157,7 +158,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("malformed JSON member", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		key := "recache:1:normal"
 		mr.ZAdd(key, 1000, "not-valid-json")
@@ -174,7 +175,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 	})
 
 	t.Run("empty queues", func(t *testing.T) {
-		qr, _, _ := setupTestQueueReader(t)
+		qr, _, _, _ := setupTestQueueReader(t)
 
 		result, err := qr.ListQueueItems(QueueListParams{
 			HostID: 1,
@@ -190,7 +191,7 @@ func TestQueueReader_ListQueueItems(t *testing.T) {
 
 func TestQueueReader_GetQueueSummary(t *testing.T) {
 	t.Run("sums all three queues for pending", func(t *testing.T) {
-		qr, mr, _ := setupTestQueueReader(t)
+		qr, mr, _, _ := setupTestQueueReader(t)
 
 		for i := 0; i < 3; i++ {
 			addQueueMember(mr, 1, "high", fmt.Sprintf("https://example.com/h%d", i), 1, float64(1000+i))
@@ -207,22 +208,88 @@ func TestQueueReader_GetQueueSummary(t *testing.T) {
 		assert.Equal(t, 10, result.Pending)
 	})
 
-	t.Run("processing counts internal queue entries", func(t *testing.T) {
-		qr, _, iq := setupTestQueueReader(t)
+	t.Run("processing counts in-flight renders from the limiter", func(t *testing.T) {
+		qr, _, _, limiter := setupTestQueueReader(t)
 
+		// Acquire 3 slots for host 1 and 1 for host 2. Cap is DefaultMaxConcurrent
+		// (5) since the limiter was built with nil config, so all succeed.
+		var host1Slots []Slot
 		for i := 0; i < 3; i++ {
-			iq.Enqueue(InternalQueueEntry{HostID: 1, URL: fmt.Sprintf("https://example.com/%d", i)})
+			slot, ok := limiter.TryAcquire(1)
+			require.True(t, ok)
+			host1Slots = append(host1Slots, slot)
 		}
-		// Different host
+		otherSlot, ok := limiter.TryAcquire(2)
+		require.True(t, ok)
+
+		result, err := qr.GetQueueSummary(1)
+		require.NoError(t, err)
+		assert.Equal(t, 3, result.Processing, "processing must reflect host 1's in-flight renders only")
+
+		// Releasing slots returns processing to 0.
+		for _, slot := range host1Slots {
+			limiter.Release(slot)
+		}
+		limiter.Release(otherSlot)
+
+		result, err = qr.GetQueueSummary(1)
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Processing)
+	})
+
+	t.Run("pending includes internalQueue entries (waiting for a slot or retry)", func(t *testing.T) {
+		qr, mr, iq, _ := setupTestQueueReader(t)
+
+		// 2 durable in Redis + 3 staged in the internalQueue for host 1.
+		addQueueMember(mr, 1, "high", "https://example.com/r1", 1, 1000)
+		addQueueMember(mr, 1, "normal", "https://example.com/r2", 1, 2000)
+		for i := 0; i < 3; i++ {
+			iq.Enqueue(InternalQueueEntry{HostID: 1, URL: fmt.Sprintf("https://example.com/iq%d", i)})
+		}
+		// Another host's internalQueue entry must not leak into host 1's count.
 		iq.Enqueue(InternalQueueEntry{HostID: 2, URL: "https://other.com/1"})
 
 		result, err := qr.GetQueueSummary(1)
 		require.NoError(t, err)
-		assert.Equal(t, 3, result.Processing)
+		assert.Equal(t, 5, result.Pending, "pending = Redis depth + internalQueue depth for the host")
+		assert.Equal(t, 0, result.Processing, "internalQueue entries are not in-flight")
+	})
+
+	t.Run("pending is independent of in-flight", func(t *testing.T) {
+		qr, mr, _, limiter := setupTestQueueReader(t)
+
+		addQueueMember(mr, 1, "high", "https://example.com/p1", 1, 1000)
+		slot, ok := limiter.TryAcquire(1)
+		require.True(t, ok)
+		defer limiter.Release(slot)
+
+		result, err := qr.GetQueueSummary(1)
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Pending, "the durable entry stays pending while a render is in-flight")
+		assert.Equal(t, 1, result.Processing)
+	})
+
+	t.Run("processing matches the limiter stats source (consistency guard)", func(t *testing.T) {
+		qr, _, _, limiter := setupTestQueueReader(t)
+
+		slot1, ok := limiter.TryAcquire(1)
+		require.True(t, ok)
+		defer limiter.Release(slot1)
+		slot2, ok := limiter.TryAcquire(1)
+		require.True(t, ok)
+		defer limiter.Release(slot2)
+
+		result, err := qr.GetQueueSummary(1)
+		require.NoError(t, err)
+
+		// /status reports in-flight via AllStats(); the summary endpoint must
+		// report the identical number from the same limiter.
+		assert.Equal(t, int(limiter.AllStats()[1].InFlight), result.Processing)
+		assert.Equal(t, int(limiter.Stats(1).InFlight), result.Processing)
 	})
 
 	t.Run("empty queues", func(t *testing.T) {
-		qr, _, _ := setupTestQueueReader(t)
+		qr, _, _, _ := setupTestQueueReader(t)
 
 		result, err := qr.GetQueueSummary(1)
 		require.NoError(t, err)

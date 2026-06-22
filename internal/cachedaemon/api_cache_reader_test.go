@@ -77,6 +77,7 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 		},
 	}
 
+	limiter := NewHostConcurrencyLimiter(configMgr.GetConfig(), configMgr.GetHosts())
 	daemon := &CacheDaemon{
 		redis:              redisClient,
 		logger:             logger,
@@ -85,9 +86,9 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 		internalQueue:      iq,
 		internalAuthKey:    "test-auth-key",
 		configManager:      configMgr,
-		concurrencyLimiter: NewHostConcurrencyLimiter(configMgr.GetConfig(), configMgr.GetHosts()),
+		concurrencyLimiter: limiter,
 		cacheReader:        NewCacheReader(redisClient, keyGen, logger),
-		queueReader:        NewQueueReader(redisClient, keyGen, iq, logger),
+		queueReader:        NewQueueReader(redisClient, keyGen, iq, limiter, logger),
 	}
 	daemon.reloadMu.Lock()
 	daemon.rebuildHostByIDLocked()

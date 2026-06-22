@@ -160,6 +160,11 @@ func NewCacheDaemon(
 		return nil, fmt.Errorf("failed to start metrics server: %w", err)
 	}
 
+	// Shared between the daemon's concurrency gate and the queue reader so the
+	// "processing" figure reported by the queue-summary endpoint derives from
+	// the same in-flight counters as /status and the recache_inflight gauge.
+	concurrencyLimiter := NewHostConcurrencyLimiter(egConfig, configManager.GetHosts())
+
 	daemon := &CacheDaemon{
 		daemonConfig:       daemonCfg,
 		configManager:      configManager,
@@ -174,12 +179,12 @@ func NewCacheDaemon(
 		httpClient:         httpClient,
 		retryBaseDelay:     retryBaseDelay,
 		startTime:          time.Now().UTC(),
-		concurrencyLimiter: NewHostConcurrencyLimiter(egConfig, configManager.GetHosts()),
+		concurrencyLimiter: concurrencyLimiter,
 		hostCursor:         0,
 		metricsCollector:   metricsCollector,
 		metricsServer:      metricsServer,
 		cacheReader:        NewCacheReader(redisClient, keyGenerator, logger),
-		queueReader:        NewQueueReader(redisClient, keyGenerator, internalQueue, logger),
+		queueReader:        NewQueueReader(redisClient, keyGenerator, internalQueue, concurrencyLimiter, logger),
 	}
 
 	daemon.reloadMu.Lock()

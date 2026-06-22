@@ -77,6 +77,18 @@ func TestIsSameOrigin(t *testing.T) {
 		{"with ports different", "example.com:8080", "example.com:9090", true},
 		{"one with port one without", "example.com", "example.com:8080", true},
 		{"subdomain with different ports", "example.com:8080", "www.example.com:9090", true},
+		// Host case is ignored (link authors write any case; the stored target is lowercased)
+		{"uppercase request host", "example.com", "EXAMPLE.COM", true},
+		{"mixed case both", "Example.com", "example.COM", true},
+		{"uppercase subdomain", "example.com", "WWW.Example.com", true},
+		{"uppercase with port", "example.com", "EXAMPLE.COM:8080", true},
+		// Trailing FQDN dot is ignored
+		{"trailing dot request", "example.com", "example.com.", true},
+		{"trailing dot base", "example.com.", "example.com", true},
+		{"trailing dot subdomain", "example.com", "www.example.com.", true},
+		{"trailing dot and port", "example.com", "example.com.:8080", true},
+		// Genuinely different hosts still external after normalization
+		{"different host uppercase", "example.com", "OTHER.COM", false},
 	}
 
 	for _, tt := range tests {

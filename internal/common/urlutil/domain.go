@@ -37,15 +37,15 @@ func ExtractHostname(host string) string {
 }
 
 // IsSameOrigin returns true if hosts are the same domain or one is a subdomain of the other.
-// Strips ports before comparison. Both hosts should already be lowercased.
+// Port, host case, and a trailing FQDN dot ("example.com.") are all ignored, so callers may pass
+// raw hosts straight from url.Parse without pre-normalizing.
 func IsSameOrigin(baseHost, requestHost string) bool {
 	if baseHost == "" || requestHost == "" {
 		return false
 	}
 
-	// Strip ports for comparison
-	base := ExtractHostname(baseHost)
-	req := ExtractHostname(requestHost)
+	base := canonicalHost(baseHost)
+	req := canonicalHost(requestHost)
 
 	if base == req {
 		return true
@@ -59,4 +59,12 @@ func IsSameOrigin(baseHost, requestHost string) bool {
 		return true
 	}
 	return false
+}
+
+// canonicalHost reduces a host to its comparison form: port stripped, lowercased, and the
+// trailing dot of an absolute FQDN removed. This makes equal origins compare equal regardless
+// of the case/dot/port variations a link author may write in an href.
+func canonicalHost(host string) string {
+	h := strings.ToLower(ExtractHostname(host))
+	return strings.TrimSuffix(h, ".")
 }

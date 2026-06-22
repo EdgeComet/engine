@@ -15,14 +15,16 @@ type QueueReader struct {
 	redis         *redis.Client
 	keyGenerator  *redis.KeyGenerator
 	internalQueue *InternalQueue
+	limiter       *HostConcurrencyLimiter
 	logger        *zap.Logger
 }
 
-func NewQueueReader(redisClient *redis.Client, keyGenerator *redis.KeyGenerator, internalQueue *InternalQueue, logger *zap.Logger) *QueueReader {
+func NewQueueReader(redisClient *redis.Client, keyGenerator *redis.KeyGenerator, internalQueue *InternalQueue, limiter *HostConcurrencyLimiter, logger *zap.Logger) *QueueReader {
 	return &QueueReader{
 		redis:         redisClient,
 		keyGenerator:  keyGenerator,
 		internalQueue: internalQueue,
+		limiter:       limiter,
 		logger:        logger,
 	}
 }
@@ -154,8 +156,21 @@ func (qr *QueueReader) GetQueueSummary(hostID int) (*QueueSummaryResponse, error
 		return nil, err
 	}
 
-	pending := int(highCount + normalCount + autoCount)
-	processing := qr.internalQueue.CountByHostID(hostID)
+	// processing = URLs currently being recached = in-flight renders holding a
+	// concurrency slot (dispatched to an EG, awaiting response). Bounded by the
+	// host's max_concurrent and matches the "Limit" shown in the UI. This is the
+	// same canonical source the /status endpoint and the recache_inflight gauge
+	// report, so all surfaces agree.
+	processing := int(qr.limiter.Stats(hostID).InFlight)
+
+	// pending = every URL waiting and not yet rendering:
+	//   - durable Redis ZSET depth (queued, not yet pulled), PLUS
+	//   - internalQueue entries already popped from Redis but waiting on a free
+	//     slot or a retry backoff (no slot held yet).
+	// The internalQueue set is disjoint from in-flight (a dispatched URL leaves
+	// the internalQueue before acquiring its slot), so nothing is double-counted
+	// and no in-flight or waiting URL falls through the cracks.
+	pending := int(highCount+normalCount+autoCount) + qr.internalQueue.CountByHostID(hostID)
 
 	return &QueueSummaryResponse{
 		Pending:    pending,

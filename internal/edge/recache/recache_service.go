@@ -15,6 +15,7 @@ import (
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/common/requestid"
 	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
@@ -218,8 +219,11 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		return fmt.Errorf("URL hostname %q does not match any configured domain for host %d", urlHostname, hostID)
 	}
 
-	// Generate request ID and build render context early
-	requestID := fmt.Sprintf("recache-%d-%d-%d", hostID, dimensionID, time.Now().UTC().Unix())
+	// Generate request ID and build render context early. Route through the
+	// shared helper so the ID carries a random prefix (crypto/rand) and stays
+	// unique across concurrent renders for the same host+dimension; a plain
+	// host-dimension-second format collides during bulk drains.
+	requestID := requestid.GenerateRequestID(fmt.Sprintf("recache-%d-%d", hostID, dimensionID))
 	renderCtx, err := rs.buildRecacheContext(url, host, dimensionID, dimensionName, requestID)
 	if err != nil {
 		return err

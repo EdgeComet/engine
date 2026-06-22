@@ -41,10 +41,11 @@ func TestCaptureLinks_TargetsFlagsAndNormalization(t *testing.T) {
 	assert.True(t, about.IsInternal)
 
 	// Target string normalization: default port stripped, host lowercased, query
-	// sorted, fragment dropped, path case preserved. (is_internal follows the
-	// existing case-sensitive host classification and is asserted elsewhere.)
-	_, messyOK := byTgt["https://example.com/Path?a=1&b=2"]
+	// sorted, fragment dropped, path case preserved. is_internal is classified on the
+	// same normalized host, so an uppercase same-origin host is internal (not external).
+	messy, messyOK := byTgt["https://example.com/Path?a=1&b=2"]
 	assert.True(t, messyOK, "messy URL stored in fully normalized form")
+	assert.True(t, messy.IsInternal, "uppercase same-origin host classified internal, not external")
 
 	ext := byTgt["https://other.com/x"]
 	assert.False(t, ext.IsInternal)
@@ -60,6 +61,28 @@ func TestCaptureLinks_TargetsFlagsAndNormalization(t *testing.T) {
 	assert.True(t, img.IsImage, "anchor wrapping an <img> is flagged is_image")
 
 	assert.False(t, seo.PageLinksTruncated)
+}
+
+// Absolute internal links whose host differs from the page only by case or a trailing FQDN
+// dot must classify as internal: the stored target is normalized (lowercased, dot stripped) so
+// it hash-matches the target page, and is_internal must agree or the internal inlink is hidden.
+func TestCaptureLinks_NonCanonicalHostStillInternal(t *testing.T) {
+	html := `<html><body>
+		<a href="https://EXAMPLE.COM/upper">Upper</a>
+		<a href="https://example.com./dotted">Dotted</a>
+		<a href="https://other.com/ext">Ext</a>
+	</body></html>`
+	doc := parseGoQueryDoc(t, html)
+	seo := &types.PageSEO{}
+	extractLinkMetrics(doc, "", "https://example.com/", seo)
+
+	byTgt := capturedByTarget(seo.PageLinks)
+	assert.True(t, byTgt["https://example.com/upper"].IsInternal, "uppercase host is same-origin")
+	assert.True(t, byTgt["https://example.com/dotted"].IsInternal, "trailing-dot host is same-origin")
+	assert.False(t, byTgt["https://other.com/ext"].IsInternal)
+
+	assert.Equal(t, 2, seo.LinksInternal, "both non-canonical-host links counted internal")
+	assert.Equal(t, 1, seo.LinksExternal)
 }
 
 func TestCaptureLinks_DedupMergesFlagsAndAnchor(t *testing.T) {
