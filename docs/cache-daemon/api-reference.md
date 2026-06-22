@@ -34,7 +34,8 @@ Queue URLs for rendering. Use this to manually trigger cache refresh for specifi
   "host_id": 1,
   "urls": ["https://example.com/page1", "https://example.com/page2"],
   "dimension_ids": [1, 2],
-  "priority": "high"
+  "priority": "high",
+  "mode": "render"
 }
 ```
 
@@ -44,6 +45,13 @@ Queue URLs for rendering. Use this to manually trigger cache refresh for specifi
 | `urls` | array of strings | Yes | URLs to recache (1-10000 entries) |
 | `dimension_ids` | array of integers | No | Dimension IDs to recache (empty = all dimensions) |
 | `priority` | string | Yes | Queue priority: `"high"` or `"normal"` |
+| `mode` | string | No | Action override: `"render"` forces a Chrome render (stored as render cache), `"bypass"` forces an origin fetch (stored as bypass cache). Omit to respect the configured dimension/url-rule action. |
+
+The `mode` override lets you precache against the configured action. For example, a bypass-mode
+host can render selected URLs with `"mode": "render"` so bots are served the rendered HTML, while
+a render-mode host can warm already-server-rendered URLs cheaply with `"mode": "bypass"`. A
+`"bypass"` precache never overwrites a fresh render record for the same URL (render-wins
+precedence).
 
 #### Response
 
@@ -63,7 +71,7 @@ Queue URLs for rendering. Use this to manually trigger cache refresh for specifi
 ```
 
 **Error responses:**
-- `400` - Invalid JSON, missing required fields, invalid priority, host not found, dimension not configured
+- `400` - Invalid JSON, missing required fields, invalid priority, invalid mode, host not found, dimension not configured
 - `401` - Unauthorized (invalid X-Internal-Auth)
 
 #### Example

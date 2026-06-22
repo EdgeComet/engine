@@ -177,6 +177,11 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if req.Mode != "" && req.Mode != types.RecacheModeRender && req.Mode != types.RecacheModeBypass {
+		httputil.JSONError(ctx, "mode must be empty, 'render', or 'bypass'", fasthttp.StatusBadRequest)
+		return
+	}
+
 	// Get host config
 	host := d.GetHost(req.HostID)
 	if host == nil {
@@ -212,6 +217,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 			member := types.RecacheMember{
 				URL:         normalizedURL,
 				DimensionID: dimensionID,
+				Mode:        req.Mode,
 			}
 			memberJSON, _ := json.Marshal(member)
 
@@ -1109,20 +1115,30 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 		}
 		queueKey := d.keyGenerator.RecacheQueueKey(hostID, priority)
 		for _, dimID := range dimensionIDs {
-			member := types.RecacheMember{
-				URL:         normalizedURL,
-				DimensionID: dimID,
-			}
-			memberJSON, _ := json.Marshal(member)
+			// Mode is part of the ZSET member identity, so a URL may be queued as a
+			// no-mode entry or under an action-override (render/bypass). Probe each.
+			found := false
+			for _, mode := range []string{"", types.RecacheModeRender, types.RecacheModeBypass} {
+				member := types.RecacheMember{
+					URL:         normalizedURL,
+					DimensionID: dimID,
+					Mode:        mode,
+				}
+				memberJSON, _ := json.Marshal(member)
 
-			score, err := d.redis.ZScore(reqCtx, queueKey, string(memberJSON))
-			if err != nil {
-				continue
+				score, err := d.redis.ZScore(reqCtx, queueKey, string(memberJSON))
+				if err != nil {
+					continue
+				}
+				queuePriority = priority
+				queueScheduledAt = int64(score)
+				queueFound = true
+				found = true
+				break
 			}
-			queuePriority = priority
-			queueScheduledAt = int64(score)
-			queueFound = true
-			break
+			if found {
+				break
+			}
 		}
 	}
 

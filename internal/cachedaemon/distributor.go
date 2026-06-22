@@ -194,6 +194,7 @@ func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEn
 		URL:         entry.URL,
 		HostID:      entry.HostID,
 		DimensionID: entry.DimensionID,
+		Mode:        entry.Mode,
 	}
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {

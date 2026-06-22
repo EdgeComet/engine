@@ -10,6 +10,7 @@ type InternalQueueEntry struct {
 	HostID         int
 	URL            string
 	DimensionID    int
+	Mode           string // Optional action override: render | bypass (empty = respect config)
 	RetryCount     int
 	QueuedAt       time.Time
 	LastAttempt    time.Time

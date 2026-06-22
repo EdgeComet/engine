@@ -225,11 +225,13 @@ func (d *CacheDaemon) publishConcurrencyMetrics() {
 	}
 }
 
-// actionForEntry resolves the dimension's effective action for a queue entry.
-// Returns an empty URLRuleAction when host or dimension are missing — the
-// scheduler treats these entries as unresolved and discards them before
-// dispatch. Caller must hold d.reloadMu.RLock so hostByID stays stable for
-// the duration of the lookup.
+// actionForEntry resolves the effective action for a queue entry. A per-request
+// mode (entry.Mode) overrides the dimension's action so the scheduler budgets RS
+// capacity correctly (a render override consumes render budget; a bypass override
+// does not). Returns an empty URLRuleAction when host or dimension are missing —
+// the scheduler treats these entries as unresolved and discards them before
+// dispatch. Caller must hold d.reloadMu.RLock so hostByID stays stable for the
+// duration of the lookup.
 func (d *CacheDaemon) actionForEntry(entry InternalQueueEntry) types.URLRuleAction {
 	host := d.hostByID[entry.HostID]
 	if host == nil {
@@ -237,7 +239,14 @@ func (d *CacheDaemon) actionForEntry(entry InternalQueueEntry) types.URLRuleActi
 	}
 	for _, dim := range host.Dimensions {
 		if dim.ID == entry.DimensionID {
-			return dim.EffectiveAction()
+			switch entry.Mode {
+			case types.RecacheModeRender:
+				return types.ActionRender
+			case types.RecacheModeBypass:
+				return types.ActionBypass
+			default:
+				return dim.EffectiveAction()
+			}
 		}
 	}
 	return ""

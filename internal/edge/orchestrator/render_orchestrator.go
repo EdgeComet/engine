@@ -292,49 +292,55 @@ func (ro *RenderOrchestrator) ProcessRenderRequest(renderCtx *edgectx.RenderCont
 		zap.Duration("cache_ttl", resolved.Cache.TTL),
 		zap.Duration("render_timeout", resolved.Render.Timeout))
 
-	// Handle bypass action immediately (skip rendering and caching)
-	if resolved.Action == types.ActionBypass {
-		if renderCtx.DimensionUnmatched {
-			return ro.ServeUnmatchedBypass(renderCtx)
-		}
-		renderCtx.Logger.Info("URL matched bypass rule, fetching from origin directly")
-		return ro.serveBypass(renderCtx, "url_rule")
-	}
-
-	// Continue with normal render workflow for action="render"
-
-	// 1. CHECK CACHE FIRST (early optimization - avoids locking for cache hits)
-	// Detect both fresh and stale cache, but only serve fresh immediately
+	// 1. CHECK CACHE FIRST, before branching on action (early optimization - avoids
+	// locking for cache hits). A fresh cached record is served regardless of action:
+	// for "render" this is the normal early cache hit; for "bypass" it serves a precached
+	// render record (mode:render) sitting in the same (host,dimension,url) slot, applying
+	// the render-wins precedence to the bypass read path. Stale capture stays render-only;
+	// the bypass body keeps its own stale/origin logic for bypass records.
 	var staleCache *cache.CacheMetadata
 	if cached, exists := ro.cacheCoord.LookupCache(renderCtx); exists {
-		// Check if cache is fresh or stale
 		if cached.IsFresh() {
-			// Metadata-only entries (redirects, status overrides) are accessible via Redis on all EGs
-			// Regular content requires file ownership check
-			isMetadataOnly := cached.DiskSize == 0
+			// Bypass action serves only a fresh render-sourced record here; a fresh bypass
+			// record falls through to serveBypass so its metrics/stale logic are unchanged.
+			if resolved.Action == types.ActionRender || cached.Source == cache.SourceRender {
+				// Metadata-only entries (redirects, status overrides) are accessible via Redis on
+				// all EGs; regular content requires file ownership check.
+				isMetadataOnly := cached.DiskSize == 0
 
-			if isMetadataOnly || ro.cacheCoord.IsFileLocal(cached) {
-				result, err := ro.serveFromCache(renderCtx, cached)
-				if err == nil {
-					renderCtx.Logger.Info("Early cache hit, served without locking")
+				if isMetadataOnly || ro.cacheCoord.IsFileLocal(cached) {
+					result, err := ro.serveFromCache(renderCtx, cached)
+					if err == nil {
+						renderCtx.Logger.Info("Early cache hit, served without locking")
+						return result, nil
+					}
+					// File not accessible locally - will try to pull from remote in next step
+					renderCtx.Logger.Warn("Cache file not accessible, will attempt pull or render",
+						zap.String("relative_file_path", cached.FilePath),
+						zap.Error(err))
+				}
+				// If not local, try pulling from remote EG immediately
+				if result, pulled := ro.tryPullFromRemoteSmartly(renderCtx, cached, false); pulled {
 					return result, nil
 				}
-				// File not accessible locally - will try to pull from remote in next step
-				renderCtx.Logger.Warn("Cache file not accessible, will attempt pull or render",
-					zap.String("relative_file_path", cached.FilePath),
-					zap.Error(err))
 			}
-			// If not local, try pulling from remote EG immediately
-			if result, pulled := ro.tryPullFromRemoteSmartly(renderCtx, cached, false); pulled {
-				return result, nil
-			}
-		} else if ro.isStaleServable(renderCtx, cached) {
+		} else if resolved.Action == types.ActionRender && ro.isStaleServable(renderCtx, cached) {
 			// Cache is stale but servable - store for later use if render fails
 			staleCache = cached
 			renderCtx.Logger.Debug("Stale cache detected, will use as fallback if render fails",
 				zap.Duration("stale_age", cached.StaleAge()))
 			// Don't serve stale now - attempt fresh render first
 		}
+	}
+
+	// Handle bypass action (skip rendering): origin fetch + bypass caching. A fresh render
+	// record for this URL was already served above, so this is the genuine not-precached path.
+	if resolved.Action == types.ActionBypass {
+		if renderCtx.DimensionUnmatched {
+			return ro.ServeUnmatchedBypass(renderCtx)
+		}
+		renderCtx.Logger.Info("URL matched bypass rule, fetching from origin directly")
+		return ro.serveBypass(renderCtx, "url_rule")
 	}
 
 	// 2. TRY TO ACQUIRE LOCK FOR RENDERING

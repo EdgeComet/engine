@@ -15,6 +15,7 @@ type RecacheRequest struct {
 	URL         string `json:"url"`
 	HostID      int    `json:"host_id"`
 	DimensionID int    `json:"dimension_id"`
+	Mode        string `json:"mode,omitempty"` // Optional action override: render | bypass (empty = respect config)
 }
 
 // RecacheResponse represents the response from a recache request
@@ -52,7 +53,7 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		zap.Int("host_id", req.HostID),
 		zap.Int("dimension_id", req.DimensionID))
 
-	if err := rs.ProcessRecache(ctx, req.URL, req.HostID, req.DimensionID); err != nil {
+	if err := rs.ProcessRecache(ctx, req.URL, req.HostID, req.DimensionID, req.Mode); err != nil {
 		rs.logger.Error("Recache request failed", zap.Error(err))
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusInternalServerError)
 		return

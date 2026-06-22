@@ -469,6 +469,7 @@ func (d *CacheDaemon) zpopAndEnqueue(ctx context.Context, hostID int, priority s
 			HostID:      hostID,
 			URL:         member.URL,
 			DimensionID: member.DimensionID,
+			Mode:        member.Mode,
 			RetryCount:  0,
 			QueuedAt:    time.Now().UTC(),
 		}

@@ -1,17 +1,26 @@
 package types
 
+// Recache mode override values for RecacheMember.Mode / RecacheAPIRequest.Mode.
+// Empty string means "respect the configured action" (dimension / url-rule).
+const (
+	RecacheModeRender = "render" // force a Chrome render, store as render cache
+	RecacheModeBypass = "bypass" // force an origin fetch, store as bypass cache
+)
+
 // RecacheMember represents a ZSET member for recache queues
 type RecacheMember struct {
-	URL         string `json:"url"`          // Normalized URL
-	DimensionID int    `json:"dimension_id"` // Integer dimension ID (1, 2, 3...)
+	URL         string `json:"url"`            // Normalized URL
+	DimensionID int    `json:"dimension_id"`   // Integer dimension ID (1, 2, 3...)
+	Mode        string `json:"mode,omitempty"` // Optional action override: render | bypass (empty = respect config)
 }
 
 // RecacheAPIRequest is the request body for POST /internal/cache/recache
 type RecacheAPIRequest struct {
-	HostID       int      `json:"host_id"`       // Host identifier from hosts.yaml
-	URLs         []string `json:"urls"`          // URLs to recache (1-10000)
-	DimensionIDs []int    `json:"dimension_ids"` // Dimension IDs (optional, empty = all)
-	Priority     string   `json:"priority"`      // "high" or "normal"
+	HostID       int      `json:"host_id"`        // Host identifier from hosts.yaml
+	URLs         []string `json:"urls"`           // URLs to recache (1-10000)
+	DimensionIDs []int    `json:"dimension_ids"`  // Dimension IDs (optional, empty = all)
+	Priority     string   `json:"priority"`       // "high" or "normal"
+	Mode         string   `json:"mode,omitempty"` // Optional action override: render | bypass (empty = respect config)
 }
 
 // RecacheAPIData is the data payload for POST /internal/cache/recache response

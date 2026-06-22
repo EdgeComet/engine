@@ -179,9 +179,12 @@ func NewRecacheService(
 	}
 }
 
-// ProcessRecache processes a recache request from the cache daemon
-// Validates host and dimension, renders the URL, and saves to cache
-func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID, dimensionID int) error {
+// ProcessRecache processes a recache request from the cache daemon.
+// Validates host and dimension, then renders or bypass-fetches the URL and saves
+// to cache. mode optionally overrides the configured action: "render" forces a
+// Chrome render (stored as render cache), "bypass" forces an origin fetch (stored
+// as bypass cache), and "" respects the dimension/url-rule action.
+func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID, dimensionID int, mode string) error {
 	startTime := time.Now()
 
 	// Get host config
@@ -242,6 +245,24 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		if dimAction != types.ActionRender {
 			renderCtx.ResolvedConfig.Action = dimAction
 		}
+	}
+
+	// Apply the per-request mode override as the final action decision (overrides the
+	// dimension/url-rule action). Empty mode keeps the resolved action unchanged.
+	switch mode {
+	case types.RecacheModeRender:
+		renderCtx.ResolvedConfig.Action = types.ActionRender
+	case types.RecacheModeBypass:
+		renderCtx.ResolvedConfig.Action = types.ActionBypass
+	}
+
+	// A forced render needs resolved render/cache config. ResolveForURL fills it only
+	// when the URL's action is render (no bypass url_rule matched) - true for a
+	// bypass-by-dimension host, where Render.Timeout is populated. Fail loudly on the
+	// unsupported url_rule-bypass + mode:render combination rather than rendering with
+	// a zero-valued config.
+	if mode == types.RecacheModeRender && renderCtx.ResolvedConfig.Render.Timeout == 0 {
+		return fmt.Errorf("mode:render unsupported for URL %q: render config unresolved (bypass set via url_rule)", url)
 	}
 
 	// Route to bypass recache if the effective action is bypass
@@ -550,7 +571,11 @@ func (rs *RecacheService) getHostByID(hostID int) *types.Host {
 
 // buildRecacheContext creates RenderContext for a recache request
 func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dimensionID int, dimensionName, requestID string) (*edgectx.RenderContext, error) {
-	// Normalize URL and generate cache key
+	// Normalize URL and generate cache key. Passing nil strip patterns is correct only
+	// because the URL arriving here is already daemon-normalized (hostURLNormalizer strips
+	// tracking params via the same resolver as the edge), so re-normalizing is idempotent
+	// and yields the same hash the live request computes. If the recache entry source ever
+	// changes to deliver raw URLs, this must resolve and pass the host's strip patterns.
 	normalizer := hash.NewURLNormalizer()
 	normalizedResult, err := normalizer.Normalize(url, nil)
 	if err != nil {
