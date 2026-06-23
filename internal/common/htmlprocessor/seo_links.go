@@ -89,16 +89,20 @@ func resolveURL(href, baseURL string) string {
 	return resolved
 }
 
+// effectiveBaseURL is the base for resolving the document's relative URLs:
+// <base href> resolved against the page URL, else the page URL itself.
+func effectiveBaseURL(doc *goquery.Document, pageURL string) string {
+	if bh := extractBaseHref(doc); bh != "" {
+		return resolveURL(bh, pageURL)
+	}
+	return pageURL
+}
+
 // extractLinkMetrics populates link metrics in the PageSEO struct.
-// Extracts from body only, handles base tag, classifies internal/external.
-func extractLinkMetrics(doc *goquery.Document, baseHref, pageURL string, seo *types.PageSEO) {
+// Extracts from body only, resolves relative URLs against base, classifies internal/external.
+func extractLinkMetrics(doc *goquery.Document, base, pageURL string, seo *types.PageSEO) {
 	if seo == nil {
 		return
-	}
-
-	effectiveBase := pageURL
-	if baseHref != "" {
-		effectiveBase = resolveURL(baseHref, pageURL)
 	}
 
 	pageOrigin := ""
@@ -120,7 +124,7 @@ func extractLinkMetrics(doc *goquery.Document, baseHref, pageURL string, seo *ty
 		rel := strings.ToLower(getSelectionAttr(s, "rel"))
 		isNofollow := strings.Contains(rel, "nofollow")
 
-		resolved := resolveURL(href, effectiveBase)
+		resolved := resolveURL(href, base)
 		parsed, parseErr := url.Parse(resolved)
 
 		isInternal := false
@@ -225,14 +229,9 @@ func (a *linkAccumulator) result() []types.PageLink {
 }
 
 // extractImageMetrics populates image metrics in the PageSEO struct.
-func extractImageMetrics(doc *goquery.Document, baseHref, pageURL string, seo *types.PageSEO) {
+func extractImageMetrics(doc *goquery.Document, base, pageURL string, seo *types.PageSEO) {
 	if seo == nil {
 		return
-	}
-
-	effectiveBase := pageURL
-	if baseHref != "" {
-		effectiveBase = resolveURL(baseHref, pageURL)
 	}
 
 	pageOrigin := ""
@@ -255,7 +254,7 @@ func extractImageMetrics(doc *goquery.Document, baseHref, pageURL string, seo *t
 			seo.ImagesWithoutAlt++
 		}
 
-		resolved := resolveURL(src, effectiveBase)
+		resolved := resolveURL(src, base)
 		parsed, err := url.Parse(resolved)
 		if err != nil {
 			seo.ImagesExternal++

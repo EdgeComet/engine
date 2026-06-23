@@ -15,7 +15,7 @@ import (
 // (document order) and returns its items as ordered BreadcrumbEntry slice.
 // All input is treated as untrusted; the function returns nil on any malformed
 // or unrecognized input and never panics on hostile JSON.
-func extractBreadcrumbs(doc *goquery.Document, pageURL string) (result []types.BreadcrumbEntry) {
+func extractBreadcrumbs(doc *goquery.Document, base string) (result []types.BreadcrumbEntry) {
 	defer func() {
 		if r := recover(); r != nil {
 			result = nil
@@ -39,7 +39,7 @@ func extractBreadcrumbs(doc *goquery.Document, pageURL string) (result []types.B
 	if list == nil {
 		return nil
 	}
-	return buildBreadcrumbEntries(list, pageURL)
+	return buildBreadcrumbEntries(list, base)
 }
 
 // findFirstBreadcrumbList walks JSON-LD in declaration order looking for an
@@ -86,7 +86,7 @@ func isBreadcrumbListType(v interface{}) bool {
 
 // buildBreadcrumbEntries reads itemListElement, orders by position, normalizes,
 // filters non-navigational URLs, drops items without a URL, and caps at 5.
-func buildBreadcrumbEntries(list map[string]interface{}, pageURL string) []types.BreadcrumbEntry {
+func buildBreadcrumbEntries(list map[string]interface{}, base string) []types.BreadcrumbEntry {
 	raw, ok := list["itemListElement"].([]interface{})
 	if !ok || len(raw) == 0 {
 		return nil
@@ -124,11 +124,7 @@ func buildBreadcrumbEntries(list map[string]interface{}, pageURL string) []types
 		if rawURL == "" || shouldSkipLink(rawURL) {
 			continue
 		}
-		resolved := resolveCanonicalURL(rawURL, pageURL)
-		if resolved == "" {
-			resolved = rawURL
-		}
-		resolved = normalizeAbsoluteURL(resolved)
+		resolved := normalizeAbsoluteURL(resolveURL(rawURL, base))
 		name := readBreadcrumbName(p.item)
 		result = append(result, types.BreadcrumbEntry{
 			Name: truncateRunes(collapseWhitespace(name), types.MaxHeadingLength),

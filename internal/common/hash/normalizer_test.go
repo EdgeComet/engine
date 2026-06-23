@@ -173,6 +173,67 @@ func TestHashConsistency_DifferentEncodings(t *testing.T) {
 	}
 }
 
+// TestPathUnicodeDecoding validates that percent-encoded UTF-8 in the path is stored
+// in its readable Unicode form, that encoded and decoded inputs normalize identically
+// (same string and hash), and that malformed or non-UTF-8 paths keep the escaped form.
+func TestPathUnicodeDecoding(t *testing.T) {
+	normalizer := NewURLNormalizer()
+
+	t.Run("normalized form", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			{
+				name:     "cyrillic encoded decodes to unicode",
+				input:    "https://example.com/%D0%BD%D0%BE%D0%B2%D0%B0%D1%8F",
+				expected: "https://example.com/новая",
+			},
+			{
+				name:     "cyrillic literal stays unicode",
+				input:    "https://example.com/новая",
+				expected: "https://example.com/новая",
+			},
+			{
+				name:     "accented latin decodes",
+				input:    "https://example.com/caf%C3%A9",
+				expected: "https://example.com/café",
+			},
+			{
+				name:     "invalid utf8 stays escaped",
+				input:    "https://example.com/a%FFb",
+				expected: "https://example.com/a%FFb",
+			},
+			{
+				name:     "encoded query is not decoded",
+				input:    "https://example.com/новая?q=%D0%BD",
+				expected: "https://example.com/новая?q=%D0%BD",
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := normalizer.Normalize(tt.input, nil)
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result.NormalizedURL)
+			})
+		}
+	})
+
+	t.Run("encoded and decoded inputs share one cache key", func(t *testing.T) {
+		encoded := "https://example.com/%D0%BD%D0%BE%D0%B2%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0"
+		decoded := "https://example.com/новая-страница"
+
+		re, err := normalizer.Normalize(encoded, nil)
+		require.NoError(t, err)
+		rd, err := normalizer.Normalize(decoded, nil)
+		require.NoError(t, err)
+
+		assert.Equal(t, rd.NormalizedURL, re.NormalizedURL)
+		assert.Equal(t, normalizer.Hash(rd.NormalizedURL), normalizer.Hash(re.NormalizedURL))
+	})
+}
+
 func TestInvalidURL(t *testing.T) {
 	normalizer := NewURLNormalizer()
 

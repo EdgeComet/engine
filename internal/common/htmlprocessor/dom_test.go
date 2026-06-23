@@ -481,6 +481,116 @@ func TestIndexationStatus_Canonical(t *testing.T) {
 	}
 }
 
+// TestIndexationStatus_CanonicalNormalization covers the identity-preserving
+// differences between the canonical and the page URL. Both sides are normalized
+// before comparison, so host case, default ports, query order, trailing dot, and
+// fragments must NOT flag NonCanonical - matching how canonical_url is stored.
+func TestIndexationStatus_CanonicalNormalization(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		finalURL string
+		want     types.IndexStatus
+	}{
+		{
+			name:     "canonical host case differs is self",
+			html:     `<html><head><link rel="canonical" href="https://EXAMPLE.com/page"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "page url host case differs is self",
+			html:     `<html><head><link rel="canonical" href="https://example.com/page"></head></html>`,
+			finalURL: "https://EXAMPLE.com/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "canonical default https port is self",
+			html:     `<html><head><link rel="canonical" href="https://example.com:443/page"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "canonical query order differs is self",
+			html:     `<html><head><link rel="canonical" href="https://example.com/page?a=1&b=2"></head></html>`,
+			finalURL: "https://example.com/page?b=2&a=1",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "canonical fragment ignored is self",
+			html:     `<html><head><link rel="canonical" href="https://example.com/page#section"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "canonical trailing dot host is self",
+			html:     `<html><head><link rel="canonical" href="https://example.com./page"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			name:     "genuinely different path stays non-canonical",
+			html:     `<html><head><link rel="canonical" href="https://example.com/other"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusNonCanonical,
+		},
+		{
+			name:     "genuinely different host stays non-canonical",
+			html:     `<html><head><link rel="canonical" href="https://other.com/page"></head></html>`,
+			finalURL: "https://example.com/page",
+			want:     types.IndexStatusNonCanonical,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, doc.IndexationStatus(200, tt.finalURL))
+		})
+	}
+}
+
+// TestIndexationStatus_BaseHref: canonical resolved against <base href>. Each case uses
+// base-dir != page-dir so the result FLIPS vs the unfixed resolve-against-finalURL.
+func TestIndexationStatus_BaseHref(t *testing.T) {
+	tests := []struct {
+		name     string
+		html     string
+		finalURL string
+		want     types.IndexStatus
+	}{
+		{
+			// base shifts resolution OFF the page: was Indexable (bug) -> NonCanonical.
+			name:     "relative canonical under shallower base is non-canonical",
+			html:     `<html><head><base href="https://site.com/"><link rel="canonical" href="page"></head></html>`,
+			finalURL: "https://site.com/dir/page",
+			want:     types.IndexStatusNonCanonical,
+		},
+		{
+			// base shifts resolution ONTO the page: was NonCanonical (bug) -> Indexable.
+			name:     "relative canonical self only under base is indexable",
+			html:     `<html><head><base href="https://site.com/a/"><link rel="canonical" href="b/page"></head></html>`,
+			finalURL: "https://site.com/a/b/page",
+			want:     types.IndexStatusIndexable,
+		},
+		{
+			// regression guard: no <base> -> resolution against finalURL unchanged.
+			name:     "no base resolves against page",
+			html:     `<html><head><link rel="canonical" href="page"></head></html>`,
+			finalURL: "https://site.com/dir/page",
+			want:     types.IndexStatusIndexable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := ParseWithDOM([]byte(tt.html))
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, doc.IndexationStatus(200, tt.finalURL))
+		})
+	}
+}
+
 func TestCleanScripts(t *testing.T) {
 	t.Run("removes executable scripts preserves JSON-LD", func(t *testing.T) {
 		htmlStr := `<!DOCTYPE html><html><head>

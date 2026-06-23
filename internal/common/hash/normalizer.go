@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
 
@@ -110,9 +111,42 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 		u.Fragment = ""
 	}
 
-	result.NormalizedURL = u.String()
+	// Store the path in its readable Unicode form: percent-encoding in the path is
+	// decoded (e.g. /%D0%BD%D0%BE -> /но) so the persisted/hashed URL matches across
+	// encoded and decoded inputs and is human-readable. Falls back to the escaped form
+	// when the path is malformed or would decode to invalid UTF-8.
+	result.NormalizedURL = decodeURLPathUnicode(u)
 
 	return result, nil
+}
+
+// decodeURLPathUnicode builds the normalized URL with a readable Unicode path. We cannot
+// use u.String here: it always percent-encodes non-ASCII path bytes (via EscapedPath)
+// with no option to disable, which is exactly what we want to avoid. u.Path is already
+// percent-decoded by url.Parse, so we emit it directly; the escaped path is used only
+// when u.Path is not valid UTF-8 (e.g. %FF byte runs), so a path that cannot be
+// represented in Unicode never produces a broken stored string. Fragments are already
+// stripped before this point, so they need no handling here.
+func decodeURLPathUnicode(u *url.URL) string {
+	path := u.Path
+	if !utf8.ValidString(path) {
+		path = u.EscapedPath()
+	}
+
+	var b strings.Builder
+	b.WriteString(u.Scheme)
+	b.WriteString("://")
+	if u.User != nil {
+		b.WriteString(u.User.String())
+		b.WriteByte('@')
+	}
+	b.WriteString(u.Host)
+	b.WriteString(path)
+	if u.ForceQuery || u.RawQuery != "" {
+		b.WriteByte('?')
+		b.WriteString(u.RawQuery)
+	}
+	return b.String()
 }
 
 // Hash generates XXHash64 of normalized URL

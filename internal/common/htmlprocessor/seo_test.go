@@ -8,6 +8,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTruncateRunes(t *testing.T) {
@@ -748,7 +749,7 @@ func TestExtractLinkMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractLinkMetrics(doc, "", tt.pageURL, seo)
+			extractLinkMetrics(doc, tt.pageURL, tt.pageURL, seo)
 
 			assert.Equal(t, tt.expectTotal, seo.LinksTotal, "LinksTotal mismatch")
 			assert.Equal(t, tt.expectInternal, seo.LinksInternal, "LinksInternal mismatch")
@@ -826,7 +827,7 @@ func TestExtractImageMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractImageMetrics(doc, "", tt.pageURL, seo)
+			extractImageMetrics(doc, tt.pageURL, tt.pageURL, seo)
 
 			assert.Equal(t, tt.expectTotal, seo.ImagesTotal, "ImagesTotal mismatch")
 			assert.Equal(t, tt.expectInternal, seo.ImagesInternal, "ImagesInternal mismatch")
@@ -891,7 +892,7 @@ func TestExtractImageMetrics_AltText(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tt.html)
 			seo := &types.PageSEO{}
-			extractImageMetrics(doc, "", "https://example.com/", seo)
+			extractImageMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 			assert.Equal(t, tt.expectTotal, seo.ImagesTotal, "ImagesTotal mismatch")
 			assert.Equal(t, tt.expectWithAlt, seo.ImagesWithAlt, "ImagesWithAlt mismatch")
@@ -903,7 +904,7 @@ func TestExtractImageMetrics_AltText(t *testing.T) {
 	t.Run("invariant holds", func(t *testing.T) {
 		doc := parseGoQueryDoc(t, `<html><body><img src="/a.jpg" alt="First"><img src="/b.jpg" alt="Second"><img src="/c.jpg"><img src="/d.jpg" alt=""></body></html>`)
 		seo := &types.PageSEO{}
-		extractImageMetrics(doc, "", "https://example.com/", seo)
+		extractImageMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 		assert.Equal(t, seo.ImagesTotal, seo.ImagesWithAlt+seo.ImagesWithoutAlt, "invariant: ImagesWithAlt + ImagesWithoutAlt == ImagesTotal")
 	})
@@ -987,6 +988,90 @@ func TestLinkMetricsWithBaseTag(t *testing.T) {
 	// Link should resolve against base href, which is on cdn.example.com (internal via subdomain)
 	assert.Equal(t, 1, seo.LinksTotal)
 	assert.Equal(t, 1, seo.LinksInternal)
+}
+
+// TestExtractPageSEO_HonorsBaseHref: canonical/hreflang/breadcrumb resolve against
+// <base href> (.../sub/), not the page URL (.../other/). Body link already did.
+// page-dir (/other/) != base-dir (/sub/) is mandatory; without it the test is vacuous.
+func TestExtractPageSEO_HonorsBaseHref(t *testing.T) {
+	const pageURL = "https://site.com/other/page"
+	html := `<html><head>
+		<base href="https://site.com/sub/">
+		<link rel="canonical" href="canon">
+		<link rel="alternate" hreflang="en" href="https://site.com/other/page">
+		<link rel="alternate" hreflang="de" href="de">
+		<script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+			{"@type":"ListItem","position":1,"name":"Home","item":{"@id":"crumb"}}
+		]}
+		</script>
+	</head><body><a href="link">Body Link</a></body></html>`
+
+	doc, err := ParseWithDOM([]byte(html))
+	require.NoError(t, err)
+	seo := doc.ExtractPageSEO(200, pageURL)
+
+	assert.Equal(t, "https://site.com/sub/canon", seo.CanonicalURL)
+	require.Len(t, seo.Hreflang, 2)
+	assert.Equal(t, "https://site.com/other/page", seo.Hreflang[0].URL) // absolute, ignores base
+	assert.Equal(t, "https://site.com/sub/de", seo.Hreflang[1].URL)     // relative, via base
+	assert.Equal(t, "en", seo.HreflangSelf)                             // identity, still page URL
+	require.Len(t, seo.Breadcrumbs, 1)
+	assert.Equal(t, "https://site.com/sub/crumb", seo.Breadcrumbs[0].URL)
+	require.Len(t, seo.PageLinks, 1)
+	assert.Equal(t, "https://site.com/sub/link", seo.PageLinks[0].Target)
+}
+
+// TestExtractPageSEO_NoBaseHref: regression guard. No <base> -> every relative SEO
+// URL resolves against the page (.../other/), pinned exactly.
+func TestExtractPageSEO_NoBaseHref(t *testing.T) {
+	const pageURL = "https://site.com/other/page"
+	html := `<html><head>
+		<link rel="canonical" href="canon">
+		<link rel="alternate" hreflang="de" href="de">
+		<script type="application/ld+json">
+		{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+			{"@type":"ListItem","position":1,"name":"Home","item":{"@id":"crumb"}}
+		]}
+		</script>
+	</head><body><a href="link">Body Link</a></body></html>`
+
+	doc, err := ParseWithDOM([]byte(html))
+	require.NoError(t, err)
+	seo := doc.ExtractPageSEO(200, pageURL)
+
+	assert.Equal(t, "https://site.com/other/canon", seo.CanonicalURL)
+	require.Len(t, seo.Hreflang, 1)
+	assert.Equal(t, "https://site.com/other/de", seo.Hreflang[0].URL)
+	require.Len(t, seo.Breadcrumbs, 1)
+	assert.Equal(t, "https://site.com/other/crumb", seo.Breadcrumbs[0].URL)
+	require.Len(t, seo.PageLinks, 1)
+	assert.Equal(t, "https://site.com/other/link", seo.PageLinks[0].Target)
+}
+
+// TestEffectiveBaseURL: unit coverage for the helper, including the edge cases the
+// old inline block silently handled (empty/whitespace href -> page URL).
+func TestEffectiveBaseURL(t *testing.T) {
+	const pageURL = "https://site.com/other/page"
+	tests := []struct {
+		name string
+		tag  string // <base> tag markup, "" = no tag
+		want string
+	}{
+		{"no base tag", "", pageURL},
+		{"empty href", `<base href="">`, pageURL},
+		{"whitespace href", `<base href="   ">`, pageURL},
+		{"absolute base", `<base href="https://site.com/sub/">`, "https://site.com/sub/"},
+		{"relative base", `<base href="/sub/">`, "https://site.com/sub/"},
+		{"protocol-relative base", `<base href="//cdn.site.com/x/">`, "https://cdn.site.com/x/"},
+		{"cross-origin base", `<base href="https://cdn.example.net/a/">`, "https://cdn.example.net/a/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := parseGoQueryDoc(t, "<html><head>"+tt.tag+"</head><body></body></html>")
+			assert.Equal(t, tt.want, effectiveBaseURL(doc, pageURL))
+		})
+	}
 }
 
 func TestExtractHreflang(t *testing.T) {
@@ -1502,7 +1587,7 @@ func TestExtractLinkMetrics_GoQuery(t *testing.T) {
 
 	doc := parseGoQueryDoc(t, htmlStr)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	assert.Equal(t, 5, seo.LinksTotal)
 	assert.Equal(t, 2, seo.LinksInternal)
@@ -1522,7 +1607,7 @@ func TestExtractImageMetrics_GoQuery(t *testing.T) {
 
 	doc := parseGoQueryDoc(t, htmlStr)
 	seo := &types.PageSEO{}
-	extractImageMetrics(doc, "", "https://example.com/", seo)
+	extractImageMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	assert.Equal(t, 2, seo.ImagesTotal)
 	assert.Equal(t, 1, seo.ImagesInternal)

@@ -10,6 +10,11 @@ import (
 func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.PageSEO {
 	seo := &types.PageSEO{}
 
+	// One source of base truth: <base href> resolved against the page URL, else the
+	// page URL. Threaded to every extractor that RESOLVES a relative URL; identity
+	// checks (IndexationStatus, HreflangSelf) keep the page URL.
+	effectiveBase := effectiveBaseURL(d.doc, pageURL)
+
 	seo.Title = extractSEOTitle(d.doc)
 	seo.IndexStatus = d.IndexationStatus(statusCode, pageURL)
 	seo.MetaDescription = extractMetaDescription(d.doc)
@@ -17,7 +22,7 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 
 	canonicalRaw := extractCanonicalURL(d.doc)
 	if canonicalRaw != "" {
-		resolved := normalizeAbsoluteURL(resolveCanonicalURL(canonicalRaw, pageURL))
+		resolved := normalizeAbsoluteURL(resolveCanonicalURL(canonicalRaw, effectiveBase))
 		seo.CanonicalURL = truncateRunes(resolved, types.MaxCanonicalURLLength)
 	}
 
@@ -25,19 +30,18 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 	seo.H2s = extractHeadings(d.doc, "h2", types.MaxHeadingsPerLevel)
 	seo.H3s = extractHeadings(d.doc, "h3", types.MaxHeadingsPerLevel)
 
-	baseHref := extractBaseHref(d.doc)
-	extractLinkMetrics(d.doc, baseHref, pageURL, seo)
-	extractImageMetrics(d.doc, baseHref, pageURL, seo)
+	extractLinkMetrics(d.doc, effectiveBase, pageURL, seo)
+	extractImageMetrics(d.doc, effectiveBase, pageURL, seo)
 
 	words := extractBodyWords(d.doc)
 	if len(words) > 0 {
 		seo.WordCount = len(words)
 	}
 
-	seo.Hreflang = extractHreflang(d.doc, pageURL)
+	seo.Hreflang = extractHreflang(d.doc, effectiveBase)
 	seo.HreflangSelf = extractHreflangSelf(seo.Hreflang, pageURL)
 	seo.StructuredDataTypes = extractStructuredDataTypes(d.doc)
-	seo.Breadcrumbs = extractBreadcrumbs(d.doc, pageURL)
+	seo.Breadcrumbs = extractBreadcrumbs(d.doc, effectiveBase)
 
 	return seo
 }

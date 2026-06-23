@@ -30,7 +30,7 @@ func TestCaptureLinks_TargetsFlagsAndNormalization(t *testing.T) {
 	</body></html>`
 	doc := parseGoQueryDoc(t, html)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/dir/", seo)
+	extractLinkMetrics(doc, "https://example.com/dir/", "https://example.com/dir/", seo)
 
 	byTgt := capturedByTarget(seo.PageLinks)
 	require.Len(t, seo.PageLinks, 5)
@@ -74,7 +74,7 @@ func TestCaptureLinks_NonCanonicalHostStillInternal(t *testing.T) {
 	</body></html>`
 	doc := parseGoQueryDoc(t, html)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	byTgt := capturedByTarget(seo.PageLinks)
 	assert.True(t, byTgt["https://example.com/upper"].IsInternal, "uppercase host is same-origin")
@@ -94,7 +94,7 @@ func TestCaptureLinks_DedupMergesFlagsAndAnchor(t *testing.T) {
 	</body></html>`
 	doc := parseGoQueryDoc(t, html)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	require.Len(t, seo.PageLinks, 1, "three edges to one target dedupe to one PageLink")
 	l := seo.PageLinks[0]
@@ -119,7 +119,7 @@ func TestCaptureLinks_CapAndTruncation(t *testing.T) {
 
 	doc := parseGoQueryDoc(t, b.String())
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	assert.Len(t, seo.PageLinks, types.MaxPageLinks, "distinct targets capped at MaxPageLinks")
 	assert.True(t, seo.PageLinksTruncated, "truncation recorded, never silent")
@@ -135,7 +135,7 @@ func TestCaptureLinks_AnchorTrimAndCap(t *testing.T) {
 	</body></html>`
 	doc := parseGoQueryDoc(t, html)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	byTgt := capturedByTarget(seo.PageLinks)
 	assert.Equal(t, "spaced out text", byTgt["https://example.com/ws"].Anchor, "whitespace collapsed")
@@ -153,7 +153,7 @@ func TestCaptureLinks_SkippedHrefsNotCaptured(t *testing.T) {
 	</body></html>`
 	doc := parseGoQueryDoc(t, html)
 	seo := &types.PageSEO{}
-	extractLinkMetrics(doc, "", "https://example.com/", seo)
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
 
 	require.Len(t, seo.PageLinks, 1)
 	assert.Equal(t, "https://example.com/real", seo.PageLinks[0].Target)

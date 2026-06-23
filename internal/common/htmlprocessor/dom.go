@@ -121,11 +121,16 @@ func (d *domDocument) IndexationStatus(statusCode int, finalURL string) types.In
 		}
 	}
 
-	// Check canonical
+	// Check canonical. Resolve the relative canonical against the document's effective
+	// base (<base href>, else the page URL), matching how canonical_url is built. Compare
+	// canonical and page URL in their normalized forms (the same normalizer that produces
+	// canonical_url), so identity-preserving differences - host case, default ports, query
+	// order, trailing dot, fragment - are not flagged as non-canonical. The comparison
+	// target stays the page URL (identity = the page).
 	canonical := strings.TrimSpace(getSelectionAttr(d.doc.Find("head link[rel='canonical']").First(), "href"))
 	if canonical != "" {
-		resolved := resolveCanonicalURL(canonical, finalURL)
-		if resolved != finalURL {
+		resolved := normalizeAbsoluteURL(resolveCanonicalURL(canonical, effectiveBaseURL(d.doc, finalURL)))
+		if resolved != normalizeAbsoluteURL(finalURL) {
 			return types.IndexStatusNonCanonical
 		}
 	}

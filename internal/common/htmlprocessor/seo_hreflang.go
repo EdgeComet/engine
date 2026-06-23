@@ -7,8 +7,9 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// extractHreflang extracts hreflang alternate links from head.
-func extractHreflang(doc *goquery.Document, pageURL string) []types.HreflangEntry {
+// extractHreflang extracts hreflang alternate links from head, resolving relative
+// hrefs against base (the document's effective base URL).
+func extractHreflang(doc *goquery.Document, base string) []types.HreflangEntry {
 	var entries []types.HreflangEntry
 	doc.Find("head link[rel='alternate']").Each(func(_ int, s *goquery.Selection) {
 		hreflang := strings.TrimSpace(getSelectionAttr(s, "hreflang"))
@@ -19,11 +20,7 @@ func extractHreflang(doc *goquery.Document, pageURL string) []types.HreflangEntr
 		if href == "" {
 			return
 		}
-		resolved := resolveCanonicalURL(href, pageURL)
-		if resolved == "" {
-			resolved = href
-		}
-		resolved = truncateRunes(normalizeAbsoluteURL(resolved), types.MaxHreflangURLLength)
+		resolved := truncateRunes(normalizeAbsoluteURL(resolveURL(href, base)), types.MaxHreflangURLLength)
 		entries = append(entries, types.HreflangEntry{Lang: hreflang, URL: resolved})
 	})
 	if len(entries) == 0 {
