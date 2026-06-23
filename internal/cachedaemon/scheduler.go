@@ -109,6 +109,11 @@ func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
 		return
 	}
 
+	// Self-heal derived caches (hostByID + concurrencyLimiter) if the host set
+	// was swapped out-of-band since the last tick. Runs before the drain so the
+	// pull path and the gate path within this tick share the fresh snapshot.
+	d.maybeResyncDerivedCaches()
+
 	hosts := d.GetConfiguredHosts()
 	n := len(hosts)
 	nowUnix := time.Now().UTC().Unix()

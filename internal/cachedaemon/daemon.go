@@ -47,6 +47,15 @@ type CacheDaemon struct {
 	// only by Run() (single goroutine), so no synchronisation is needed.
 	hostCursor int
 
+	// hostSetPtr/hostSetLen identify the host slice last applied to the derived
+	// caches (hostByID + concurrencyLimiter). The config manager swaps its host
+	// slice wholesale on every reload, so a changed first-element address or
+	// length means the live host set diverged from the derived caches and they
+	// must be rebuilt (see maybeResyncDerivedCaches). Read/written only by the
+	// Run goroutine, like hostCursor, so no synchronisation is needed.
+	hostSetPtr *types.Host
+	hostSetLen int
+
 	// dispatchHook, when non-nil, replaces the EG dispatch path inside
 	// ProcessInternalQueue. Used by scheduler unit tests to observe gated
 	// entries without standing up a real EG. The hook owns slot release for
@@ -215,6 +224,13 @@ func NewCacheDaemon(
 	daemon.rebuildHostByIDLocked()
 	daemon.reloadMu.Unlock()
 
+	// Seed the change-detection marker with the host set hostByID was just built
+	// from, so the first scheduler tick doesn't trigger a redundant resync.
+	if h := configManager.GetHosts(); len(h) > 0 {
+		daemon.hostSetPtr = &h[0]
+		daemon.hostSetLen = len(h)
+	}
+
 	return daemon, nil
 }
 
@@ -227,6 +243,46 @@ func (d *CacheDaemon) rebuildHostByIDLocked() {
 		m[hosts[i].ID] = &hosts[i]
 	}
 	d.hostByID = m
+}
+
+// resyncDerivedCaches rebuilds hostByID and the per-host concurrency limiter
+// from the config manager's current host set, atomically under reloadMu so a
+// concurrent scheduler gate loop never observes one new and one old. Shared by
+// the reload hook (POST /internal/reload) and the per-tick self-resync.
+func (d *CacheDaemon) resyncDerivedCaches() {
+	eg := d.configManager.GetConfig()
+	d.reloadMu.Lock()
+	d.rebuildHostByIDLocked()
+	d.concurrencyLimiter.Reload(eg, d.configManager.GetHosts())
+	d.reloadMu.Unlock()
+}
+
+// maybeResyncDerivedCaches rebuilds the derived caches when the config manager's
+// host set was swapped out-of-band (e.g. a hot-reload poll) without going through
+// POST /internal/reload. Called at the top of each tick on the Run goroutine. The
+// manager swaps its host slice wholesale, so a different first-element address or
+// length signals a change. The stored pointer is used only as an identity token
+// (never dereferenced).
+//
+// Keep hostSetPtr typed as *types.Host (not uintptr): retaining a real pointer
+// into the previous backing array keeps that array alive, so the allocator cannot
+// reuse its address for the next host slice -- which is what makes the address
+// comparison sound (prevents an ABA false-negative on a same-length swap).
+//
+// On a no-change tick this takes no lock: GetHosts() is an atomic load and the
+// check is a pointer/int comparison; reloadMu is taken only when a change fires.
+func (d *CacheDaemon) maybeResyncDerivedCaches() {
+	hosts := d.configManager.GetHosts()
+	var ptr *types.Host
+	if len(hosts) > 0 {
+		ptr = &hosts[0]
+	}
+	if ptr == d.hostSetPtr && len(hosts) == d.hostSetLen {
+		return
+	}
+	d.resyncDerivedCaches()
+	d.hostSetPtr = ptr
+	d.hostSetLen = len(hosts)
 }
 
 // publishConcurrencyMetrics snapshots the per-host concurrency limiter state
@@ -523,12 +579,7 @@ func (d *CacheDaemon) SetReloadFunc(fn func(ctx context.Context) error) {
 		if err := fn(ctx); err != nil {
 			return err
 		}
-		eg := d.configManager.GetConfig()
-		hosts := d.configManager.GetHosts()
-		d.reloadMu.Lock()
-		d.rebuildHostByIDLocked()
-		d.concurrencyLimiter.Reload(eg, hosts)
-		d.reloadMu.Unlock()
+		d.resyncDerivedCaches()
 		return nil
 	}
 }

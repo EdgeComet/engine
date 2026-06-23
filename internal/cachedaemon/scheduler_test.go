@@ -46,6 +46,23 @@ type schedulerTestHost struct {
 	action        types.URLRuleAction
 }
 
+// newTestHost builds a types.Host from the test input shape. Shared by
+// newSchedulerEnv and resync tests that swap the config manager's host set.
+func newTestHost(h schedulerTestHost) types.Host {
+	action := h.action
+	if action == "" {
+		action = types.ActionBypass
+	}
+	return types.Host{
+		ID:     h.id,
+		Domain: h.domain,
+		Dimensions: map[string]types.Dimension{
+			"dim": {ID: h.dimensionID, Action: action},
+		},
+		Recache: &types.RecacheLimitConfig{MaxConcurrent: h.maxConcurrent},
+	}
+}
+
 func newSchedulerEnv(t *testing.T, iqMaxSize int, hostsIn []schedulerTestHost) *schedulerTestEnv {
 	t.Helper()
 
@@ -59,18 +76,7 @@ func newSchedulerEnv(t *testing.T, iqMaxSize int, hostsIn []schedulerTestHost) *
 
 	hosts := make([]types.Host, 0, len(hostsIn))
 	for _, h := range hostsIn {
-		action := h.action
-		if action == "" {
-			action = types.ActionBypass
-		}
-		hosts = append(hosts, types.Host{
-			ID:     h.id,
-			Domain: h.domain,
-			Dimensions: map[string]types.Dimension{
-				"dim": {ID: h.dimensionID, Action: action},
-			},
-			Recache: &types.RecacheLimitConfig{MaxConcurrent: h.maxConcurrent},
-		})
+		hosts = append(hosts, newTestHost(h))
 	}
 
 	configMgr := &mockConfigManager{hosts: hosts}
@@ -156,6 +162,12 @@ func (env *schedulerTestEnv) totalDispatched() int {
 	env.mu.Lock()
 	defer env.mu.Unlock()
 	return len(env.dispatchOrder)
+}
+
+func (env *schedulerTestEnv) dispatchedFor(hostID int) int {
+	env.mu.Lock()
+	defer env.mu.Unlock()
+	return env.dispatchedBy[hostID]
 }
 
 // TestScheduler_DrainHighOnly (#1): a single host with only high-priority
@@ -641,4 +653,107 @@ func TestScheduler_CtxCancelSkipsTickEnd(t *testing.T) {
 
 	assert.Equal(t, 0, env.totalDispatched(), "cancelled tick must not dispatch anything")
 	assert.Equal(t, 1, env.daemon.internalQueue.Size(), "seeded entry must remain in iq, not be drained by tick-end ProcessInternalQueue")
+}
+
+// TestScheduler_RuntimeHostAdd_Resyncs: a host added to the config manager's host
+// set out-of-band (no POST /internal/reload) must be picked up by the next tick,
+// so its recache entries dispatch instead of being discarded as "unresolved host".
+// Regression for the stale-hostByID silent-drop bug. The first tick seeds the
+// change-detection marker with the {host1} set (the harness skips NewCacheDaemon's
+// marker init); the assertion then proves dispatch happens on the SECOND tick via
+// genuine change-detection, not an unconditional cold-start resync.
+func TestScheduler_RuntimeHostAdd_Resyncs(t *testing.T) {
+	const (
+		host1 = 1
+		host2 = 2
+		dim1  = 1
+		dim2  = 2
+	)
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: host1, domain: "h1.test", maxConcurrent: 5, dimensionID: dim1},
+	})
+
+	env.daemon.runOneTick(context.Background(), 1)
+	require.Equal(t, 0, env.totalDispatched(), "no host1 work queued yet")
+
+	// Add host2 out-of-band: a brand-new slice, no reload call.
+	cm := env.daemon.configManager.(*mockConfigManager)
+	cm.hosts = []types.Host{
+		newTestHost(schedulerTestHost{id: host1, domain: "h1.test", maxConcurrent: 5, dimensionID: dim1}),
+		newTestHost(schedulerTestHost{id: host2, domain: "h2.test", maxConcurrent: 5, dimensionID: dim2}),
+	}
+
+	urls := []string{"https://h2.test/a", "https://h2.test/b", "https://h2.test/c"}
+	env.enqueueZSet(t, host2, redis.PriorityNormal, dim2, urls, 0)
+
+	env.daemon.runOneTick(context.Background(), 2)
+
+	assert.Equal(t, len(urls), env.dispatchedFor(host2), "host2 entries must dispatch after the out-of-band add")
+	assert.Equal(t, int64(0), env.zcard(t, host2, redis.PriorityNormal), "host2 queue must be drained as work, not discarded")
+}
+
+// TestScheduler_RuntimeHostRemove_StillDiscards: the resync also applies removals.
+// An entry already in the internal queue for a host dropped from config out-of-band
+// is discarded (not dispatched), and the discard path still fires after the resync.
+func TestScheduler_RuntimeHostRemove_StillDiscards(t *testing.T) {
+	const (
+		host1 = 1
+		dim1  = 1
+	)
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: host1, domain: "h1.test", maxConcurrent: 5, dimensionID: dim1},
+	})
+
+	env.daemon.runOneTick(context.Background(), 1) // seed marker with {host1}
+
+	// Drop host1 out-of-band and seed an iq entry for it directly (the pull path
+	// would no longer pull a now-unconfigured host from Redis).
+	cm := env.daemon.configManager.(*mockConfigManager)
+	cm.hosts = nil
+	require.True(t, env.daemon.internalQueue.Enqueue(InternalQueueEntry{
+		HostID:      host1,
+		URL:         "https://h1.test/stale",
+		DimensionID: dim1,
+		QueuedAt:    time.Now().UTC(),
+	}))
+
+	env.daemon.runOneTick(context.Background(), 2)
+
+	assert.Equal(t, 0, env.totalDispatched(), "entry for a removed host must be discarded, not dispatched")
+	assert.Equal(t, 0, env.daemon.internalQueue.Size(), "discarded entry must be drained out of iq")
+}
+
+// TestDaemon_ActionForEntry_AfterResync: the resync helper makes a newly added
+// host resolvable by actionForEntry and applies its concurrency override (proving
+// the paired limiter resync ran, not just the hostByID rebuild).
+func TestDaemon_ActionForEntry_AfterResync(t *testing.T) {
+	const (
+		host2        = 2
+		dim2         = 2
+		host2MaxConc = 7
+	)
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: 1, domain: "h1.test", maxConcurrent: 5, dimensionID: 1},
+	})
+
+	entry := InternalQueueEntry{HostID: host2, DimensionID: dim2}
+
+	env.daemon.reloadMu.RLock()
+	before := env.daemon.actionForEntry(entry)
+	env.daemon.reloadMu.RUnlock()
+	require.Equal(t, types.URLRuleAction(""), before, "host2 unknown before resync")
+
+	cm := env.daemon.configManager.(*mockConfigManager)
+	cm.hosts = []types.Host{
+		newTestHost(schedulerTestHost{id: 1, domain: "h1.test", maxConcurrent: 5, dimensionID: 1}),
+		newTestHost(schedulerTestHost{id: host2, domain: "h2.test", maxConcurrent: host2MaxConc, dimensionID: dim2, action: types.ActionRender}),
+	}
+
+	env.daemon.maybeResyncDerivedCaches()
+
+	env.daemon.reloadMu.RLock()
+	after := env.daemon.actionForEntry(entry)
+	env.daemon.reloadMu.RUnlock()
+	assert.Equal(t, types.ActionRender, after, "host2 resolves to its dimension action after resync")
+	assert.Equal(t, host2MaxConc, env.daemon.concurrencyLimiter.MaxConcurrent(host2), "host2 concurrency override applied by the paired limiter resync")
 }
