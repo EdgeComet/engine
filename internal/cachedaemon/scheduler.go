@@ -3,7 +3,9 @@ package cachedaemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -34,10 +36,16 @@ const maxDrainIterationsPerTick = 100
 // awaiting retry must still get a chance to dispatch.
 //
 // The actual tick body lives in runOneTick so unit tests can fire ticks
-// deterministically without a ticker goroutine. Shutdown latency is bounded
-// by one drain iter plus any in-flight DistributeToEGs wg.Wait() — the
-// ctx.Done() check at iter top does not cancel renders mid-dispatch.
+// deterministically without a ticker goroutine. Dispatch is detached from the
+// tick (ProcessInternalQueue hands each gated batch to a goroutine tracked by
+// dispatchWG and returns immediately), so the tick body never blocks on a
+// slow URL. Run returns promptly on cancel; Shutdown joins this goroutine via
+// schedulerDone, then drains the in-flight dispatches.
 func (d *CacheDaemon) Run(ctx context.Context) {
+	// Closed on every return path so Shutdown can join the scheduler before
+	// draining dispatchWG (closes the dispatchWG.Add-during-Wait race).
+	defer close(d.schedulerDone)
+
 	ticker := time.NewTicker(time.Duration(d.daemonConfig.Scheduler.TickInterval))
 	defer ticker.Stop()
 
@@ -82,10 +90,9 @@ func (d *CacheDaemon) Run(ctx context.Context) {
 // test assertions deterministic.
 //
 // Shutdown behaviour: a cancelled ctx returns immediately from the drain
-// loop without running tick-end housekeeping, so DistributeToEGs.wg.Wait()
-// is never started on a cancelled context. Worst-case shutdown latency is
-// one render_time (the longest in-flight dispatch from the last successful
-// iter).
+// loop without running tick-end housekeeping. Dispatch is detached, so the
+// tick never blocks on a slow URL; the in-flight dispatches a tick spawned
+// are drained separately by Shutdown via dispatchWG.
 //
 // Per-host skip on defer: after each iter's ProcessInternalQueue, compare
 // per-host iq counts before and after. Any host whose iq count grew (its
@@ -93,8 +100,8 @@ func (d *CacheDaemon) Run(ctx context.Context) {
 // is added to a tick-local skip set and not pulled from again for the rest
 // of this tick. Healthy hosts in the same iter (e.g., bypass hosts when
 // render hosts RS-defer) keep draining across subsequent iters; only the
-// deferring hosts are throttled. This preserves the spec's per-host
-// independence goal: one host's pathology does not throttle other hosts.
+// deferring hosts are throttled. This preserves per-host independence: one
+// host's pathology does not throttle other hosts.
 // The drain naturally terminates when all hosts are either drained or
 // skipped, signalled by `pulled == 0` in an iter.
 func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
@@ -294,7 +301,16 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 		return 0
 	}
 
+	// Subtract the daemon's own in-flight render dispatches from the per-tick
+	// budget. With async dispatch, prior-tick renders are still in flight when
+	// this tick computes budget from RS-reported Load (which lags by up to one
+	// RS heartbeat), so successive ticks could otherwise over-dispatch past the
+	// reserve. Floor at 0.
 	rsBudget := d.CalculateAvailableCapacity()
+	rsBudget -= int(atomic.LoadInt64(&d.inFlightRenders))
+	if rsBudget < 0 {
+		rsBudget = 0
+	}
 	rsBudgetInitial := rsBudget
 	now := time.Now().UTC()
 	skipHosts := map[int]bool{}
@@ -371,7 +387,12 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 			rsBudget--
 		}
 
-		ready = append(ready, readyItem{entry: entry, slot: slot})
+		// Capture isRender at gate time (action is resolved here under
+		// reloadMu). A later config reload that flips this dimension
+		// render<->bypass must not unbalance the in-flight render counter, so
+		// the per-URL goroutine keys off this captured flag rather than
+		// re-reading config.
+		ready = append(ready, readyItem{entry: entry, slot: slot, isRender: action == types.ActionRender})
 	}
 	d.reloadMu.RUnlock()
 
@@ -400,10 +421,34 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 
 	dispatched := len(ready)
 	if d.dispatchHook != nil {
+		// Test seam stays synchronous so existing scheduler tests keep their
+		// deterministic ordering guarantees.
 		d.dispatchHook(ready)
 		return dispatched
 	}
-	d.DistributeToEGs(ready)
+
+	// Detach dispatch from the tick. The tick keeps all its gating logic and
+	// returns immediately; the next tick refills slots freed by completed URLs.
+	// dispatchWG.Add runs here on the Run goroutine; Shutdown joins Run before
+	// it Waits, so Add never races Wait.
+	d.dispatchWG.Add(1)
+	go func(batch []readyItem) {
+		defer d.dispatchWG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				// Backstop: a panic in the coordinator (before the per-URL
+				// goroutines spawn) would otherwise crash the process AND leak
+				// the slots of the un-dispatched tail. Release+re-enqueue keeps
+				// the semaphore honest. Release is idempotent (sync.Once), so
+				// double-releasing slots already freed by per-URL goroutines is
+				// a no-op; inFlightRenders is never touched here (it is paired
+				// 1:1 only inside the per-URL goroutine), so it cannot corrupt.
+				d.logger.Error("recovered panic in recache dispatch goroutine", zap.Any("panic", r))
+				d.releaseAndReenqueue(batch, fmt.Errorf("dispatch panic: %v", r))
+			}
+		}()
+		d.DistributeToEGs(batch)
+	}(ready)
 	return dispatched
 }
 
@@ -470,6 +515,7 @@ func (d *CacheDaemon) zpopAndEnqueue(ctx context.Context, hostID int, priority s
 			URL:         member.URL,
 			DimensionID: member.DimensionID,
 			Mode:        member.Mode,
+			Priority:    priority,
 			RetryCount:  0,
 			QueuedAt:    time.Now().UTC(),
 		}

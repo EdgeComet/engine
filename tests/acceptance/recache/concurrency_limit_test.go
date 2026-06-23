@@ -167,9 +167,41 @@ var _ = Describe("Per-Host Concurrency Limiter", func() {
 	})
 
 	Context("Drain mode for high priority", func() {
-		It("drains a 200-URL burst within a few ticks instead of 200 ticks", func() {
-			// With drain mode + fast mock EG, 200 URLs at max_concurrent=5 should
-			// process within seconds. Without the fix, 1 URL/sec means ~200s.
+		It("drains a 200-URL burst across ticks instead of 200 ticks", func() {
+			// Dispatch is detached from the tick: each tick pulls
+			// free = max_concurrent - in_flight and refills slots freed by the
+			// PRIOR tick's completed dispatches. So a fast-URL burst drains at
+			// roughly max_concurrent per tick (tick-granularity refill) rather
+			// than within a single tick's synchronous drain loop. At
+			// max_concurrent=5 and a 100ms tick, 200 URLs take a few seconds --
+			// still far from the ~200s of the original per-60s-gate bug, just no
+			// longer sub-tick.
+			//
+			// Dimension 1 is render mode, so dispatch is gated on RS capacity.
+			// The real daemon heartbeats RS every 1s; the test harness does not,
+			// and the registry entry goes stale after RegistryTTL (3s). Because
+			// the tick-paced drain now outlives that window, refresh RS in the
+			// background for the duration so staleness -- not the fix -- does not
+			// halt render dispatch midway.
+			stopRefresh := make(chan struct{})
+			refreshDone := make(chan struct{})
+			go func() {
+				defer close(refreshDone)
+				ticker := time.NewTicker(1 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-stopRefresh:
+						return
+					case <-ticker.C:
+						_ = testEnv.AddMockRSToRegistry("rs-1", 100, 0)
+					}
+				}
+			}()
+			defer func() { close(stopRefresh); <-refreshDone }()
+
+			Expect(testEnv.AddMockRSToRegistry("rs-1", 100, 0)).ToNot(HaveOccurred())
+
 			score := float64(time.Now().Unix())
 			for i := 0; i < 200; i++ {
 				err := addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "high",
@@ -177,9 +209,9 @@ var _ = Describe("Per-Host Concurrency Limiter", func() {
 				Expect(err).ToNot(HaveOccurred())
 			}
 
-			received, _ := testEnv.DrainChannelUntilCount(200, 6*time.Second)
+			received, _ := testEnv.DrainChannelUntilCount(200, 20*time.Second)
 			Expect(received).To(Equal(200),
-				"all 200 URLs must reach the mock EG within 6s; without drain mode this would take ~200s")
+				"all 200 URLs must reach the mock EG within the tick-paced drain window; without drain mode this would take ~200s")
 		})
 	})
 

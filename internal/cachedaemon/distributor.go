@@ -3,14 +3,25 @@ package cachedaemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/recache"
+)
+
+// Recache outcome status labels for edgecomet_cd_recache_requests_total.
+const (
+	recacheStatusSuccess = "success"
+	recacheStatusTimeout = "timeout"
+	recacheStatusError   = "error"
 )
 
 // readyItem pairs a queue entry with the per-host concurrency slot reserved
@@ -21,6 +32,10 @@ import (
 type readyItem struct {
 	entry InternalQueueEntry
 	slot  Slot
+	// isRender is captured at gate time (ProcessInternalQueue) so the per-URL
+	// goroutine can pair the in-flight render counter without re-reading config
+	// (which a concurrent reload could have flipped).
+	isRender bool
 }
 
 // RecacheResult represents the result of a single recache attempt
@@ -168,10 +183,35 @@ func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []readyItem, results
 		batchWG.Add(1)
 
 		go func(it readyItem) {
+			// Pair the in-flight render counter 1:1. Both the increment and the
+			// deferred decrement live in this goroutine, so every early-return
+			// path that releases a slot WITHOUT spawning this goroutine
+			// (no-healthy-EG, registry error, coordinator panic) never
+			// increments and therefore needs no decrement.
+			if it.isRender {
+				atomic.AddInt64(&d.inFlightRenders, 1)
+			}
 			defer batchWG.Done()
 			defer d.concurrencyLimiter.Release(it.slot)
+			if it.isRender {
+				defer atomic.AddInt64(&d.inFlightRenders, -1)
+			}
+			defer func() {
+				if r := recover(); r != nil {
+					// Contain a panic in SendRecacheRequest here so it cannot
+					// crash the process. The deferred Release above still runs
+					// during unwind, so the slot is freed. Emit a result so the
+					// coordinator's accounting stays balanced.
+					d.logger.Error("recovered panic in recache URL dispatch",
+						zap.String("url", it.entry.URL), zap.Any("panic", r))
+					results <- RecacheResult{Entry: it.entry, Success: false,
+						Error: fmt.Errorf("dispatch panic: %v", r)}
+				}
+			}()
 
+			start := time.Now()
 			err := d.SendRecacheRequest(egAddress, it.entry)
+			d.recordRecacheOutcome(it.entry, err, time.Since(start))
 
 			results <- RecacheResult{
 				Entry:   it.entry,
@@ -232,6 +272,49 @@ func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEn
 		zap.Int("dimension_id", entry.DimensionID))
 
 	return nil
+}
+
+// recordRecacheOutcome records per-URL dispatch timing and outcome to
+// Prometheus. RecordRecacheDuration was previously never wired, which is why
+// recache_duration_seconds read all-zero in production. The status label lets
+// operators see the straggler (timeout) rate directly.
+func (d *CacheDaemon) recordRecacheOutcome(entry InternalQueueEntry, err error, elapsed time.Duration) {
+	if d.metricsCollector == nil {
+		return
+	}
+	d.metricsCollector.RecordRecacheDuration(elapsed)
+
+	status := recacheStatusSuccess
+	if err != nil {
+		if isTimeoutErr(err) {
+			status = recacheStatusTimeout
+		} else {
+			status = recacheStatusError
+		}
+	}
+	queueType := entry.Priority
+	if queueType == "" {
+		queueType = redis.PriorityNormal
+	}
+	d.metricsCollector.RecordRecacheRequest(status, queueType)
+}
+
+// isTimeoutErr reports whether err is (or wraps) a request deadline/timeout, so
+// a URL that hit timeout_per_url is classified as a timeout rather than a
+// generic error. DoTimeout surfaces fasthttp.ErrTimeout; dial-level deadlines
+// surface as a net.Error with Timeout() true.
+func isTimeoutErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, fasthttp.ErrTimeout) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	return false
 }
 
 // HandleRecacheResults processes results and implements retry logic.

@@ -2,6 +2,7 @@ package cachedaemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -76,6 +77,28 @@ type CacheDaemon struct {
 	schedulerCancel  context.CancelFunc
 	schedulerPaused  bool
 	schedulerPauseMu sync.RWMutex
+
+	// dispatchWG tracks detached DistributeToEGs goroutines so Shutdown can
+	// drain in-flight dispatches before the process exits. Add is called only
+	// on the Run goroutine; Wait is called only by Shutdown after Run returns.
+	dispatchWG sync.WaitGroup
+
+	// schedulerDone is closed by Run() on every return path so Shutdown can
+	// join the scheduler before draining dispatchWG (closes the Add-during-Wait
+	// race). Initialised in NewCacheDaemon.
+	schedulerDone chan struct{}
+
+	// schedulerJoinTimeout bounds the wait for Run() to return after cancel.
+	// Zero means defaultSchedulerJoinTimeout. Overridable only so tests can
+	// exercise the pathological non-returning-Run abort path quickly.
+	schedulerJoinTimeout time.Duration
+
+	// inFlightRenders counts render-mode recache requests the daemon currently
+	// has in flight across detached dispatch goroutines. Accessed via
+	// sync/atomic. Subtracted from the per-tick RS budget so async dispatch
+	// cannot over-commit render-service capacity past the reserve. Incremented
+	// and decremented 1:1 inside the per-URL goroutine (distributor.go).
+	inFlightRenders int64
 
 	// Reload hook (optional, set by enterprise version)
 	reloadFunc func(ctx context.Context) error
@@ -185,6 +208,7 @@ func NewCacheDaemon(
 		metricsServer:      metricsServer,
 		cacheReader:        NewCacheReader(redisClient, keyGenerator, logger),
 		queueReader:        NewQueueReader(redisClient, keyGenerator, internalQueue, concurrencyLimiter, logger),
+		schedulerDone:      make(chan struct{}),
 	}
 
 	daemon.reloadMu.Lock()
@@ -266,15 +290,28 @@ func (d *CacheDaemon) Start(ctx context.Context) error {
 	return nil
 }
 
-// Shutdown gracefully shuts down the cache daemon
-func (d *CacheDaemon) Shutdown() error {
+// defaultSchedulerJoinTimeout bounds the wait for Run() to return after cancel.
+// It is INDEPENDENT of the shutdown ctx on purpose: the common trigger is a
+// shutdown ctx already expired on entry, and we must still wait the (now
+// non-blocking) tick for the scheduler to stop so the drain and flush below are
+// race-free. The tick body never blocks on dispatch, so Run returns well
+// within this bound; the timer only guards a pathological non-returning Run.
+const defaultSchedulerJoinTimeout = 30 * time.Second
+
+const metricsServerShutdownTimeout = 5 * time.Second
+
+// Shutdown gracefully shuts down the cache daemon. It accepts the process
+// shutdown context, which bounds the in-flight dispatch drain. The scheduler
+// join is bounded only by schedulerJoinTimeout (NOT by ctx) so an already
+// expired ctx cannot let dispatchWG.Add race dispatchWG.Wait.
+func (d *CacheDaemon) Shutdown(ctx context.Context) error {
 	d.logger.Info("Shutting down cache daemon")
 
-	// Shutdown separate metrics server if exists
+	// 1. Shutdown separate metrics server if exists.
 	if d.metricsServer != nil {
 		d.logger.Info("Shutting down separate metrics server")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := d.metricsServer.ShutdownWithContext(ctx); err != nil {
+		mctx, cancel := context.WithTimeout(context.Background(), metricsServerShutdownTimeout)
+		if err := d.metricsServer.ShutdownWithContext(mctx); err != nil {
 			d.logger.Error("Metrics server shutdown error", zap.Error(err))
 		} else {
 			d.logger.Info("Metrics server shutdown complete")
@@ -282,13 +319,110 @@ func (d *CacheDaemon) Shutdown() error {
 		cancel()
 	}
 
-	// Cancel scheduler context
+	// 2. Cancel the scheduler and join Run UNCONDITIONALLY, bounded only by the
+	//    safety timer (NOT by ctx). dispatchWG.Add is called only on the Run
+	//    goroutine, so the Wait in step 3 is safe only once Run has provably
+	//    returned.
 	if d.schedulerCancel != nil {
 		d.schedulerCancel()
 	}
+	joinTimeout := d.schedulerJoinTimeout
+	if joinTimeout == 0 {
+		joinTimeout = defaultSchedulerJoinTimeout
+	}
+	joinTimer := time.NewTimer(joinTimeout)
+	defer joinTimer.Stop()
+	select {
+	case <-d.schedulerDone:
+		// Run returned: no further dispatchWG.Add can happen.
+	case <-joinTimer.C:
+		// Pathological: Run did not return. We cannot safely Wait on dispatchWG
+		// (Add may still race) nor flush (the scheduler may still mutate the
+		// iq), so abandon both and let the process exit. Loud log so residual
+		// loss is observable, not silent.
+		d.logger.Error("Scheduler did not stop; abandoning dispatch drain and queue flush to avoid WaitGroup race and lossy flush",
+			zap.Int("internal_queue_remaining", d.internalQueue.Size()))
+		return fmt.Errorf("scheduler did not stop within %s", joinTimeout)
+	}
+
+	// 3. Run has returned. Drain in-flight dispatches, bounded by the shutdown ctx.
+	drained := make(chan struct{})
+	go func() { d.dispatchWG.Wait(); close(drained) }()
+	select {
+	case <-drained:
+		d.logger.Info("In-flight recache dispatches drained")
+	case <-ctx.Done():
+		d.logger.Warn("Timed out draining in-flight recache dispatches",
+			zap.Int("internal_queue_remaining", d.internalQueue.Size()))
+	}
+
+	// 4. Flush the internal queue back to Redis. Safe: the scheduler has
+	//    stopped, so the only possible producers are in-flight dispatch
+	//    goroutines. If the drain completed, none remain and the flush is a
+	//    clean final snapshot; on drain timeout it is best-effort.
+	d.flushInternalQueueToRedis()
 
 	d.logger.Info("Cache daemon shutdown complete")
 	return nil
+}
+
+// flushInternalQueueToRedis re-pushes every entry left in the volatile internal
+// queue back to its durable Redis ZSET on shutdown so deferred / retry-pending
+// entries are not silently lost. FIFO position is preserved by reusing each
+// entry's QueuedAt as the ZSET score. Best-effort: a ZAdd failure is logged at
+// ERROR so any residual loss is observable instead of silent.
+func (d *CacheDaemon) flushInternalQueueToRedis() {
+	// Drain the whole queue in one shot. The scheduler has stopped, so no new
+	// pulls race this; only in-flight dispatch goroutines might still enqueue
+	// retry entries, and those are picked up if they land before this Dequeue.
+	entries := d.internalQueue.Dequeue(d.internalQueue.Size())
+	if len(entries) == 0 {
+		return
+	}
+
+	ctx := context.Background()
+	flushed := 0
+	lost := 0
+	for _, entry := range entries {
+		priority := entry.Priority
+		if priority == "" {
+			// Entries always carry their source priority once pulled from
+			// Redis; fall back to normal for any that predate that (e.g. a
+			// directly seeded entry) so they are not lost to a malformed key.
+			priority = redis.PriorityNormal
+		}
+		zsetKey := d.keyGenerator.RecacheQueueKey(entry.HostID, priority)
+		member := types.RecacheMember{
+			URL:         entry.URL,
+			DimensionID: entry.DimensionID,
+			Mode:        entry.Mode,
+		}
+		memberJSON, err := json.Marshal(member)
+		if err != nil {
+			d.logger.Error("Failed to marshal recache member during shutdown flush; entry lost",
+				zap.Int("host_id", entry.HostID),
+				zap.String("url", entry.URL),
+				zap.Error(err))
+			lost++
+			continue
+		}
+		score := float64(entry.QueuedAt.UTC().Unix())
+		if err := d.redis.ZAdd(ctx, zsetKey, score, string(memberJSON)); err != nil {
+			d.logger.Error("Failed to flush internal queue entry back to Redis; entry lost",
+				zap.Int("host_id", entry.HostID),
+				zap.String("url", entry.URL),
+				zap.String("priority", priority),
+				zap.String("key", zsetKey),
+				zap.Error(err))
+			lost++
+			continue
+		}
+		flushed++
+	}
+
+	d.logger.Info("Flushed internal queue to Redis on shutdown",
+		zap.Int("flushed", flushed),
+		zap.Int("lost", lost))
 }
 
 // GetConfiguredHosts returns a list of host IDs from the hosts configuration

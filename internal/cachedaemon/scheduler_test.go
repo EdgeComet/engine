@@ -11,11 +11,13 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/edge/sharding"
 	"github.com/edgecomet/engine/internal/render/registry"
 	"github.com/edgecomet/engine/pkg/types"
 )
@@ -89,10 +91,17 @@ func newSchedulerEnv(t *testing.T, iqMaxSize int, hostsIn []schedulerTestHost) *
 		logger:             logger,
 		internalQueue:      iq,
 		rsRegistry:         registry.NewServiceRegistry(redisClient, logger),
+		egRegistry:         sharding.NewRedisRegistry(redisClient, logger),
 		normalizer:         hash.NewURLNormalizer(),
 		keyGenerator:       keyGen,
 		retryBaseDelay:     10 * time.Millisecond,
 		concurrencyLimiter: limiter,
+		schedulerDone:      make(chan struct{}),
+		httpClient: &fasthttp.Client{
+			ReadTimeout:     time.Duration(daemonCfg.Recache.TimeoutPerURL),
+			WriteTimeout:    time.Duration(daemonCfg.Recache.TimeoutPerURL),
+			MaxConnsPerHost: 256,
+		},
 	}
 	d.reloadMu.Lock()
 	d.rebuildHostByIDLocked()
@@ -600,9 +609,12 @@ func TestScheduler_MixedBatchRSBudgetStall(t *testing.T) {
 
 // TestScheduler_CtxCancelSkipsTickEnd (#15): regression for the
 // "post-cancel work" bug. After ctx is cancelled inside the drain loop the
-// tick-end ProcessInternalQueue must NOT run — otherwise it would start a
-// fresh synchronous DistributeToEGs(wg.Wait) on a cancelled context,
-// stretching shutdown latency past the spec's bound.
+// tick-end ProcessInternalQueue must NOT run. Dispatch is detached from the
+// tick now, so the concern is no longer a synchronous wg.Wait stretching
+// shutdown latency; it is that a cancelled tick must not move durable Redis
+// state into the volatile iq (or spawn fresh dispatch work) after cancel —
+// Shutdown joins the scheduler and drains exactly the in-flight set, so the
+// tick must stop cleanly at the cancel checkpoint.
 //
 // We seed iq with a directly-dispatchable entry, then cancel ctx and call
 // runOneTick. If the early return is honoured, the seeded entry stays in iq

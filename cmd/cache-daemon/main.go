@@ -21,6 +21,20 @@ import (
 	"github.com/edgecomet/engine/internal/common/redis"
 )
 
+const (
+	// daemonShutdownTimeout bounds the daemon drain (in-flight dispatch + iq
+	// flush). It must exceed a single recache.timeout_per_url (60s deployed)
+	// plus dispatch grace and the HTTP-shutdown allowance so the drain can
+	// actually complete before SIGKILL. The deploy role / systemd unit must set
+	// TimeoutStopSec >= 90s so the orchestrator does not kill mid-drain.
+	daemonShutdownTimeout = 75 * time.Second
+
+	// httpListenerShutdownTimeout bounds stopping the HTTP API listener early
+	// (before the daemon drain) so no new recache requests arrive during
+	// shutdown.
+	httpListenerShutdownTimeout = 5 * time.Second
+)
+
 func main() {
 	// Parse command-line flags
 	configPath := flag.String("c", "configs/example/cache-daemon.yaml", "path to cache-daemon configuration file")
@@ -126,17 +140,22 @@ func main() {
 		dynamicLogger.EnsureInfoLevelForShutdown()
 		zapLogger.Info("Shutting down Cache Daemon...")
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), daemonShutdownTimeout)
 		defer cancel()
 
-		// Shutdown daemon components first
-		if err := daemon.Shutdown(); err != nil {
-			zapLogger.Error("Failed to shutdown daemon components gracefully", zap.Error(err))
-		}
-
-		// Then shutdown HTTP server
-		if err := httpServer.ShutdownWithContext(shutdownCtx); err != nil {
+		// Stop accepting new recache requests first so the daemon drains a
+		// fixed in-flight set rather than a moving target. Bounded separately
+		// from the daemon drain budget below.
+		listenerCtx, listenerCancel := context.WithTimeout(context.Background(), httpListenerShutdownTimeout)
+		if err := httpServer.ShutdownWithContext(listenerCtx); err != nil {
 			zapLogger.Error("Failed to shutdown HTTP server gracefully", zap.Error(err))
+		}
+		listenerCancel()
+
+		// Then drain the daemon (joins the scheduler, drains in-flight
+		// dispatches within shutdownCtx, flushes the internal queue to Redis).
+		if err := daemon.Shutdown(shutdownCtx); err != nil {
+			zapLogger.Error("Failed to shutdown daemon components gracefully", zap.Error(err))
 		}
 
 		zapLogger.Info("Cache daemon stopped")
@@ -154,7 +173,9 @@ func main() {
 
 		dynamicLogger.EnsureInfoLevelForShutdown()
 		zapLogger.Info("Shutting down Cache Daemon...")
-		if err := daemon.Shutdown(); err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), daemonShutdownTimeout)
+		defer cancel()
+		if err := daemon.Shutdown(shutdownCtx); err != nil {
 			zapLogger.Error("Failed to shutdown daemon components gracefully", zap.Error(err))
 		}
 		zapLogger.Info("Cache daemon stopped")

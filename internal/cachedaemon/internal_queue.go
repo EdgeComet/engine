@@ -11,6 +11,7 @@ type InternalQueueEntry struct {
 	URL            string
 	DimensionID    int
 	Mode           string // Optional action override: render | bypass (empty = respect config)
+	Priority       string // Source Redis priority (high | normal | autorecache); used for shutdown flush and metrics
 	RetryCount     int
 	QueuedAt       time.Time
 	LastAttempt    time.Time
