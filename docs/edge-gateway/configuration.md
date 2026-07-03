@@ -433,7 +433,7 @@ cache_sharding:
   replicate_on_pull: true
 
 # HTTP headers to pass through from responses
-# Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location"]
+# Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"]
 safe_headers:
   - "Content-Type"
   - "Cache-Control"
@@ -441,6 +441,7 @@ safe_headers:
   - "Last-Modified"
   - "ETag"
   - "Location"
+  - "X-Robots-Tag"
 
 hosts:
   # Glob pattern to load host configurations

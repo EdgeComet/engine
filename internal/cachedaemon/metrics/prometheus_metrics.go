@@ -5,9 +5,8 @@ import (
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/expfmt"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"go.uber.org/zap"
 )
 
@@ -20,8 +19,8 @@ type hostConcurrencyTotals struct {
 }
 
 type PrometheusMetrics struct {
-	httpHandler func(*fasthttp.RequestCtx)
-	logger      *zap.Logger
+	gatherer prometheus.Gatherer
+	logger   *zap.Logger
 
 	recacheRequestsTotal *prometheus.CounterVec
 	queueDepth           *prometheus.GaugeVec
@@ -172,12 +171,7 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 	registry.MustRegister(pm.recacheDeniedTotal)
 	registry.MustRegister(pm.recachePulledTotal)
 
-	gatherer := prometheus.Gatherer(registry)
-	handler := promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{
-		ErrorHandling: promhttp.ContinueOnError,
-	})
-
-	pm.httpHandler = fasthttpadaptor.NewFastHTTPHandler(handler)
+	pm.gatherer = registry
 
 	logger.Info("Prometheus metrics initialized for Cache Daemon",
 		zap.String("namespace", namespace))
@@ -239,6 +233,28 @@ func (pm *PrometheusMetrics) RecordRecachePulled(priority string, hostID int, n 
 	pm.recachePulledTotal.WithLabelValues(priority, strconv.Itoa(hostID)).Add(float64(n))
 }
 
+// ServeHTTP gathers the registered metrics and writes the Prometheus text
+// exposition directly to ctx. Encoding inline (instead of bridging through
+// fasthttpadaptor.NewFastHTTPHandler) keeps the scrape fully synchronous: the
+// adaptor spawned a goroutine and did a non-blocking modeDone send on an
+// unbuffered channel, so a scraper preempted before its receive would block
+// forever -- the source of the cache-daemon metrics-scrape hang under load.
 func (pm *PrometheusMetrics) ServeHTTP(ctx *fasthttp.RequestCtx) {
-	pm.httpHandler(ctx)
+	mfs, err := pm.gatherer.Gather()
+	if err != nil {
+		// Parity with promhttp.ContinueOnError: log and still emit whatever
+		// families were gathered.
+		pm.logger.Error("Failed to gather Prometheus metrics", zap.Error(err))
+	}
+
+	format := expfmt.NewFormat(expfmt.TypeTextPlain)
+	ctx.SetContentType(string(format))
+
+	enc := expfmt.NewEncoder(ctx.Response.BodyWriter(), format)
+	for _, mf := range mfs {
+		if encErr := enc.Encode(mf); encErr != nil {
+			pm.logger.Error("Failed to encode Prometheus metric family", zap.Error(encErr))
+			return
+		}
+	}
 }

@@ -978,7 +978,7 @@ func TestResolver_HeadersResolution(t *testing.T) {
 			patternHeaders:          nil,
 			url:                     "https://example.com/page",
 			expectedRequestHeaders:  nil,
-			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location"},
+			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"},
 		},
 		{
 			name: "global safe_response replaces defaults",
@@ -1041,7 +1041,7 @@ func TestResolver_HeadersResolution(t *testing.T) {
 			patternHeaders:          nil,
 			url:                     "https://example.com/page",
 			expectedRequestHeaders:  []string{"Authorization"},
-			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location"},
+			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"},
 		},
 		{
 			name: "request headers add at host level",
@@ -1054,7 +1054,7 @@ func TestResolver_HeadersResolution(t *testing.T) {
 			patternHeaders:          nil,
 			url:                     "https://example.com/page",
 			expectedRequestHeaders:  []string{"Authorization", "X-Tenant-ID"},
-			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location"},
+			expectedResponseHeaders: []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"},
 		},
 	}
 

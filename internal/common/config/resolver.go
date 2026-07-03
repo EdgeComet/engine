@@ -692,7 +692,7 @@ func (r *ConfigResolver) resolveBothitRecache(resolved *ResolvedConfig, matchedR
 // Each field (request/response) is resolved independently.
 func (r *ConfigResolver) resolveHeaders(resolved *ResolvedConfig, matchedRule *types.URLRule) {
 	// Default response headers
-	responseHeaders := []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location"}
+	responseHeaders := []string{"Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"}
 	// Default request headers (empty - opt-in)
 	var requestHeaders []string
 

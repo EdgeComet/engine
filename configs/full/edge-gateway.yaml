@@ -507,7 +507,7 @@ headers:
 
   # Response headers to return to client
   # REPLACES inherited list (mutually exclusive with safe_response_add)
-  # Default: Content-Type, Cache-Control, Expires, Last-Modified, ETag, Location
+  # Default: Content-Type, Cache-Control, Expires, Last-Modified, ETag, Location, X-Robots-Tag
   safe_response:
     - "Content-Type"
     - "Cache-Control"
@@ -515,6 +515,7 @@ headers:
     - "Last-Modified"
     - "ETag"
     - "Location"
+    - "X-Robots-Tag"
     - "Content-Language"
     - "Vary"
 
