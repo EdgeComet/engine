@@ -57,6 +57,16 @@ jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -69,3 +79,5 @@ jobs:
 
       - name: Run unit tests
         run: cd tests && make unit
+        env:
+          TEST_REDIS_ADDR: localhost:6379

@@ -18,7 +18,7 @@ const (
 	MaxCanonicalURLLength    = 2000
 	MaxHreflangURLLength     = 2000
 	MaxHeadingLength         = 500
-	MaxHeadingsPerLevel      = 5
+	MaxHeadingsPerLevel      = 30
 	MaxExternalDomains       = 20
 	MaxBreadcrumbs           = 5
 )
@@ -71,7 +71,7 @@ type PageSEO struct {
 	CanonicalURL    string   `json:"canonical_url,omitempty"`
 	MetaRobots      []string `json:"meta_robots,omitempty"`
 
-	// Headings (first 5 of each level, max 500 chars each)
+	// Headings (first MaxHeadingsPerLevel of each level, each truncated to MaxHeadingLength runes)
 	H1s []string `json:"h1s,omitempty"`
 	H2s []string `json:"h2s,omitempty"`
 	H3s []string `json:"h3s,omitempty"`

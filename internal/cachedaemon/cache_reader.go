@@ -18,12 +18,18 @@ const (
 	maxLimit     = 100
 )
 
+// cacheListTimeBudget bounds the total time ListURLs spends looping bounded
+// Lua chunks over a shard keyspace. Checked between Evals; each Eval itself
+// stays bounded by max_scan_iterations. If shards outgrow what this budget
+// can walk (~10M+ keys), the fix is a per-host index, not a bigger budget.
+const cacheListTimeBudget = 2 * time.Second
+
 const luaCacheList = `
 local prefix = "meta:cache:" .. ARGV[1] .. ":"
 local stale_ttl = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local cursor = ARGV[4]
-local limit = tonumber(ARGV[5])
+local stop_threshold = tonumber(ARGV[5])
 local status_filter = ARGV[6]
 local dimension_filter = ARGV[7]
 local url_contains = ARGV[8]
@@ -54,17 +60,18 @@ local title_ends_with = string.lower(ARGV[30])
 local title_neq = string.lower(ARGV[31])
 local title_not_contains = string.lower(ARGV[32])
 local last_bot_hit_exists = ARGV[33]
+local scan_count = tonumber(ARGV[34])
 
 local max_scan_iterations = 200
 local scan_iterations = 0
 local results = {}
 
--- SCAN advances the cursor past every key in the returned batch, so the batch
--- size (COUNT) must not exceed the page limit: any matching key we fetch but do
--- not emit before stopping would be skipped permanently. We size each batch to
--- the limit and only stop at a batch boundary so the returned cursor always
--- matches what we emitted.
-local scan_count = limit
+-- SCAN advances the cursor past every key in the returned batch, so we only
+-- stop at a batch boundary: every fetched key is either emitted or filtered,
+-- never silently skipped. The Go loop shrinks stop_threshold to the items
+-- still missing from the page while scan_count stays pinned to the original
+-- request limit, so a page missing only its last items keeps scanning
+-- full-size batches instead of degrading to tiny Evals.
 if scan_count < 1 then scan_count = 1 end
 
 repeat
@@ -242,7 +249,7 @@ repeat
         end
     end
 
-    if #results >= limit then break end
+    if #results >= stop_threshold then break end
     scan_iterations = scan_iterations + 1
     if scan_iterations >= max_scan_iterations then break end
 until cursor == "0"
@@ -307,6 +314,7 @@ return {cursor, total, active, stale, expired,
 type CacheReader struct {
 	redis        *redis.Client
 	keyGenerator *redis.KeyGenerator
+	nowFunc      func() time.Time
 	logger       *zap.Logger
 }
 
@@ -314,6 +322,7 @@ func NewCacheReader(redisClient *redis.Client, keyGenerator *redis.KeyGenerator,
 	return &CacheReader{
 		redis:        redisClient,
 		keyGenerator: keyGenerator,
+		nowFunc:      time.Now,
 		logger:       logger,
 	}
 }
@@ -372,59 +381,93 @@ type CacheListParams struct {
 	StaleTTL          int64
 }
 
-func (cr *CacheReader) ListURLs(params CacheListParams) (*CacheURLsResponse, error) {
-	result, err := cr.redis.Eval(
-		context.Background(),
-		luaCacheList,
-		[]string{},
-		strconv.Itoa(params.HostID),
-		strconv.FormatInt(params.StaleTTL, 10),
-		strconv.FormatInt(time.Now().Unix(), 10),
-		params.Cursor,
-		strconv.Itoa(params.Limit),
-		params.StatusFilter,
-		params.DimensionFilter,
-		params.URLContains,
-		strconv.FormatInt(params.SizeMin, 10),
-		strconv.FormatInt(params.SizeMax, 10),
-		strconv.FormatInt(params.CacheAgeMin, 10),
-		strconv.FormatInt(params.CacheAgeMax, 10),
-		params.StatusCodeFilter,
-		params.SourceFilter,
-		params.IndexStatusFilter,
-		params.Title,
-		strconv.FormatInt(params.CreatedAtMin, 10),
-		strconv.FormatInt(params.CreatedAtMax, 10),
-		strconv.FormatInt(params.ExpiresAtMin, 10),
-		strconv.FormatInt(params.ExpiresAtMax, 10),
-		strconv.FormatInt(params.LastAccessMin, 10),
-		strconv.FormatInt(params.LastAccessMax, 10),
-		strconv.FormatInt(params.LastBotHitMin, 10),
-		strconv.FormatInt(params.LastBotHitMax, 10),
-		params.URLStartsWith,
-		params.URLEndsWith,
-		params.URLNeq,
-		params.URLNotContains,
-		params.TitleStartsWith,
-		params.TitleEndsWith,
-		params.TitleNeq,
-		params.TitleNotContains,
-		params.LastBotHitExists,
-	)
-	if err != nil {
-		return nil, err
+// ListURLs walks the shard keyspace with bounded Lua chunks (same pattern as
+// GetSummary) until the page fills, the cursor exhausts, or the time budget
+// expires. A single bounded Eval is not enough: SCAN examines the whole shard
+// and the host MATCH only post-filters, so a small host colocated with a large
+// neighbor would return an empty first page.
+func (cr *CacheReader) ListURLs(ctx context.Context, params CacheListParams) (*CacheURLsResponse, error) {
+	start := cr.nowFunc()
+	deadline := start.Add(cacheListTimeBudget)
+	now := strconv.FormatInt(start.Unix(), 10)
+	cursor := params.Cursor
+	items := make([]CacheURLItem, 0, params.Limit)
+
+	for {
+		result, err := cr.redis.Eval(
+			ctx,
+			luaCacheList,
+			[]string{},
+			strconv.Itoa(params.HostID),
+			strconv.FormatInt(params.StaleTTL, 10),
+			now,
+			cursor,
+			strconv.Itoa(params.Limit-len(items)),
+			params.StatusFilter,
+			params.DimensionFilter,
+			params.URLContains,
+			strconv.FormatInt(params.SizeMin, 10),
+			strconv.FormatInt(params.SizeMax, 10),
+			strconv.FormatInt(params.CacheAgeMin, 10),
+			strconv.FormatInt(params.CacheAgeMax, 10),
+			params.StatusCodeFilter,
+			params.SourceFilter,
+			params.IndexStatusFilter,
+			params.Title,
+			strconv.FormatInt(params.CreatedAtMin, 10),
+			strconv.FormatInt(params.CreatedAtMax, 10),
+			strconv.FormatInt(params.ExpiresAtMin, 10),
+			strconv.FormatInt(params.ExpiresAtMax, 10),
+			strconv.FormatInt(params.LastAccessMin, 10),
+			strconv.FormatInt(params.LastAccessMax, 10),
+			strconv.FormatInt(params.LastBotHitMin, 10),
+			strconv.FormatInt(params.LastBotHitMax, 10),
+			params.URLStartsWith,
+			params.URLEndsWith,
+			params.URLNeq,
+			params.URLNotContains,
+			params.TitleStartsWith,
+			params.TitleEndsWith,
+			params.TitleNeq,
+			params.TitleNotContains,
+			params.LastBotHitExists,
+			strconv.Itoa(params.Limit),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		arr, ok := result.([]interface{})
+		if !ok || len(arr) == 0 {
+			cr.logger.Error("Unexpected Lua cache list result format")
+			break
+		}
+
+		cursor = fmt.Sprintf("%v", arr[0])
+		items = cr.appendListItems(items, arr[1:])
+
+		if cursor == "0" || len(items) >= params.Limit {
+			break
+		}
+		if !cr.nowFunc().Before(deadline) {
+			cr.logger.Warn("Cache list time budget expired, returning partial page",
+				zap.Int("host_id", params.HostID),
+				zap.Int("items_accumulated", len(items)),
+				zap.Int("limit", params.Limit))
+			break
+		}
 	}
 
-	arr, ok := result.([]interface{})
-	if !ok || len(arr) == 0 {
-		return &CacheURLsResponse{Items: []CacheURLItem{}, Cursor: "0"}, nil
-	}
+	return &CacheURLsResponse{
+		Items:   items,
+		Cursor:  cursor,
+		HasMore: cursor != "0",
+	}, nil
+}
 
-	nextCursor := fmt.Sprintf("%v", arr[0])
-	items := make([]CacheURLItem, 0, len(arr)-1)
-
-	for i := 1; i < len(arr); i++ {
-		jsonStr, ok := arr[i].(string)
+func (cr *CacheReader) appendListItems(items []CacheURLItem, rawItems []interface{}) []CacheURLItem {
+	for _, entry := range rawItems {
+		jsonStr, ok := entry.(string)
 		if !ok {
 			continue
 		}
@@ -458,17 +501,12 @@ func (cr *CacheReader) ListURLs(params CacheListParams) (*CacheURLsResponse, err
 
 		items = append(items, item)
 	}
-
-	return &CacheURLsResponse{
-		Items:   items,
-		Cursor:  nextCursor,
-		HasMore: nextCursor != "0",
-	}, nil
+	return items
 }
 
 func (cr *CacheReader) GetSummary(hostID int, staleTTL int64) (*CacheSummaryResponse, error) {
 	cursor := "0"
-	now := strconv.FormatInt(time.Now().Unix(), 10)
+	now := strconv.FormatInt(cr.nowFunc().Unix(), 10)
 	hostIDStr := strconv.Itoa(hostID)
 	staleTTLStr := strconv.FormatInt(staleTTL, 10)
 

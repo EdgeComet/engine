@@ -1542,6 +1542,25 @@ func TestExtractHeadings_GoQuery(t *testing.T) {
 		result := extractHeadings(doc, "h1", 5)
 		assert.Nil(t, result)
 	})
+
+	// Every heading is truncated independently, not just the first one, so the
+	// per-level payload stays bounded by MaxHeadingsPerLevel * MaxHeadingLength.
+	t.Run("each heading truncated to MaxHeadingLength", func(t *testing.T) {
+		var sb strings.Builder
+		sb.WriteString("<html><body>")
+		for i := 0; i < types.MaxHeadingsPerLevel+5; i++ {
+			sb.WriteString("<h2>" + strings.Repeat("b", types.MaxHeadingLength+100) + "</h2>")
+		}
+		sb.WriteString("</body></html>")
+
+		doc := parseGoQueryDoc(t, sb.String())
+		result := extractHeadings(doc, "h2", types.MaxHeadingsPerLevel)
+
+		require.Len(t, result, types.MaxHeadingsPerLevel)
+		for _, h := range result {
+			assert.Equal(t, types.MaxHeadingLength, utf8.RuneCountInString(h))
+		}
+	})
 }
 
 func TestExtractBodyWords_GoQuery(t *testing.T) {

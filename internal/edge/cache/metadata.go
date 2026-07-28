@@ -418,10 +418,21 @@ func (ms *MetadataStore) GetAbsoluteFilePath(relativePath string) (string, error
 	return cleanPath, nil
 }
 
+// A raw HSET would recreate the meta key if it expired or was deleted between
+// the cache lookup and this update, leaving a one-field hash with no TTL that
+// never expires. Guard the write behind EXISTS so a touch racing expiry or
+// deletion is a no-op.
+const luaUpdateLastBotHitIfExists = `
+if redis.call("EXISTS", KEYS[1]) == 1 then
+    redis.call("HSET", KEYS[1], "last_bot_hit", ARGV[1])
+end
+return 0
+`
+
 // UpdateLastBotHit updates the last_bot_hit field in cache metadata
 func (ms *MetadataStore) UpdateLastBotHit(ctx context.Context, cacheKey *types.CacheKey, timestamp time.Time) error {
 	metaKey := ms.keyGenerator.GenerateMetadataKey(cacheKey)
-	if err := ms.redis.HSet(ctx, metaKey, "last_bot_hit", timestamp.Unix()); err != nil {
+	if _, err := ms.redis.Eval(ctx, luaUpdateLastBotHitIfExists, []string{metaKey}, timestamp.Unix()); err != nil {
 		return fmt.Errorf("failed to update last_bot_hit: %w", err)
 	}
 	return nil

@@ -956,7 +956,7 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		StaleTTL:          staleTTL,
 	}
 
-	result, err := d.cacheReader.ListURLs(params)
+	result, err := d.cacheReader.ListURLs(ctx, params)
 	if handleRedisError(ctx, err, d.logger) {
 		return
 	}

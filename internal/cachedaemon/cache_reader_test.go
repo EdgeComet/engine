@@ -1,6 +1,7 @@
 package cachedaemon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			})
 		}
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    3,
@@ -98,7 +99,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			})
 		}
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -132,7 +133,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:          1,
 			Cursor:          "0",
 			Limit:           100,
@@ -164,7 +165,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:      1,
 			Cursor:      "0",
 			Limit:       100,
@@ -204,7 +205,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -239,7 +240,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:      1,
 			Cursor:      "0",
 			Limit:       100,
@@ -283,7 +284,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:      1,
 			Cursor:      "0",
 			Limit:       100,
@@ -318,7 +319,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":      "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:           1,
 			Cursor:           "0",
 			Limit:            100,
@@ -350,7 +351,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "bypass",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -384,7 +385,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"index_status": "2",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:            1,
 			Cursor:            "0",
 			Limit:             100,
@@ -427,7 +428,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "bypass",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:          1,
 			Cursor:          "0",
 			Limit:           100,
@@ -456,7 +457,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			})
 		}
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    5,
@@ -466,7 +467,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		assert.Len(t, result.Items, 5)
 
 		// Request all items with large limit
-		allResult, err := cr.ListURLs(CacheListParams{
+		allResult, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -500,7 +501,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		seen := make(map[string]struct{})
 		cursor := "0"
 		for pages := 0; pages < 100; pages++ {
-			result, err := cr.ListURLs(CacheListParams{
+			result, err := cr.ListURLs(context.Background(), CacheListParams{
 				HostID:   1,
 				Cursor:   cursor,
 				Limit:    100,
@@ -531,7 +532,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -556,7 +557,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -600,7 +601,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -627,7 +628,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -667,7 +668,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -711,7 +712,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -746,7 +747,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":      "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -789,7 +790,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -822,7 +823,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -865,7 +866,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:       1,
 			Cursor:       "0",
 			Limit:        100,
@@ -901,7 +902,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -945,7 +946,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -977,7 +978,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:      1,
 			Cursor:      "0",
 			Limit:       100,
@@ -1017,7 +1018,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -1059,7 +1060,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:         1,
 			Cursor:         "0",
 			Limit:          100,
@@ -1102,7 +1103,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:          1,
 			Cursor:          "0",
 			Limit:           100,
@@ -1147,7 +1148,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -1192,7 +1193,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:   1,
 			Cursor:   "0",
 			Limit:    100,
@@ -1237,7 +1238,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:           1,
 			Cursor:           "0",
 			Limit:            100,
@@ -1279,7 +1280,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:           1,
 			Cursor:           "0",
 			Limit:            100,
@@ -1323,7 +1324,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:           1,
 			Cursor:           "0",
 			Limit:            100,
@@ -1347,7 +1348,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:        1,
 			Cursor:        "0",
 			Limit:         100,
@@ -1389,7 +1390,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			"source":     "render",
 		})
 
-		result, err := cr.ListURLs(CacheListParams{
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
 			HostID:           1,
 			Cursor:           "0",
 			Limit:            100,
@@ -1400,6 +1401,146 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
 		assert.Contains(t, result.Items[0].URL, "hats")
+	})
+}
+
+func TestCacheReader_ListURLs_ChunkedScan(t *testing.T) {
+	now := time.Now().Unix()
+
+	activeEntry := func(url string) map[string]string {
+		return map[string]string{
+			"url":        url,
+			"dimension":  "mobile",
+			"size":       "500",
+			"created_at": fmt.Sprintf("%d", now-100),
+			"expires_at": fmt.Sprintf("%d", now+3600),
+			"source":     "render",
+		}
+	}
+
+	t.Run("small host among large neighbor keyspace returns entries on page 1", func(t *testing.T) {
+		// Incident shape in miniredis form. miniredis paginates SCAN over the
+		// MATCH-filtered sorted key list, so neighbor keys cannot starve the
+		// scan here the way real Redis hash-bucket scatter does - the real
+		// incident is covered by the TEST_REDIS_ADDR integration test. This
+		// pins the user-visible contract: both entries on page 1, no more.
+		cr, mr := setupTestCacheReader(t)
+
+		for i := 0; i < 6000; i++ {
+			populateMetadataHash(mr, 1, 1, hashLabel(fmt.Sprintf("neighbor%d", i)),
+				activeEntry(fmt.Sprintf("https://big.example.com/page%d", i)))
+		}
+		populateMetadataHash(mr, 2, 1, hashLabel("small1"), activeEntry("https://small.example.com/one"))
+		populateMetadataHash(mr, 2, 1, hashLabel("small2"), activeEntry("https://small.example.com/two"))
+
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
+			HostID:   2,
+			Cursor:   "0",
+			Limit:    25,
+			StaleTTL: 600,
+		})
+		require.NoError(t, err)
+		assert.Len(t, result.Items, 2)
+		assert.Equal(t, "0", result.Cursor)
+		assert.False(t, result.HasMore)
+	})
+
+	t.Run("budget expiry returns partial page with has_more", func(t *testing.T) {
+		// miniredis paginates SCAN over the MATCH-filtered sorted key list, so
+		// keys of other hosts never consume iterations here. Filter-rejected
+		// keys of the target host do: 1500 render-source keys at limit=5 mean
+		// one Eval (200 iterations x COUNT=5) covers only 1000 of them, so the
+		// cursor cannot exhaust in a single chunk.
+		cr, mr := setupTestCacheReader(t)
+
+		for i := 0; i < 1500; i++ {
+			populateMetadataHash(mr, 2, 1, hashLabel(fmt.Sprintf("filtered%d", i)),
+				activeEntry(fmt.Sprintf("https://small.example.com/page%d", i)))
+		}
+
+		base := time.Now()
+		nowCalls := 0
+		cr.nowFunc = func() time.Time {
+			nowCalls++
+			if nowCalls == 1 {
+				return base
+			}
+			return base.Add(cacheListTimeBudget + time.Second)
+		}
+
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
+			HostID:       2,
+			Cursor:       "0",
+			Limit:        5,
+			SourceFilter: "bypass",
+			StaleTTL:     600,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, result.Items)
+		assert.NotEqual(t, "0", result.Cursor)
+		assert.True(t, result.HasMore)
+		assert.Equal(t, 2, nowCalls, "budget expiry must stop the loop after the first Eval")
+	})
+
+	t.Run("request cancellation stops the loop", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+
+		populateMetadataHash(mr, 1, 1, hashLabel("entry1"), activeEntry("https://example.com/page"))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := cr.ListURLs(ctx, CacheListParams{
+			HostID:   1,
+			Cursor:   "0",
+			Limit:    25,
+			StaleTTL: 600,
+		})
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("page may overshoot limit by up to one scan batch and is not truncated", func(t *testing.T) {
+		// Pins the overshoot contract: the Lua chunk only stops at a batch
+		// boundary, so a page can exceed the limit by up to one SCAN batch and
+		// the daemon returns all collected items untruncated. miniredis
+		// paginates SCAN over the MATCH-filtered sorted key list, so the
+		// layout below controls key order via fixed-width numeric hashes: at
+		// limit=10 the first Eval covers positions 0..1999 (1997 rejected + 3
+		// accepted) and hits its iteration cap; the second Eval, needing 7
+		// more items, collects a full batch of 10 accepted keys.
+		cr, mr := setupTestCacheReader(t)
+
+		const hashBase = uint64(1000000000)
+		total := 2017
+		for i := 0; i < total; i++ {
+			entry := activeEntry(fmt.Sprintf("https://small.example.com/page%d", i))
+			if i < 1997 {
+				entry["source"] = "render"
+			} else {
+				entry["source"] = "bypass"
+			}
+			populateMetadataHash(mr, 2, 1, hashBase+uint64(i), entry)
+		}
+
+		limit := 10
+		result, err := cr.ListURLs(context.Background(), CacheListParams{
+			HostID:       2,
+			Cursor:       "0",
+			Limit:        limit,
+			SourceFilter: "bypass",
+			StaleTTL:     600,
+		})
+		require.NoError(t, err)
+		assert.Greater(t, len(result.Items), limit, "page should overshoot the limit at a batch boundary")
+		assert.LessOrEqual(t, len(result.Items), 2*limit, "overshoot is bounded by one scan batch")
+		assert.True(t, result.HasMore)
+
+		seen := make(map[string]struct{})
+		for _, item := range result.Items {
+			assert.Equal(t, "bypass", item.Source)
+			seen[item.URL] = struct{}{}
+		}
+		assert.Len(t, seen, len(result.Items), "overshot page must not contain duplicates")
 	})
 }
 

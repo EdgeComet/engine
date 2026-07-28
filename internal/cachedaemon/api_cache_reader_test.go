@@ -98,10 +98,15 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 }
 
 func makeTestRequest(daemon *CacheDaemon, method, path string) *fasthttp.RequestCtx {
+	var req fasthttp.Request
+	req.Header.SetMethod(method)
+	req.SetRequestURI(path)
+	req.Header.Set("X-Internal-Auth", "test-auth-key")
+
+	// Init sets the ctx's internal server reference; without it Done() panics
+	// when handlers pass the request ctx as a context.Context to Redis.
 	ctx := &fasthttp.RequestCtx{}
-	ctx.Request.Header.SetMethod(method)
-	ctx.Request.SetRequestURI(path)
-	ctx.Request.Header.Set("X-Internal-Auth", "test-auth-key")
+	ctx.Init(&req, nil, nil)
 	daemon.ServeHTTP(ctx)
 	return ctx
 }

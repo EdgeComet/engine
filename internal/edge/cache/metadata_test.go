@@ -1,12 +1,19 @@
 package cache
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 func TestCacheMetadata_ToHash(t *testing.T) {
@@ -1098,5 +1105,51 @@ func TestMetadataStore_GetAbsoluteFilePath(t *testing.T) {
 		path, err := ms.GetAbsoluteFilePath("1/2025/10/18/abc123_1.html.snappy")
 		require.NoError(t, err)
 		assert.Equal(t, "/var/cache/edgecomet/1/2025/10/18/abc123_1.html.snappy", path)
+	})
+}
+
+func setupTestMetadataStore(t *testing.T) (*MetadataStore, *miniredis.Miniredis) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	t.Cleanup(mr.Close)
+
+	logger := zap.NewNop()
+	redisClient, err := redis.NewClient(&config.RedisConfig{Addr: mr.Addr()}, logger)
+	require.NoError(t, err)
+
+	ms := NewMetadataStore(redisClient, redis.NewKeyGenerator(), t.TempDir(), logger)
+	return ms, mr
+}
+
+func TestMetadataStore_UpdateLastBotHit(t *testing.T) {
+	cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 42}
+	metaKey := "meta:" + cacheKey.String()
+
+	t.Run("touch on live key updates the field", func(t *testing.T) {
+		ms, mr := setupTestMetadataStore(t)
+
+		mr.HSet(metaKey, "url", "https://example.com/page", "created_at", "1700000000")
+
+		ts := time.Unix(1700000100, 0)
+		require.NoError(t, ms.UpdateLastBotHit(context.Background(), cacheKey, ts))
+		assert.Equal(t, "1700000100", mr.HGet(metaKey, "last_bot_hit"))
+	})
+
+	t.Run("touch racing deletion creates nothing", func(t *testing.T) {
+		ms, mr := setupTestMetadataStore(t)
+
+		require.NoError(t, ms.UpdateLastBotHit(context.Background(), cacheKey, time.Unix(1700000100, 0)))
+		assert.False(t, mr.Exists(metaKey), "guarded update must not create a stray meta hash")
+	})
+
+	t.Run("touch racing TTL expiry creates nothing", func(t *testing.T) {
+		ms, mr := setupTestMetadataStore(t)
+
+		mr.HSet(metaKey, "url", "https://example.com/page", "created_at", "1700000000")
+		mr.SetTTL(metaKey, time.Minute)
+		mr.FastForward(2 * time.Minute)
+
+		require.NoError(t, ms.UpdateLastBotHit(context.Background(), cacheKey, time.Unix(1700000100, 0)))
+		assert.False(t, mr.Exists(metaKey), "guarded update must not resurrect an expired meta hash")
 	})
 }
