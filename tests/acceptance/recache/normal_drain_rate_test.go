@@ -15,10 +15,9 @@ import (
 // whenever per-host concurrency and RS budget have headroom.
 var _ = Describe("Normal queue drain rate", func() {
 	BeforeEach(func() {
-		err := testEnv.RestartDaemon()
+		err := testEnv.RestartDaemonWithCleanRedis()
 		Expect(err).ToNot(HaveOccurred())
 
-		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
 		testEnv.DrainMockEGResponses()
 

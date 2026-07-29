@@ -693,6 +693,51 @@ func TestConvertPageSEO_NewFieldsZeroValues(t *testing.T) {
 	assert.Equal(t, "", event.HreflangSelf)
 }
 
+// TestBuildRequestEvent_LinksOnlyOnPrimarySnapshot pins where the link graph rides:
+// the original-SEO snapshot exists for before/after SEO comparison and no consumer
+// reads links from it, so carrying them twice would only double the event.
+func TestBuildRequestEvent_LinksOnlyOnPrimarySnapshot(t *testing.T) {
+	links := []types.PageLink{
+		{Target: "https://example.com/about", Anchor: "About", IsInternal: true},
+	}
+	result := &orchestrator.RenderResult{
+		Source:          orchestrator.ServedFromRender,
+		StatusCode:      200,
+		PageSEO:         &types.PageSEO{Title: "Modified", PageLinks: links},
+		OriginalPageSEO: &types.PageSEO{Title: "Original", PageLinks: links},
+	}
+
+	event := BuildRequestEvent(createTestRenderContext(), result, 100*time.Millisecond, "eg-1")
+
+	require.NotNil(t, event.PageSEO)
+	assert.Len(t, event.PageSEO.PageLinks, 1)
+	require.NotNil(t, event.PageSEOOriginal)
+	assert.Empty(t, event.PageSEOOriginal.PageLinks)
+	assert.Equal(t, "Original", event.PageSEOOriginal.Title)
+}
+
+// TestConvertPageSEO_TruncationFlagReachesTheWire covers the one stored signal that
+// separates "this page has no links" from "the link graph is incomplete", whether
+// capture hit its budget or the graph was shed in transit.
+func TestConvertPageSEO_TruncationFlagReachesTheWire(t *testing.T) {
+	event := convertPageSEO(&types.PageSEO{Title: "Truncated", PageLinksTruncated: true})
+	require.NotNil(t, event)
+	assert.True(t, event.PageLinksTruncated)
+
+	data, err := json.Marshal(event)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "\"page_links_truncated\":true")
+
+	var stored PageSEOEvent
+	require.NoError(t, json.Unmarshal(data, &stored))
+	assert.True(t, stored.PageLinksTruncated)
+
+	// The flag is omitted, not stored as false, when the graph is complete.
+	complete, err := json.Marshal(convertPageSEO(&types.PageSEO{Title: "Complete"}))
+	require.NoError(t, err)
+	assert.NotContains(t, string(complete), "page_links_truncated")
+}
+
 func TestBuildRequestEvent_RedirectTo(t *testing.T) {
 	renderCtx := createTestRenderContext()
 

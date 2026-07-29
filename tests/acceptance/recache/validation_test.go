@@ -272,6 +272,8 @@ var _ = Describe("Recache Validation Tests", func() {
 		})
 
 		It("should accept valid request and create ZSET entries", func() {
+			pauseSchedulerForSpec()
+
 			req := types.RecacheAPIRequest{
 				HostID:       testEnv.TestHostID,
 				URLs:         []string{"https://example.com/page1", "https://example.com/page2"},

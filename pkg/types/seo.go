@@ -32,20 +32,28 @@ const (
 // Link capture limits. Hard caps that bound the per-page link payload; exceeding
 // MaxPageLinks truncates and sets PageSEO.PageLinksTruncated.
 const (
-	MaxPageLinks    = 1000 // max distinct outbound link targets captured per page
+	MaxPageLinks    = 1000 // max distinct placement variants captured per page
 	MaxAnchorLength = 300  // max runes of anchor text stored per link
+
+	MaxPlacementsPerTarget = 5  // distinct DOM placements kept per link target
+	MaxDomPathSteps        = 16 // significant steps kept in a placement path
+	DomPathHeadSteps       = 6  // outermost steps kept when a path is depth-truncated
+	DomPathTailSteps       = 9  // innermost steps kept when a path is depth-truncated
+	MaxDomPathClasses      = 4  // class tokens kept per step after alphabetical sort
+	MaxDomPathStepLength   = 64 // max runes of a single step string
 )
 
 // PageLink is one captured outbound link from a rendered or bypassed page. Target is
 // a normalized absolute URL string; no hash is computed here.
 type PageLink struct {
-	Target     string `json:"target"`
-	Anchor     string `json:"anchor,omitempty"`
-	IsInternal bool   `json:"is_internal,omitempty"`
-	Nofollow   bool   `json:"nofollow,omitempty"`
-	Sponsored  bool   `json:"sponsored,omitempty"`
-	UGC        bool   `json:"ugc,omitempty"`
-	IsImage    bool   `json:"is_image,omitempty"`
+	Target     string   `json:"target"`
+	Anchor     string   `json:"anchor,omitempty"`
+	IsInternal bool     `json:"is_internal,omitempty"`
+	Nofollow   bool     `json:"nofollow,omitempty"`
+	Sponsored  bool     `json:"sponsored,omitempty"`
+	UGC        bool     `json:"ugc,omitempty"`
+	IsImage    bool     `json:"is_image,omitempty"`
+	DomPath    []string `json:"dom_path,omitempty"`
 }
 
 // HreflangEntry represents a single hreflang alternate link
@@ -107,7 +115,7 @@ type PageSEO struct {
 	// Per-link outbound graph captured at render/bypass. Carried on the event alongside
 	// the SEO summary; downstream consumers decide how to persist it.
 	PageLinks []PageLink `json:"page_links,omitempty"`
-	// PageLinksTruncated is set when distinct targets exceeded MaxPageLinks. In-process
-	// signal only (json:"-"), not serialized.
+	// PageLinksTruncated is set when captured placement variants exceeded MaxPageLinks.
+	// In-process signal only (json:"-"), not serialized on this struct.
 	PageLinksTruncated bool `json:"-"`
 }

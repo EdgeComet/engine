@@ -167,6 +167,8 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 	})
 
 	Context("Recache with Bypass Dimension", func() {
+		BeforeEach(pauseSchedulerForSpec)
+
 		It("should accept recache request for bypass dimension_id 0", func() {
 			req := types.RecacheAPIRequest{
 				HostID:       testEnv.TestHostID,
@@ -220,6 +222,8 @@ var _ = Describe("Dimension Actions - Bypass and Block", func() {
 	})
 
 	Context("Recache with Block Dimensions", func() {
+		BeforeEach(pauseSchedulerForSpec)
+
 		It("should exclude block dimensions from default dimension list", func() {
 			req := types.RecacheAPIRequest{
 				HostID:       testEnv.TestHostID,

@@ -548,42 +548,51 @@ func (env *RecacheTestEnvironment) StartMockEG() error {
 	return env.AddMockEGToRegistry(fmt.Sprintf("127.0.0.1:%d", env.MockEGPort))
 }
 
-// RestartDaemon kills and restarts the daemon process
-func (env *RecacheTestEnvironment) RestartDaemon() error {
-	// Stop existing daemon process
-	if env.DaemonCmd != nil && env.DaemonCmd.Process != nil {
-		// Try graceful shutdown first (SIGTERM)
-		pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid)
-		if err == nil {
-			// Kill entire process group
-			syscall.Kill(-pgid, syscall.SIGTERM)
-		} else {
-			// Fallback to killing just the parent
-			env.DaemonCmd.Process.Signal(os.Interrupt)
-		}
-
-		// Wait for graceful shutdown with timeout
-		done := make(chan error, 1)
-		go func() {
-			done <- env.DaemonCmd.Wait()
-		}()
-
-		select {
-		case <-done:
-			// Graceful shutdown succeeded
-		case <-time.After(2 * time.Second):
-			// Force kill if timeout
-			if pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid); err == nil {
-				syscall.Kill(-pgid, syscall.SIGKILL)
-			} else {
-				env.DaemonCmd.Process.Kill()
-			}
-			// Wait a bit for force kill to complete
-			time.Sleep(100 * time.Millisecond)
-		}
+// StopDaemon terminates the daemon process and waits for it to exit.
+//
+// The daemon flushes whatever is still in its internal queue back into the
+// recache ZSETs as it shuts down, so on return Redis may hold entries the
+// previous spec left in flight.
+func (env *RecacheTestEnvironment) StopDaemon() {
+	if env.DaemonCmd == nil || env.DaemonCmd.Process == nil {
+		return
 	}
 
-	// Start new daemon process
+	// Try graceful shutdown first (SIGTERM)
+	pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid)
+	if err == nil {
+		// Kill entire process group
+		syscall.Kill(-pgid, syscall.SIGTERM)
+	} else {
+		// Fallback to killing just the parent
+		env.DaemonCmd.Process.Signal(os.Interrupt)
+	}
+
+	// Wait for graceful shutdown with timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- env.DaemonCmd.Wait()
+	}()
+
+	select {
+	case <-done:
+		// Graceful shutdown succeeded
+	case <-time.After(2 * time.Second):
+		// Force kill if timeout
+		if pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid); err == nil {
+			syscall.Kill(-pgid, syscall.SIGKILL)
+		} else {
+			env.DaemonCmd.Process.Kill()
+		}
+		// Wait a bit for force kill to complete
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	env.DaemonCmd = nil
+}
+
+// StartDaemon launches a daemon process and blocks until it serves /status.
+func (env *RecacheTestEnvironment) StartDaemon() error {
 	projectRoot := filepath.Join("..", "..", "..")
 	daemonPath := filepath.Join(projectRoot, "cmd", "cache-daemon")
 
@@ -603,7 +612,7 @@ func (env *RecacheTestEnvironment) RestartDaemon() error {
 	}
 
 	if err := daemonCmd.Start(); err != nil {
-		return fmt.Errorf("failed to restart daemon process: %w", err)
+		return fmt.Errorf("failed to start daemon process: %w", err)
 	}
 	env.DaemonCmd = daemonCmd
 
@@ -615,42 +624,32 @@ func (env *RecacheTestEnvironment) RestartDaemon() error {
 		} else {
 			daemonCmd.Process.Kill()
 		}
-		return fmt.Errorf("daemon not ready after restart: %w", err)
+		return fmt.Errorf("daemon not ready after start: %w", err)
 	}
 
 	return nil
 }
 
+// RestartDaemonWithCleanRedis restarts the daemon and clears Redis while no
+// daemon is running. This is the only restart specs should use.
+//
+// Restarting first and clearing after does not work: the shutdown flush pushes
+// the previous spec's in-flight entries back into the recache ZSETs, and a
+// daemon started before that flush is cleared has a full tick to pull them
+// into its (in-memory) internal queue -- where no later ClearRedis can reach
+// them. They then dispatch to the mock EG in the middle of the next spec and
+// corrupt its view of which URLs were received.
+func (env *RecacheTestEnvironment) RestartDaemonWithCleanRedis() error {
+	env.StopDaemon()
+	if err := env.ClearRedis(); err != nil {
+		return fmt.Errorf("failed to clear redis between daemon runs: %w", err)
+	}
+	return env.StartDaemon()
+}
+
 // Stop shuts down all test services
 func (env *RecacheTestEnvironment) Stop() error {
-	// Stop daemon process
-	if env.DaemonCmd != nil && env.DaemonCmd.Process != nil {
-		// Try graceful shutdown
-		pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid)
-		if err == nil {
-			syscall.Kill(-pgid, syscall.SIGTERM)
-		} else {
-			env.DaemonCmd.Process.Signal(os.Interrupt)
-		}
-
-		// Wait for graceful shutdown
-		done := make(chan error, 1)
-		go func() {
-			done <- env.DaemonCmd.Wait()
-		}()
-
-		select {
-		case <-done:
-			// Graceful shutdown
-		case <-time.After(3 * time.Second):
-			// Force kill
-			if pgid, err := syscall.Getpgid(env.DaemonCmd.Process.Pid); err == nil {
-				syscall.Kill(-pgid, syscall.SIGKILL)
-			} else {
-				env.DaemonCmd.Process.Kill()
-			}
-		}
-	}
+	env.StopDaemon()
 
 	// Shutdown mock EG server
 	if env.MockEGServer != nil {

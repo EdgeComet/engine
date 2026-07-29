@@ -117,13 +117,14 @@ type BreadcrumbEntryEvent struct {
 // PageLinkEvent is one captured outbound link, carried folded inside the page_seo
 // event struct.
 type PageLinkEvent struct {
-	Target     string `json:"target"`
-	Anchor     string `json:"anchor,omitempty"`
-	IsInternal bool   `json:"is_internal,omitempty"`
-	Nofollow   bool   `json:"nofollow,omitempty"`
-	Sponsored  bool   `json:"sponsored,omitempty"`
-	UGC        bool   `json:"ugc,omitempty"`
-	IsImage    bool   `json:"is_image,omitempty"`
+	Target     string   `json:"target"`
+	Anchor     string   `json:"anchor,omitempty"`
+	IsInternal bool     `json:"is_internal,omitempty"`
+	Nofollow   bool     `json:"nofollow,omitempty"`
+	Sponsored  bool     `json:"sponsored,omitempty"`
+	UGC        bool     `json:"ugc,omitempty"`
+	IsImage    bool     `json:"is_image,omitempty"`
+	DomPath    []string `json:"dom_path,omitempty"`
 }
 
 // PageSEOEvent contains SEO metadata for event logging
@@ -153,4 +154,8 @@ type PageSEOEvent struct {
 	Breadcrumbs         []BreadcrumbEntryEvent `json:"breadcrumbs,omitempty"`
 	// PageLinks carry the per-link outbound graph on the event.
 	PageLinks []PageLinkEvent `json:"page_links,omitempty"`
+	// PageLinksTruncated marks the outbound graph as incomplete, either because
+	// capture hit its budget or because the graph was dropped in transit. It travels
+	// to storage so a link-heavy page is never read back as a page without links.
+	PageLinksTruncated bool `json:"page_links_truncated,omitempty"`
 }

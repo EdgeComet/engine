@@ -11,10 +11,36 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-redis/redis/v8"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/edgecomet/engine/pkg/types"
 )
+
+// pauseSchedulerForSpec pauses the daemon scheduler for the remainder of the
+// current spec and resumes it during cleanup.
+//
+// Any spec that seeds a recache queue and then asserts its exact contents must
+// call this. The daemon runs for the whole suite with a 100ms tick, and the
+// unified drain ZPopMins up to max_concurrent entries per host per tick. The
+// pull is gated only by concurrency slots and internal-queue space -- not by RS
+// capacity -- so a tick landing between the enqueue and the assertion silently
+// removes entries the spec is about to count.
+//
+// Safe to call from an It or a BeforeEach; cleanup is registered per spec.
+func pauseSchedulerForSpec() {
+	Expect(testEnv.PauseScheduler()).To(Succeed())
+	DeferCleanup(func() {
+		// Drop the entries this spec seeded BEFORE letting the scheduler run
+		// again. Resuming first hands the drain a full queue, and the entries
+		// it pulls land in the daemon's in-memory internal queue -- where the
+		// next spec's ClearRedis cannot reach them. They then show up in
+		// whatever a later spec counts (queue/summary reports Redis depth plus
+		// that in-memory queue) or dispatch to the mock EG mid-spec.
+		Expect(testEnv.ClearRedis()).To(Succeed())
+		Expect(testEnv.ResumeScheduler()).To(Succeed())
+	})
+}
 
 // Helper function to add entry to recache ZSET
 func addToRecacheZSET(client *redis.Client, hostID int, priority string, url string, dimensionID int, score float64) error {

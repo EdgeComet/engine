@@ -10,11 +10,12 @@ import (
 
 var _ = Describe("Scheduler Processing", func() {
 	BeforeEach(func() {
-		// Restart daemon for clean internal queue
-		err := testEnv.RestartDaemon()
+		// Restart daemon for clean internal queue. Redis is cleared while the
+		// daemon is down so the shutdown flush cannot hand the previous spec's
+		// in-flight entries to the fresh daemon.
+		err := testEnv.RestartDaemonWithCleanRedis()
 		Expect(err).ToNot(HaveOccurred())
 
-		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
 		testEnv.DrainMockEGResponses()
 

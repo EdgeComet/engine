@@ -11,6 +11,10 @@ import (
 )
 
 var _ = Describe("ZSET Deduplication & URL Normalization Integration", func() {
+	// The whole file asserts exact ZSET contents after enqueueing, which only
+	// holds while the scheduler is not draining the queue.
+	BeforeEach(pauseSchedulerForSpec)
+
 	Context("URL Normalization Prevents ZSET Duplicates", func() {
 		It("should deduplicate URLs with different query parameter order, case, and ports", func() {
 			req := types.RecacheAPIRequest{
@@ -121,10 +125,6 @@ var _ = Describe("ZSET Deduplication & URL Normalization Integration", func() {
 		})
 
 		It("should keep dimensions independent across different priorities", func() {
-			err := testEnv.PauseScheduler()
-			Expect(err).ToNot(HaveOccurred())
-			defer testEnv.ResumeScheduler()
-
 			url := "https://example.com/test"
 
 			// Add to high priority

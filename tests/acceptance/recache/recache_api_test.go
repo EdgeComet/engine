@@ -10,6 +10,10 @@ import (
 )
 
 var _ = Describe("Recache API - Extended Scenarios", func() {
+	// Every spec here enqueues and then counts the queue, so the scheduler
+	// must not drain underneath the assertion.
+	BeforeEach(pauseSchedulerForSpec)
+
 	Context("Bulk Operations", func() {
 		It("should handle bulk recache of 1000 URLs", func() {
 			urls := make([]string, 1000)
@@ -34,8 +38,7 @@ var _ = Describe("Recache API - Extended Scenarios", func() {
 			zsetKey := fmt.Sprintf("recache:%d:high", testEnv.TestHostID)
 			size, err := testEnv.GetZSETSize(zsetKey)
 			Expect(err).ToNot(HaveOccurred())
-			// Allow for minor normalization/timing variations
-			Expect(size).To(BeNumerically(">=", 999), "At least 999 of 1000 URLs should be enqueued")
+			Expect(size).To(Equal(int64(1000)), "All 1000 distinct URLs should be enqueued")
 		})
 	})
 

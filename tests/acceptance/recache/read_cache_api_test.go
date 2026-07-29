@@ -396,12 +396,11 @@ var _ = Describe("Cache Reader", func() {
 	Context("GET /internal/cache/queue", func() {
 		It("returns queue items", func() {
 			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
-			err := testEnv.PauseScheduler()
-			Expect(err).NotTo(HaveOccurred())
+			pauseSchedulerForSpec()
 
 			now := float64(time.Now().Unix())
 
-			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/q1", 1, now)
+			err := addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/q1", 1, now)
 			Expect(err).NotTo(HaveOccurred())
 			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "normal", "https://example.com/q2", 2, now+10)
 			Expect(err).NotTo(HaveOccurred())
@@ -425,12 +424,11 @@ var _ = Describe("Cache Reader", func() {
 
 		It("filters by priority=high", func() {
 			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
-			err := testEnv.PauseScheduler()
-			Expect(err).NotTo(HaveOccurred())
+			pauseSchedulerForSpec()
 
 			now := float64(time.Now().Unix())
 
-			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high1", 1, now)
+			err := addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high1", 1, now)
 			Expect(err).NotTo(HaveOccurred())
 			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/high2", 1, now+1)
 			Expect(err).NotTo(HaveOccurred())
@@ -454,8 +452,7 @@ var _ = Describe("Cache Reader", func() {
 
 		It("supports cursor pagination", func() {
 			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
-			err := testEnv.PauseScheduler()
-			Expect(err).NotTo(HaveOccurred())
+			pauseSchedulerForSpec()
 
 			now := float64(time.Now().Unix())
 
@@ -492,14 +489,20 @@ var _ = Describe("Cache Reader", func() {
 	})
 
 	Context("GET /internal/cache/queue/summary", func() {
+		// pending = Redis ZSET depth PLUS the daemon's in-memory internal
+		// queue, so ClearRedis alone cannot give this spec a known baseline.
+		// Only a fresh daemon guarantees the in-memory queue starts empty.
+		BeforeEach(func() {
+			Expect(testEnv.RestartDaemonWithCleanRedis()).To(Succeed())
+		})
+
 		It("returns pending count", func() {
 			// Pause scheduler to prevent it from consuming ZSET entries via ZPOPMIN
-			err := testEnv.PauseScheduler()
-			Expect(err).NotTo(HaveOccurred())
+			pauseSchedulerForSpec()
 
 			now := float64(time.Now().Unix())
 
-			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/qs1", 1, now)
+			err := addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/qs1", 1, now)
 			Expect(err).NotTo(HaveOccurred())
 			err = addToRecacheZSET(testEnv.RedisClient, testHostID, "high", "https://example.com/qs2", 1, now+1)
 			Expect(err).NotTo(HaveOccurred())
@@ -517,9 +520,6 @@ var _ = Describe("Cache Reader", func() {
 			data := result["data"].(map[string]interface{})
 			Expect(data["pending"]).To(BeNumerically("==", 4))
 			Expect(data).To(HaveKey("processing"))
-
-			err = testEnv.ResumeScheduler()
-			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 

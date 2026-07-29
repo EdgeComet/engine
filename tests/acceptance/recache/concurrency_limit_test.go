@@ -15,10 +15,9 @@ import (
 
 var _ = Describe("Per-Host Concurrency Limiter", func() {
 	BeforeEach(func() {
-		err := testEnv.RestartDaemon()
+		err := testEnv.RestartDaemonWithCleanRedis()
 		Expect(err).ToNot(HaveOccurred())
 
-		testEnv.ClearRedis()
 		testEnv.DrainMockEGReceivedChannel()
 		testEnv.DrainMockEGResponses()
 
