@@ -422,7 +422,7 @@ func TestProcessContent_HeaderCandidateExemptFromCap(t *testing.T) {
 
 	var metaTags strings.Builder
 	for i := 0; i < types.MaxDateCandidates+5; i++ {
-		metaTags.WriteString(fmt.Sprintf(`<meta property="article:published_time" content="2024-03-%02d">`, i+1))
+		fmt.Fprintf(&metaTags, `<meta property="article:published_time" content="2024-03-%02d">`, i+1)
 	}
 	html := []byte(`<!DOCTYPE html><html><head>` + metaTags.String() + `</head><body></body></html>`)
 
