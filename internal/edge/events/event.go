@@ -53,7 +53,9 @@ type RequestEvent struct {
 	// Page metrics (nil for non-render events)
 	Metrics *PageMetricsEvent `json:"metrics,omitempty"`
 
-	// SEO metadata (nil for cache hits, bypass)
+	// SEO metadata. Populated wherever content processing runs: render, precache and
+	// bypass. Cache-served events carry at most a minimal blob rebuilt from cache
+	// metadata, which is not an inspection result.
 	PageSEO *PageSEOEvent `json:"page_seo,omitempty"`
 
 	// Content processor fields
@@ -127,6 +129,15 @@ type PageLinkEvent struct {
 	DomPath    []string `json:"dom_path,omitempty"`
 }
 
+// DateCandidateEvent is one raw date signal captured from the page or the origin
+// response, carried folded inside the page_seo event struct.
+type DateCandidateEvent struct {
+	Source  string `json:"source"`
+	Field   string `json:"field"`
+	Raw     string `json:"raw"`
+	Context string `json:"context"`
+}
+
 // PageSEOEvent contains SEO metadata for event logging
 type PageSEOEvent struct {
 	Title               string                 `json:"title,omitempty"`
@@ -152,6 +163,13 @@ type PageSEOEvent struct {
 	HreflangSelf        string                 `json:"hreflang_self,omitempty"`
 	StructuredDataTypes []string               `json:"structured_data_types,omitempty"`
 	Breadcrumbs         []BreadcrumbEntryEvent `json:"breadcrumbs,omitempty"`
+	// Dates carries every captured date signal. The tag is omitzero, not omitempty:
+	// an inspected page with no signal keeps its empty array, which is itself the
+	// finding, while a blob that never went through content processing - the minimal
+	// one rebuilt from cache metadata when a request is served from cache - stays nil
+	// and drops the key, so it cannot be read as an inspection result. omitempty would
+	// collapse both onto an absent key, and a bare tag would marshal nil as null.
+	Dates []DateCandidateEvent `json:"dates,omitzero"`
 	// PageLinks carry the per-link outbound graph on the event.
 	PageLinks []PageLinkEvent `json:"page_links,omitempty"`
 	// PageLinksTruncated marks the outbound graph as incomplete, either because

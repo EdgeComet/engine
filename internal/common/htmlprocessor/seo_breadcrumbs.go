@@ -7,15 +7,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// extractBreadcrumbs locates the first BreadcrumbList in JSON-LD scripts
+// extractBreadcrumbs locates the first BreadcrumbList in the parsed JSON-LD blocks
 // (document order) and returns its items as ordered BreadcrumbEntry slice.
 // All input is treated as untrusted; the function returns nil on any malformed
 // or unrecognized input and never panics on hostile JSON.
-func extractBreadcrumbs(doc *goquery.Document, base string) (result []types.BreadcrumbEntry) {
+func extractBreadcrumbs(blocks []interface{}, base string) (result []types.BreadcrumbEntry) {
 	defer func() {
 		if r := recover(); r != nil {
 			result = nil
@@ -23,18 +22,11 @@ func extractBreadcrumbs(doc *goquery.Document, base string) (result []types.Brea
 	}()
 
 	var list map[string]interface{}
-	doc.Find("script[type='application/ld+json']").EachWithBreak(func(_ int, s *goquery.Selection) bool {
-		content := s.Text()
-		if len(content) > types.MaxJSONLDSize {
-			return true
+	for _, block := range blocks {
+		if list = findFirstBreadcrumbList(block, 0); list != nil {
+			break
 		}
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-			return true
-		}
-		list = findFirstBreadcrumbList(parsed, 0)
-		return list == nil
-	})
+	}
 
 	if list == nil {
 		return nil
@@ -166,22 +158,18 @@ func readBreadcrumbURL(item map[string]interface{}) string {
 	return ""
 }
 
-// readBreadcrumbPosition extracts position from float64 or numeric string.
+// readBreadcrumbPosition extracts position from a JSON number or a numeric string.
+// JSON-LD is decoded with UseNumber, so numeric positions arrive as json.Number.
 // Returns (0, false) for any other shape, NaN, infinity, fractional, negative,
 // or out-of-int32-range values.
 func readBreadcrumbPosition(v interface{}) (int, bool) {
 	switch val := v.(type) {
-	case float64:
-		if math.IsNaN(val) || math.IsInf(val, 0) {
+	case json.Number:
+		f, err := val.Float64()
+		if err != nil {
 			return 0, false
 		}
-		if val != math.Trunc(val) {
-			return 0, false
-		}
-		if val < 0 || val > math.MaxInt32 {
-			return 0, false
-		}
-		return int(val), true
+		return breadcrumbPositionFromFloat(f)
 	case string:
 		trimmed := strings.TrimSpace(val)
 		if trimmed == "" {
@@ -194,6 +182,20 @@ func readBreadcrumbPosition(v interface{}) (int, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// breadcrumbPositionFromFloat accepts only a whole, in-range, non-negative value.
+func breadcrumbPositionFromFloat(f float64) (int, bool) {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0, false
+	}
+	if f != math.Trunc(f) {
+		return 0, false
+	}
+	if f < 0 || f > math.MaxInt32 {
+		return 0, false
+	}
+	return int(f), true
 }
 
 // readJSONString returns the string at key, or "" if the key is absent or the

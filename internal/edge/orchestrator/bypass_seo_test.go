@@ -81,7 +81,7 @@ func TestProcessContent_BypassSEOExtraction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ProcessContent(context.Background(), tt.body, tt.statusCode, tt.targetURL, false, 1, nil, logger)
+			result := ProcessContent(context.Background(), tt.body, tt.statusCode, nil, tt.targetURL, false, 1, nil, logger)
 
 			if tt.wantNil {
 				assert.Nil(t, result.PageSEO)

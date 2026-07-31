@@ -14,6 +14,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// Fixed date values served by the /dates-test/ endpoints. Exported so the specs assert
+// the same literals the origin emits.
+const (
+	DatesTestLastModified      = "Last-Modified"
+	DatesTestLastModifiedValue = "Wed, 05 Mar 2024 08:00:00 GMT"
+	DatesTestPublished         = "2024-03-05T10:00:00+02:00"
+	DatesTestModified          = "2024-04-01T09:30:00+02:00"
+	DatesTestTitle             = "Date Capture Test Page"
+)
+
 // TestServer manages a local HTTP server for serving test fixtures
 type TestServer struct {
 	server      *http.Server
@@ -814,6 +824,41 @@ func (ts *TestServer) Start() error {
 <head><title>Page Not Found</title></head>
 <body><h1>404 - Not Found</h1></body>
 </html>`))
+	})
+
+	// Date capture endpoints - /dates-test/*
+	// Serves date-bearing markup for every capture source plus a fixed Last-Modified
+	// response header, so a test can pin exact values on the render and bypass paths.
+	mux.HandleFunc("/dates-test/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store")
+		w.Header().Set(DatesTestLastModified, DatesTestLastModifiedValue)
+		w.WriteHeader(http.StatusOK)
+
+		fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>`+DatesTestTitle+`</title>
+	<script type="application/ld+json">
+	{
+		"@context": "https://schema.org",
+		"@type": "BlogPosting",
+		"headline": "Date capture test",
+		"datePublished": "%s",
+		"dateModified": "%s"
+	}
+	</script>
+	<meta property="article:published_time" content="%s">
+</head>
+<body>
+	<h1>Date Capture Test Heading</h1>
+	<p class="path">Path: %s</p>
+	<time datetime="%s">March 5, 2024</time>
+	<div id="test-marker">DATES_TEST_PAGE</div>
+</body>
+</html>`,
+			DatesTestPublished, DatesTestModified, DatesTestPublished, r.URL.Path, DatesTestPublished)
 	})
 
 	// Default handler for everything else - handles PDFs, JSONs, and generic pages

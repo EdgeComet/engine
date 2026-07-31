@@ -722,3 +722,14 @@ hosts:
           cache:
             ttl: 5m
 
+      # --- DATE CAPTURE TESTS (for date_capture_test.go) ---
+      # The origin serves date markup plus a Last-Modified response header on both
+      # paths, so the same page can be exercised rendered and bypassed.
+      - match: "/dates-test/bypass*"
+        action: "bypass"
+
+      - match: "/dates-test/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 0s

@@ -32,6 +32,31 @@ func isRedirectStatusCode(statusCode int) bool {
 	return statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308
 }
 
+// firstHeaderValueSorted returns the first value of the header matching name
+// case-insensitively, resolving ties on the lexicographically smallest matching name.
+//
+// getHeaderCaseInsensitive ranges over the map and stops at the first hit, so an origin
+// that sends the same header under two spellings gets a different answer on every run.
+// That is tolerable when the value only steers serving, but not when it is stored as
+// evidence: repeated processing of one response must yield one answer.
+func firstHeaderValueSorted(headers map[string][]string, name string) (string, bool) {
+	var selected string
+	found := false
+	for headerName := range headers {
+		if !strings.EqualFold(headerName, name) {
+			continue
+		}
+		if !found || headerName < selected {
+			selected = headerName
+			found = true
+		}
+	}
+	if !found || len(headers[selected]) == 0 {
+		return "", false
+	}
+	return headers[selected][0], true
+}
+
 // getHeaderCaseInsensitive retrieves header value with case-insensitive key matching
 // HTTP headers are case-insensitive per RFC 7230
 func getHeaderCaseInsensitive(headers map[string][]string, name string) ([]string, bool) {

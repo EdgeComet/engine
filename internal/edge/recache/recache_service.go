@@ -320,6 +320,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		ctx,
 		renderResult.HTML,
 		renderResult.StatusCode,
+		renderResult.Headers,
 		url,
 		stripScripts,
 		renderCtx.Host.ID,
@@ -498,7 +499,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	var processed *orchestrator.ProcessedContent
 	if orchestrator.IsHTMLContentTypeValue(bypassResp.ContentType) {
 		processed = orchestrator.ProcessContent(
-			ctx, bypassResp.Body, bypassResp.StatusCode, url,
+			ctx, bypassResp.Body, bypassResp.StatusCode, bypassResp.Headers, url,
 			false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
 		)
 	}

@@ -83,3 +83,69 @@ func TestIsHTMLContentTypeValue(t *testing.T) {
 		})
 	}
 }
+
+func TestFirstHeaderValueSorted(t *testing.T) {
+	tests := []struct {
+		name      string
+		headers   map[string][]string
+		lookup    string
+		expected  string
+		expectHit bool
+	}{
+		{
+			name:      "exact name",
+			headers:   map[string][]string{"Last-Modified": {"Wed, 05 Mar 2024 08:00:00 GMT"}},
+			lookup:    "Last-Modified",
+			expected:  "Wed, 05 Mar 2024 08:00:00 GMT",
+			expectHit: true,
+		},
+		{
+			name:      "case-insensitive name",
+			headers:   map[string][]string{"last-modified": {"Wed, 05 Mar 2024 08:00:00 GMT"}},
+			lookup:    "Last-Modified",
+			expected:  "Wed, 05 Mar 2024 08:00:00 GMT",
+			expectHit: true,
+		},
+		{
+			name:      "first of several values",
+			headers:   map[string][]string{"Last-Modified": {"first", "second"}},
+			lookup:    "Last-Modified",
+			expected:  "first",
+			expectHit: true,
+		},
+		{
+			// Uppercase sorts before mixed case, which sorts before lowercase.
+			name:      "smallest matching name wins",
+			headers:   map[string][]string{"last-modified": {"lower"}, "LAST-MODIFIED": {"upper"}, "Last-Modified": {"mixed"}},
+			lookup:    "Last-Modified",
+			expected:  "upper",
+			expectHit: true,
+		},
+		{
+			name:      "absent header",
+			headers:   map[string][]string{"Cache-Control": {"max-age=60"}},
+			lookup:    "Last-Modified",
+			expectHit: false,
+		},
+		{
+			name:      "nil map",
+			headers:   nil,
+			lookup:    "Last-Modified",
+			expectHit: false,
+		},
+		{
+			name:      "matching name without values",
+			headers:   map[string][]string{"Last-Modified": {}},
+			lookup:    "Last-Modified",
+			expectHit: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value, ok := firstHeaderValueSorted(tt.headers, tt.lookup)
+			assert.Equal(t, tt.expectHit, ok)
+			assert.Equal(t, tt.expected, value)
+		})
+	}
+}

@@ -328,5 +328,23 @@ func convertPageSEOWithoutLinks(seo *types.PageSEO) *PageSEOEvent {
 		}
 	}
 
+	// Dates are materialized whenever the source slice exists, unlike every field
+	// above, which is skipped when empty: an inspected page with no date signal keeps
+	// an empty array, because that array is itself the finding. The nil check is what
+	// keeps the claim honest - only content processing initializes the slice, so a
+	// PageSEO rebuilt from cache metadata stays nil and carries no dates key.
+	if seo.Dates != nil {
+		dates := make([]DateCandidateEvent, len(seo.Dates))
+		for i, d := range seo.Dates {
+			dates[i] = DateCandidateEvent{
+				Source:  d.Source,
+				Field:   d.Field,
+				Raw:     d.Raw,
+				Context: d.Context,
+			}
+		}
+		event.Dates = dates
+	}
+
 	return event
 }

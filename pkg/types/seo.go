@@ -29,6 +29,60 @@ const (
 	MaxJSONLDRecursionDepth = 10          // Prevent stack overflow
 )
 
+// Date capture limits. Real pages sit far below every cap; the caps exist to bound
+// adversarial markup.
+const (
+	MaxDateRawLength = 64 // max runes kept per candidate Raw and Context
+	// MaxDateCandidates bounds the candidates collected from markup. The origin
+	// header candidate is appended after the cap and is not subject to it.
+	MaxDateCandidates = 20
+	// MaxTimeElementDates bounds <time> candidates, applied after the structural
+	// skip rules so a page-level element behind item-level ones is still captured.
+	MaxTimeElementDates = 3
+	// DateRepetitionThreshold is the occurrence count at which a repeated JSON-LD
+	// (context, property) signature collapses to its first occurrence.
+	DateRepetitionThreshold = 3
+	// FeedArticleThreshold is the top-level <article> count at which a page reads as
+	// a feed and every <time> inside an <article> is treated as item-level.
+	FeedArticleThreshold = 2
+)
+
+// DateCandidate.Source values, naming where a date signal was found.
+const (
+	DateSourceJSONLD      = "json_ld"
+	DateSourceMeta        = "meta"
+	DateSourceTimeElement = "time_element"
+	DateSourceHTTPHeader  = "http_header"
+)
+
+// DateCandidate.Field values. Semantically equivalent properties collapse onto one
+// value; the (Field, Context) pair disambiguates the original property downstream.
+const (
+	DateFieldPublished = "published"
+	DateFieldModified  = "modified"
+	DateFieldCreated   = "created"
+	DateFieldReleased  = "released"
+	DateFieldStart     = "start"
+	DateFieldEnd       = "end"
+	DateFieldExpires   = "expires"
+	DateFieldUnknown   = "unknown"
+)
+
+// LastModifiedHeader is the canonical spelling of the only response header captured
+// as a date signal, and the Context recorded for that candidate.
+const LastModifiedHeader = "Last-Modified"
+
+// DateCandidate is one raw date-bearing signal found on a page. Values are stored
+// exactly as found, malformed ones included: interpretation happens downstream, so a
+// malformed date is evidence rather than a capture failure. Every key is always
+// serialized; consumers rely on Context being visible even when empty.
+type DateCandidate struct {
+	Source  string `json:"source"`
+	Field   string `json:"field"`
+	Raw     string `json:"raw"`
+	Context string `json:"context"`
+}
+
 // Link capture limits. Hard caps that bound the per-page link payload; exceeding
 // MaxPageLinks truncates and sets PageSEO.PageLinksTruncated.
 const (
@@ -111,6 +165,14 @@ type PageSEO struct {
 	// Structured data
 	StructuredDataTypes []string          `json:"structured_data_types,omitempty"`
 	Breadcrumbs         []BreadcrumbEntry `json:"breadcrumbs,omitempty"`
+
+	// Dates carries every captured date signal, grouped by source. The extractor
+	// always initializes it, and the tag is omitzero rather than omitempty so that
+	// the empty array survives: it records that the page was inspected and carries
+	// no date signal, which consumers must be able to tell apart from an absent key.
+	// A struct assembled without inspecting a page keeps the nil slice and drops the
+	// key instead of claiming an empty result.
+	Dates []DateCandidate `json:"dates,omitzero"`
 
 	// Per-link outbound graph captured at render/bypass. Carried on the event alongside
 	// the SEO summary; downstream consumers decide how to persist it.

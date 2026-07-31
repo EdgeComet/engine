@@ -27,8 +27,10 @@ func NewConfigBuilder(testConfig *TestEnvironmentConfig, redisAddr string) *Conf
 	}
 }
 
-// BuildEGConfig builds Edge Gateway configuration
-func (b *ConfigBuilder) BuildEGConfig() *config.EgConfig {
+// BuildEGConfig builds Edge Gateway configuration. tempDir receives the request
+// event log, which is how specs observe that extracted PageSEO values reach the
+// emitted event.
+func (b *ConfigBuilder) BuildEGConfig(tempDir string) *config.EgConfig {
 	// Convert cache base path to absolute path
 	// Tests run from tests/acceptance/basic/, so compute path from test directory
 	cacheBasePath := b.testConfig.EdgeGateway.Storage.BasePath
@@ -90,6 +92,13 @@ func (b *ConfigBuilder) BuildEGConfig() *config.EgConfig {
 		Hosts: config.HostsIncludeConfig{
 			Include: "hosts.d/",
 		},
+		EventLogging: &configtypes.EventLoggingConfig{
+			File: configtypes.EventFileConfig{
+				Enabled:  true,
+				Path:     EventLogPath(tempDir),
+				Template: EventLogTemplate,
+			},
+		},
 	}
 }
 
@@ -133,7 +142,7 @@ func (b *ConfigBuilder) BuildRSConfig() *config.RSConfig {
 // Also copies hosts.d/ directory from fixtures
 func (b *ConfigBuilder) WriteTestConfigs(tempDir string) error {
 	// Build configs
-	egConfig := b.BuildEGConfig()
+	egConfig := b.BuildEGConfig(tempDir)
 	rsConfig := b.BuildRSConfig()
 
 	// Marshal to YAML
