@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -23,6 +24,115 @@ const (
 	DatesTestModified          = "2024-04-01T09:30:00+02:00"
 	DatesTestTitle             = "Date Capture Test Page"
 )
+
+// Body-text fingerprint fixtures. Exported names are the URL segments the specs request.
+const (
+	ContentChangeRenderPath = "/content-change/render/"
+	ContentChangeBypassPath = "/content-change/bypass/"
+
+	ContentChangeBase            = "base"
+	ContentChangeIdentical       = "identical"
+	ContentChangeBoilerplateOnly = "boilerplate-only"
+	ContentChangeSmall           = "small-change"
+	ContentChangeHalf            = "half-change"
+	ContentChangeFull            = "full-change"
+	ContentChangeTwoWords        = "two-words"
+	ContentChangeJSInjected      = "js-injected"
+)
+
+const (
+	contentChangePathPrefix    = "/content-change/"
+	contentChangeTextEndpoint  = "/api/content-text"
+	contentChangeTextDir       = "content-change"
+	contentChangeBodyElementID = "fingerprint-body"
+	contentChangeVariantParam  = "variant"
+
+	// contentChangeInjectDelayMs keeps the origin request in flight while the browser
+	// waits for it, so networkIdle cannot fire before the injected text is in the DOM.
+	contentChangeInjectDelayMs = 1200
+
+	// contentChangeTwoWordBody is short enough that no 3-word shingle exists, so the page
+	// must reach the event log with no fingerprint at all.
+	contentChangeTwoWordBody = "Only two"
+)
+
+// contentChangeFixture describes one page of the body-text fingerprint fixture set.
+// Variants naming the same textFile serve byte-identical body text, which is what the
+// identical and boilerplate-only comparisons rest on: the equality is structural, not a
+// pair of files that happen to agree today.
+type contentChangeFixture struct {
+	textFile             string
+	inlineBody           string
+	alternateBoilerplate bool
+	injectViaJS          bool
+}
+
+var contentChangeFixtures = map[string]contentChangeFixture{
+	ContentChangeBase:            {textFile: "base.txt"},
+	ContentChangeIdentical:       {textFile: "base.txt"},
+	ContentChangeBoilerplateOnly: {textFile: "base.txt", alternateBoilerplate: true},
+	ContentChangeSmall:           {textFile: "small-change.txt"},
+	ContentChangeHalf:            {textFile: "half-change.txt"},
+	ContentChangeFull:            {textFile: "full-change.txt"},
+	ContentChangeTwoWords:        {inlineBody: contentChangeTwoWordBody},
+	ContentChangeJSInjected:      {textFile: "base.txt", injectViaJS: true},
+}
+
+// contentChangeBoilerplate is the markup wrapped around the body text. Both layouts sit
+// entirely inside elements the body-text extractor removes, and they share no word, so a
+// page swapping one for the other must fingerprint identically to the other layout.
+type contentChangeBoilerplate struct {
+	leading  string
+	trailing string
+}
+
+var (
+	contentChangePrimaryBoilerplate = contentChangeBoilerplate{
+		leading: `<header><h1>Fixture Corpus</h1><p>Reference layout masthead</p></header>
+<nav><a href="/content-change/render/base">Corpus index</a> <a href="/content-change/render/identical">Second copy</a></nav>`,
+		trailing: `<aside><p>Related material sidebar, reference layout</p></aside>
+<footer><p>Reference layout colophon, revision one</p></footer>`,
+	}
+
+	contentChangeAlternateBoilerplate = contentChangeBoilerplate{
+		leading: `<header><h2>Ancillary Banner</h2><p>Swapped masthead wording, nothing shared</p></header>
+<nav><a href="/content-change/render/full-change">Unrelated destination</a> <a href="/content-change/render/half-change">Another destination</a></nav>`,
+		trailing: `<aside><p>Different sidebar prose entirely, swapped layout</p></aside>
+<footer><p>Swapped colophon, revision nine hundred</p></footer>`,
+	}
+)
+
+// contentChangePageTemplate keeps the head byte-identical across every fixture so that
+// only body text can move the fingerprint.
+const contentChangePageTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Content Change Fixture</title>
+	<meta name="description" content="Body text fingerprint fixture">
+</head>
+<body>
+%s
+<main id="` + contentChangeBodyElementID + `">%s</main>
+%s%s
+</body>
+</html>`
+
+// contentChangeInjectScript rebuilds the served-static markup from the same corpus file,
+// so a fingerprint taken after JavaScript ran must equal the statically served one. The
+// fetch is what holds the network open; a timer would let Chrome capture the empty main.
+const contentChangeInjectScript = `
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+	fetch('%s?%s=%s&delay=%d')
+		.then(function (response) { return response.json(); })
+		.then(function (payload) {
+			document.getElementById('%s').innerHTML = payload.data.paragraphs
+				.map(function (text) { return '<p>' + text + '</p>'; })
+				.join('\n');
+		});
+});
+</script>`
 
 // TestServer manages a local HTTP server for serving test fixtures
 type TestServer struct {
@@ -861,6 +971,60 @@ func (ts *TestServer) Start() error {
 			DatesTestPublished, DatesTestModified, DatesTestPublished, r.URL.Path, DatesTestPublished)
 	})
 
+	// Body-text fingerprint fixtures - /content-change/{render|bypass}/{variant}
+	// Both routing prefixes reach the same markup, so a render and a bypass of the same
+	// variant differ only in the pipeline that produced the fingerprint.
+	mux.HandleFunc(contentChangePathPrefix, func(w http.ResponseWriter, r *http.Request) {
+		variant := filepath.Base(r.URL.Path)
+		fixture, known := contentChangeFixtures[variant]
+		if !known {
+			http.NotFound(w, r)
+			return
+		}
+
+		page, err := renderContentChangePage(fixture)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache, no-store")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(page))
+	})
+
+	// Corpus endpoint backing the JavaScript-injected fixture. Same delay contract as
+	// /api/mock-data: the sleep is what keeps the browser's network busy.
+	mux.HandleFunc(contentChangeTextEndpoint, func(w http.ResponseWriter, r *http.Request) {
+		variant := r.URL.Query().Get(contentChangeVariantParam)
+		fixture, known := contentChangeFixtures[variant]
+		if !known || fixture.textFile == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		paragraphs, err := loadContentChangeParagraphs(fixture.textFile)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		sleepRequestDelay(r, contentChangeInjectDelayMs)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": map[string]interface{}{
+				contentChangeVariantParam: variant,
+				"paragraphs":              paragraphs,
+			},
+		})
+	})
+
 	// Default handler for everything else - handles PDFs, JSONs, and generic pages
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -982,6 +1146,69 @@ startxref
 
 	// Wait for server to start
 	return ts.waitForReady(30 * time.Second)
+}
+
+// loadContentChangeParagraphs reads one committed corpus file, one paragraph per line.
+// The corpus is generated once and committed rather than built per request: the expected
+// match counts are constants of these exact bytes.
+func loadContentChangeParagraphs(textFile string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join("fixtures", contentChangeTextDir, textFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read content fixture %s: %w", textFile, err)
+	}
+
+	var paragraphs []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			paragraphs = append(paragraphs, trimmed)
+		}
+	}
+	if len(paragraphs) == 0 {
+		return nil, fmt.Errorf("content fixture %s has no text", textFile)
+	}
+	return paragraphs, nil
+}
+
+// renderContentChangePage assembles one fixture page. The paragraph markup built here and
+// the markup the injection script builds in the browser are the same string, so the two
+// paths hand the extractor the same token stream.
+func renderContentChangePage(fixture contentChangeFixture) (string, error) {
+	boilerplate := contentChangePrimaryBoilerplate
+	if fixture.alternateBoilerplate {
+		boilerplate = contentChangeAlternateBoilerplate
+	}
+
+	body := fixture.inlineBody
+	script := ""
+
+	switch {
+	case fixture.injectViaJS:
+		body = ""
+		script = fmt.Sprintf(contentChangeInjectScript,
+			contentChangeTextEndpoint, contentChangeVariantParam, ContentChangeBase,
+			contentChangeInjectDelayMs, contentChangeBodyElementID)
+	case fixture.textFile != "":
+		paragraphs, err := loadContentChangeParagraphs(fixture.textFile)
+		if err != nil {
+			return "", err
+		}
+		body = "<p>" + strings.Join(paragraphs, "</p>\n<p>") + "</p>"
+	}
+
+	return fmt.Sprintf(contentChangePageTemplate,
+		boilerplate.leading, body, boilerplate.trailing, script), nil
+}
+
+// sleepRequestDelay honors the delay query parameter the mock endpoints share. The value
+// is milliseconds, matching the contract the fixture pages are written against.
+func sleepRequestDelay(r *http.Request, defaultDelayMs int) {
+	delayMs := defaultDelayMs
+	if delayParam := r.URL.Query().Get("delay"); delayParam != "" {
+		if parsed, err := strconv.Atoi(delayParam); err == nil && parsed >= 0 {
+			delayMs = parsed
+		}
+	}
+	time.Sleep(time.Duration(delayMs) * time.Millisecond)
 }
 
 // Stop stops the test server

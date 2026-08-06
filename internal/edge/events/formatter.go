@@ -2,10 +2,16 @@ package events
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/edgecomet/engine/pkg/types"
+)
+
+const (
+	minHashValueSeparator = ","
+	decimalBase           = 10
 )
 
 // TemplateFormatter formats RequestEvent using a template string
@@ -44,6 +50,7 @@ var validFields = map[string]bool{
 	"chrome_id":                     true,
 	"title":                         true,
 	"index_status":                  true,
+	"page_minhash":                  true,
 	"cache_age":                     true,
 	"cache_key":                     true,
 	"error_type":                    true,
@@ -231,6 +238,11 @@ func (f *TemplateFormatter) getTopLevelFieldValue(event *RequestEvent, field str
 			return formatInt(event.PageSEO.IndexStatus)
 		}
 		return formatInt(0)
+	case "page_minhash":
+		if event.PageSEO != nil {
+			return formatMinHash(event.PageSEO.PageMinHash)
+		}
+		return formatMinHash(nil)
 	case "cache_age":
 		return formatInt(event.CacheAge)
 	case "cache_key":
@@ -299,6 +311,21 @@ func formatConsoleMessages(messages []types.ConsoleError) string {
 			msg.Type, msg.SourceURL, msg.SourceLocation, msg.Message)
 	}
 	return "[" + strings.Join(parts, ",") + "]"
+}
+
+// formatMinHash renders a page fingerprint as comma-separated decimal values.
+// An absent fingerprint falls back to the formatter's empty-value rendering so the
+// field never collapses into an empty token in tab-delimited output.
+func formatMinHash(signature []uint64) string {
+	if len(signature) == 0 {
+		return formatString("")
+	}
+
+	parts := make([]string, len(signature))
+	for i, value := range signature {
+		parts[i] = strconv.FormatUint(value, decimalBase)
+	}
+	return strings.Join(parts, minHashValueSeparator)
 }
 
 // escapeString escapes special characters in a string for log output

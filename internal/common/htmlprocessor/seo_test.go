@@ -201,7 +201,7 @@ func TestTopNDomains(t *testing.T) {
 	}
 }
 
-func parseGoQueryDoc(t *testing.T, htmlStr string) *goquery.Document {
+func parseGoQueryDoc(t testing.TB, htmlStr string) *goquery.Document {
 	t.Helper()
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
 	if err != nil {
@@ -1730,6 +1730,7 @@ func TestExtractPageSEO_FullIntegration(t *testing.T) {
 	assert.Equal(t, 1, seo.ImagesWithoutAlt)
 
 	assert.True(t, seo.WordCount > 0)
+	assert.Len(t, seo.PageMinHash, minhashSignatureSize)
 
 	assert.Len(t, seo.Hreflang, 2)
 	assert.Equal(t, "en", seo.Hreflang[0].Lang)
@@ -1739,6 +1740,46 @@ func TestExtractPageSEO_FullIntegration(t *testing.T) {
 	assert.Equal(t, "en", seo.HreflangSelf)
 
 	assert.Equal(t, []string{"Organization", "WebPage"}, seo.StructuredDataTypes)
+}
+
+func pageWithNavAndBody(navText, bodyText string) string {
+	return `<!DOCTYPE html>
+<html>
+<head><title>Fingerprint Page</title></head>
+<body>
+    <nav>` + navText + `</nav>
+    <h1>Rendering Service</h1>
+    <p>` + bodyText + `</p>
+    <footer>Copyright 2024 Example Corp</footer>
+</body>
+</html>`
+}
+
+// TestExtractPageSEO_PageMinHash pins the content scope of the fingerprint: it
+// tracks body text and ignores the boilerplate subtrees stripped by extractBodyWords,
+// so navigation edits must not make every page on the site look changed.
+func TestExtractPageSEO_PageMinHash(t *testing.T) {
+	const (
+		baseNav    = "Home Products Support Contact"
+		editedNav  = "Start Catalog Helpdesk Reach Us"
+		baseBody   = "The service renders javascript heavy pages for search engine crawlers and returns cached html to every bot that asks for it."
+		editedBody = "The service renders javascript heavy pages for search engine crawlers and returns freshly rendered html to every bot that asks for it."
+	)
+
+	extract := func(htmlContent string) *types.PageSEO {
+		doc, err := ParseWithDOM([]byte(htmlContent))
+		require.NoError(t, err)
+		return doc.ExtractPageSEO(200, "https://example.com/")
+	}
+
+	base := extract(pageWithNavAndBody(baseNav, baseBody))
+	require.Len(t, base.PageMinHash, minhashSignatureSize)
+
+	bodyChanged := extract(pageWithNavAndBody(baseNav, editedBody))
+	assert.NotEqual(t, base.PageMinHash, bodyChanged.PageMinHash)
+
+	navChanged := extract(pageWithNavAndBody(editedNav, baseBody))
+	assert.Equal(t, base.PageMinHash, navChanged.PageMinHash)
 }
 
 func wrapBreadcrumbScript(jsonBody string) string {

@@ -15,38 +15,39 @@ const (
 	eventLogPollInterval = 100 * time.Millisecond
 )
 
+// eventForResponse polls until the gateway has written the event for this request.
+// Emission happens after the response is served, so the line lands slightly after the
+// client sees the body. Package-level rather than a closure because every spec file that
+// reads values back out of the event log needs exactly this loop.
+func eventForResponse(resp *TestResponse) testutil.EventLogEntry {
+	requestID := resp.Headers.Get(types.HeaderRequestID)
+	Expect(requestID).NotTo(BeEmpty(), "Gateway must echo a request ID to correlate the event")
+
+	var entry testutil.EventLogEntry
+	Eventually(func() (bool, error) {
+		found, ok, err := testutil.FindEventByRequestID(
+			testutil.EventLogPath(testEnv.TempConfigDir), requestID)
+		if err != nil || !ok {
+			return false, err
+		}
+		entry = found
+		return true, nil
+	}, eventLogPollTimeout, eventLogPollInterval).Should(BeTrue(),
+		"An event carrying request ID %s should reach the log", requestID)
+
+	return entry
+}
+
 // The extractor's output has to survive four hops before anything downstream can read
 // it: ExtractPageSEO builds the struct, ProcessContent carries it, BuildRequestEvent
 // converts it, and the emitter writes it. Unit tests cover each hop in isolation. These
 // specs cover the join, against the live pipeline, by reading values that only the
 // extractor could have produced back out of the emitted event.
 //
-// title and index_status are the two PageSEO-sourced fields the event log exposes
-// today. Every other extracted field, dates included, rides the same struct through the
-// same conversion, so this pins the path they all travel.
+// title and index_status are the PageSEO-sourced fields these specs read back. Every
+// other extracted field, dates and the content fingerprint included, rides the same
+// struct through the same conversion, so this pins the path they all travel.
 var _ = Describe("PageSEO Event Flow", Serial, func() {
-
-	// eventForResponse polls until the gateway has written the event for this request.
-	// Emission happens after the response is served, so the line lands slightly after
-	// the client sees the body.
-	eventForResponse := func(resp *TestResponse) testutil.EventLogEntry {
-		requestID := resp.Headers.Get(types.HeaderRequestID)
-		Expect(requestID).NotTo(BeEmpty(), "Gateway must echo a request ID to correlate the event")
-
-		var entry testutil.EventLogEntry
-		Eventually(func() (bool, error) {
-			found, ok, err := testutil.FindEventByRequestID(
-				testutil.EventLogPath(testEnv.TempConfigDir), requestID)
-			if err != nil || !ok {
-				return false, err
-			}
-			entry = found
-			return true, nil
-		}, eventLogPollTimeout, eventLogPollInterval).Should(BeTrue(),
-			"An event carrying request ID %s should reach the log", requestID)
-
-		return entry
-	}
 
 	Context("Render path", func() {
 		It("should carry extracted SEO values into the emitted event", func() {

@@ -11,22 +11,34 @@ import (
 const (
 	eventLogFileName = "events.log"
 
-	// EventLogTemplate carries the two PageSEO-sourced placeholders the edge gateway
-	// already exposes. Both are read off the struct the extractor produced, so a line
+	// EventLogTemplate carries the PageSEO-sourced placeholders the edge gateway
+	// exposes. All of them are read off the struct the extractor produced, so a line
 	// carrying the page's real title proves that extraction output survived every hop
 	// into the emitted event.
-	EventLogTemplate = "{request_id}\t{event_type}\t{url}\t{title}\t{index_status}"
+	EventLogTemplate = "{request_id}\t{event_type}\t{url}\t{title}\t{index_status}\t{page_minhash}"
 
-	eventLogFieldCount = 5
+	eventLogFieldCount = 6
 
 	eventLogRequestIDField   = 0
 	eventLogEventTypeField   = 1
 	eventLogURLField         = 2
 	eventLogTitleField       = 3
 	eventLogIndexStatusField = 4
+	eventLogMinHashField     = 5
 
 	// emptyFieldMarker is what the template formatter writes for an empty string.
 	emptyFieldMarker = "-"
+
+	// minHashSlotSeparator is how the formatter joins the fingerprint slots.
+	minHashSlotSeparator = ","
+
+	// minHashSlotCount is the fixed signature width. The fingerprint format is frozen at
+	// this width, so any other count means a damaged field rather than a shorter
+	// signature, and rejecting it is what makes a torn tail line skippable.
+	minHashSlotCount = 24
+
+	minHashValueBase    = 10
+	minHashValueBitSize = 64
 )
 
 // EventLogEntry is one parsed line of the request event log.
@@ -36,11 +48,33 @@ type EventLogEntry struct {
 	URL         string
 	Title       string
 	IndexStatus int
+	PageMinHash []uint64
 }
 
 // EventLogPath returns the request event log location for a test run.
 func EventLogPath(tempDir string) string {
 	return filepath.Join(tempDir, eventLogFileName)
+}
+
+// MatchingSlots counts the positions where two fingerprints hold the same value, which is
+// the numerator of the estimated Jaccard similarity between the two page texts.
+//
+// Returns 0 whenever the lengths differ, nil arguments included: two signatures of
+// different widths describe nothing comparable, and a zero keeps a caller from reading an
+// accidental prefix overlap as similarity. Two nil fingerprints also score 0 - "neither
+// page had enough text" is not evidence that they carry the same text.
+func MatchingSlots(a, b []uint64) int {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0
+	}
+
+	matching := 0
+	for i := range a {
+		if a[i] == b[i] {
+			matching++
+		}
+	}
+	return matching
 }
 
 // FindEventByRequestID returns the logged event for one request. The suite randomizes
@@ -85,13 +119,43 @@ func parseEventLogLine(line string) (EventLogEntry, bool) {
 		return EventLogEntry{}, false
 	}
 
+	minHash, ok := parseMinHashField(fields[eventLogMinHashField])
+	if !ok {
+		return EventLogEntry{}, false
+	}
+
 	return EventLogEntry{
 		RequestID:   unquoteEventField(fields[eventLogRequestIDField]),
 		EventType:   unquoteEventField(fields[eventLogEventTypeField]),
 		URL:         unquoteEventField(fields[eventLogURLField]),
 		Title:       unquoteEventField(fields[eventLogTitleField]),
 		IndexStatus: indexStatus,
+		PageMinHash: minHash,
 	}, true
+}
+
+// parseMinHashField reads the fingerprint the formatter writes as bare comma-separated
+// decimals - unquoted, unlike the string fields. A page with too little text to fingerprint
+// carries the empty marker and parses to nil, which is a valid reading rather than damage.
+func parseMinHashField(field string) ([]uint64, bool) {
+	if field == emptyFieldMarker {
+		return nil, true
+	}
+
+	parts := strings.Split(field, minHashSlotSeparator)
+	if len(parts) != minHashSlotCount {
+		return nil, false
+	}
+
+	values := make([]uint64, len(parts))
+	for i, part := range parts {
+		value, err := strconv.ParseUint(part, minHashValueBase, minHashValueBitSize)
+		if err != nil {
+			return nil, false
+		}
+		values[i] = value
+	}
+	return values, true
 }
 
 // eventFieldUnescaper reverses the template formatter's escaping. Single pass, so an

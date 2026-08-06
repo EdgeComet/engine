@@ -555,6 +555,7 @@ event_logging:
     # Host/URL: {host}, {host_id}, {url}, {url_hash}, {matched_rule}
     # Metadata: {event_type}, {dimension}, {user_agent}, {client_ip}, {source}
     # Response: {status_code}, {page_size}, {serve_time}, {cache_age}, {title}
+    # Content: {page_minhash} - comma-separated body-text fingerprint, "-" when absent
     # Render: {render_service_id}, {render_time}, {chrome_id}
     # Metrics: {metrics.final_url}, {metrics.total_requests}, {metrics.total_bytes},
     #          {metrics.status_2xx}, {metrics.status_3xx}, {metrics.status_4xx}, {metrics.status_5xx}

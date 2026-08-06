@@ -5,6 +5,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
+
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -116,15 +118,45 @@ func extractHeadings(doc *goquery.Document, tag string, maxCount int) []string {
 	return results
 }
 
+// bodyBoilerplateTags are the subtrees whose text never counts as body content.
+// A set rather than a CSS selector because the walk below skips them in place, and
+// membership matches what a type selector tests: element node, lowercased tag name.
+//
+// FROZEN: the membership of this set is part of the fingerprint format.
+var bodyBoilerplateTags = map[string]struct{}{
+	"nav":      {},
+	"header":   {},
+	"footer":   {},
+	"aside":    {},
+	"form":     {},
+	"script":   {},
+	"style":    {},
+	"noscript": {},
+}
+
+// extractBodyWords returns the visible body text as lowercased whitespace-separated
+// tokens, with boilerplate subtrees excluded.
+//
+// FROZEN: this token stream feeds the page content fingerprint, so the function is
+// part of a stored format, not just a word counter. Changing the excluded tag set,
+// the whitespace splitting or the lowercasing silently makes fingerprints computed
+// after the change incomparable with every fingerprint computed before it - pages
+// would appear to have changed on the deployment date alone, with no error and no way
+// to tell affected comparisons from real content changes. Treat any behavioral change
+// here as a breaking change to the fingerprint format. How the text is collected is
+// free to change; what comes out is not.
 func extractBodyWords(doc *goquery.Document) []string {
 	body := doc.Find("body")
 	if body.Length() == 0 {
 		return nil
 	}
-	clone := body.Clone()
-	clone.Find("nav, header, footer, aside, form, script, style, noscript").Remove()
-	raw := clone.Text()
-	fields := strings.Fields(raw)
+
+	var text strings.Builder
+	for _, node := range body.Nodes {
+		appendBodyText(&text, node)
+	}
+
+	fields := strings.Fields(text.String())
 	if len(fields) == 0 {
 		return nil
 	}
@@ -132,4 +164,28 @@ func extractBodyWords(doc *goquery.Document) []string {
 		fields[i] = strings.ToLower(w)
 	}
 	return fields
+}
+
+// appendBodyText walks the subtree depth first and appends every text node that does
+// not sit inside a boilerplate subtree. Skipping in place costs one pass and no copy;
+// deleting the same subtrees from a clone of the body would first duplicate the whole
+// node tree, which on a markup-dense page roughly doubles the memory the document
+// occupies while extraction runs.
+//
+// Collecting into one buffer and splitting afterwards is what fuses words across
+// element boundaries that carry no whitespace, so "a<b>c</b>d" is the single token
+// "acd". That is frozen: tokenizing per text node would split those and move the
+// fingerprint of every page containing inline markup mid-word.
+func appendBodyText(text *strings.Builder, n *html.Node) {
+	if n.Type == html.ElementNode {
+		if _, skip := bodyBoilerplateTags[n.Data]; skip {
+			return
+		}
+	}
+	if n.Type == html.TextNode {
+		text.WriteString(n.Data)
+	}
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		appendBodyText(text, child)
+	}
 }

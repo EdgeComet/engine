@@ -733,3 +733,19 @@ hosts:
         render:
           cache:
             ttl: 0s
+
+      # --- BODY TEXT FINGERPRINT TESTS (for content_change_test.go) ---
+      # Every fixture variant is reachable on both prefixes, so the same markup can be
+      # fingerprinted through the render pipeline and through the bypass pipeline.
+      # The bypass rule carries the deeper path and therefore sorts ahead of the render
+      # rule regardless of declaration order.
+      - match: "/content-change/bypass/*"
+        action: "bypass"
+
+      - match: "/content-change/*"
+        action: "render"
+        render:
+          events:
+            wait_for: "networkIdle"
+          cache:
+            ttl: 0s

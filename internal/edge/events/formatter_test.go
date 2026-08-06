@@ -176,7 +176,7 @@ func TestNewTemplateFormatter_AllValidFields(t *testing.T) {
 		"event_type", "dimension", "user_agent", "client_ip", "matched_rule",
 		"status_code", "page_size", "serve_time", "source",
 		"render_service_id", "render_time", "chrome_id",
-		"title", "index_status", "cache_age", "cache_key",
+		"title", "index_status", "page_minhash", "cache_age", "cache_key",
 		"error_type", "error_message", "eg_instance_id",
 		"metrics.final_url", "metrics.total_requests", "metrics.total_bytes",
 		"metrics.same_origin_requests", "metrics.same_origin_bytes",
@@ -241,6 +241,18 @@ func TestFormat_StringWithSpecialCharsEscaped(t *testing.T) {
 	event := &RequestEvent{PageSEO: &PageSEOEvent{Title: "Line1\nLine2\tTabbed\rReturn\\Backslash"}}
 	result := formatter.Format(event)
 	assert.Equal(t, `"Line1\nLine2\tTabbed\rReturn\\Backslash"`, result)
+}
+
+// TestFormat_PageMinHashAbsentBecomesDash covers pages with no fingerprint (too
+// short a body, or no PageSEO at all). The field must stay a real token so that a
+// tab-delimited line keeps its column count.
+func TestFormat_PageMinHashAbsentBecomesDash(t *testing.T) {
+	formatter, err := NewTemplateFormatter("{page_minhash}")
+	require.NoError(t, err)
+
+	assert.Equal(t, "-", formatter.Format(&RequestEvent{}))
+	assert.Equal(t, "-", formatter.Format(&RequestEvent{PageSEO: &PageSEOEvent{}}))
+	assert.Equal(t, "-", formatter.Format(&RequestEvent{PageSEO: &PageSEOEvent{PageMinHash: []uint64{}}}))
 }
 
 func TestFormat_EmptyStringBecomesDash(t *testing.T) {
@@ -489,6 +501,7 @@ func TestFormat_AllTopLevelFields(t *testing.T) {
 		PageSEO: &PageSEOEvent{
 			Title:       "Example Page",
 			IndexStatus: int(types.IndexStatusIndexable),
+			PageMinHash: []uint64{1, 2, 4294967295},
 		},
 		CacheAge:     3600,
 		CacheKey:     "cache:1:1:abc123",
@@ -521,6 +534,7 @@ func TestFormat_AllTopLevelFields(t *testing.T) {
 		{"chrome_id", `"chrome-1"`},
 		{"title", `"Example Page"`},
 		{"index_status", "1"},
+		{"page_minhash", "1,2,4294967295"},
 		{"cache_age", "3600"},
 		{"cache_key", `"cache:1:1:abc123"`},
 		{"error_type", `"none"`},

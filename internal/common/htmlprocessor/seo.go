@@ -37,6 +37,7 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 	words := extractBodyWords(d.doc)
 	if len(words) > 0 {
 		seo.WordCount = len(words)
+		seo.PageMinHash = computePageMinHash(words)
 	}
 
 	seo.Hreflang = extractHreflang(d.doc, effectiveBase)
