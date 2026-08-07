@@ -2,6 +2,7 @@ package recache
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
@@ -54,6 +55,16 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		zap.Int("dimension_id", req.DimensionID))
 
 	if err := rs.ProcessRecache(ctx, req.URL, req.HostID, req.DimensionID, req.Mode); err != nil {
+		if errors.Is(err, ErrRecacheSkipped) {
+			rs.logger.Info("Recache skipped by configuration",
+				zap.String("url", req.URL),
+				zap.Int("host_id", req.HostID),
+				zap.Int("dimension_id", req.DimensionID),
+				zap.Error(err))
+			httputil.JSONSuccess(ctx, err.Error(), fasthttp.StatusOK)
+			return
+		}
+
 		rs.logger.Error("Recache request failed", zap.Error(err))
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusInternalServerError)
 		return

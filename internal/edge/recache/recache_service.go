@@ -32,6 +32,13 @@ const (
 	redisCacheOperationTimeout = 5 * time.Second
 )
 
+// ErrRecacheSkipped marks a recache the configuration declines by design: bypass caching is off
+// for the URL, its TTL is zero, or the response status is one the cache rejects. The outcome is
+// terminal - a retry resolves to the same decision - so the handler answers 200 and logs at info.
+// Reporting it as a failure made the daemon retry to MaxRetries, and every attempt raised an
+// error on both services, which is what drowned Rollbar.
+var ErrRecacheSkipped = errors.New("recache skipped")
+
 // RecacheService handles background cache recaching operations
 type RecacheService struct {
 	configManager    configtypes.EGConfigManager
@@ -364,11 +371,11 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		zap.String("cache_key", renderCtx.CacheKey.String()))
 
 	if !renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
-		return fmt.Errorf("bypass cache disabled, skipping recache")
+		return fmt.Errorf("%w: bypass cache disabled", ErrRecacheSkipped)
 	}
 
 	if renderCtx.ResolvedConfig.Bypass.Cache.TTL == 0 {
-		return fmt.Errorf("bypass cache TTL is 0, skipping recache")
+		return fmt.Errorf("%w: bypass cache TTL is 0", ErrRecacheSkipped)
 	}
 
 	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Host.RenderKey, renderCtx.Logger)
@@ -382,7 +389,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		zap.Int("response_size", len(bypassResp.Body)))
 
 	if canSave, reason := rs.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); !canSave {
-		return fmt.Errorf("bypass cache save skipped: %s", reason)
+		return fmt.Errorf("%w: bypass cache save rejected: %s", ErrRecacheSkipped, reason)
 	}
 
 	// Only HTML responses are content-processed, mirroring the live bypass serve path
