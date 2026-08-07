@@ -23,9 +23,14 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// testEGRegistryKeyPrefix mirrors sharding.registryKeyPrefix. Duplicated here
-// because that const is unexported; GetHealthyEGs scans keys under this prefix.
-const testEGRegistryKeyPrefix = "registry:eg:"
+// testEGRegistryKeyPrefix and testEGRegistryIndexKey mirror
+// sharding.registryKeyPrefix and sharding.registryIndexKey. Duplicated here
+// because those consts are unexported; GetHealthyEGs reads the EG IDs from the
+// index hash and then loads each EG's key under this prefix.
+const (
+	testEGRegistryKeyPrefix = "registry:eg:"
+	testEGRegistryIndexKey  = "registry:eg-index"
+)
 
 // fakeEG is an in-process stand-in for an Edge Gateway's
 // /internal/cache/recache endpoint. Each request records its URL; a request
@@ -101,6 +106,7 @@ func (env *schedulerTestEnv) registerEG(t *testing.T, egID, address string) {
 	raw, err := json.Marshal(info)
 	require.NoError(t, err)
 	require.NoError(t, env.daemon.redis.Set(context.Background(), testEGRegistryKeyPrefix+egID, string(raw), time.Minute))
+	require.NoError(t, env.daemon.redis.HSet(context.Background(), testEGRegistryIndexKey, egID, address))
 }
 
 // registerRS registers a healthy render service so CalculateAvailableCapacity

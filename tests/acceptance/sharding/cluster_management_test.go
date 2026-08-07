@@ -143,6 +143,11 @@ var _ = Describe("Cluster Management", Serial, func() {
 			Expect(err).To(BeNil())
 			Expect(exists).To(Equal(int64(0)), "registry:eg:eg2 should be deleted after graceful shutdown")
 
+			By("Verifying EG2 is removed from the discovery index")
+			indexed, err := testEnv.RedisClient.HExists(ctx, "registry:eg-index", "eg2").Result()
+			Expect(err).To(BeNil())
+			Expect(indexed).To(BeFalse(), "eg2 should be removed from registry:eg-index after graceful shutdown")
+
 			By("Verifying cluster size is now 2")
 			clusterSize, err := testEnv.GetClusterSize()
 			Expect(err).To(BeNil())

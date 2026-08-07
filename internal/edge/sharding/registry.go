@@ -16,6 +16,13 @@ import (
 const (
 	registryKeyPrefix = "registry:eg:"
 
+	// registryIndexKey is a hash of eg_id -> address naming the EGs to look up.
+	// It replaces a KEYS scan as the discovery mechanism; the per-EG keys under
+	// registryKeyPrefix remain the liveness source of truth. The name
+	// deliberately sits outside the registryKeyPrefix namespace so a
+	// KEYS "registry:eg:*" scan from an older build never matches the hash.
+	registryIndexKey = "registry:eg-index"
+
 	defaultRegistryTTL       = 3 * time.Second
 	defaultHeartbeatInterval = 1 * time.Second
 )
@@ -111,6 +118,14 @@ func (r *RedisRegistry) Deregister(ctx context.Context, egID string) error {
 		return fmt.Errorf("failed to deregister EG from Redis: %w", err)
 	}
 
+	// A leftover index field is harmless: readers prune it once they see the
+	// per-EG key is gone, so a failure here must not fail deregistration.
+	if err := r.redis.HDel(ctx, registryIndexKey, egID); err != nil {
+		r.logger.Warn("Failed to remove EG from registry index",
+			zap.String("eg_id", egID),
+			zap.Error(err))
+	}
+
 	// Clear stored info
 	r.egID = ""
 	r.address = ""
@@ -150,30 +165,66 @@ func (r *RedisRegistry) Heartbeat(ctx context.Context) error {
 		return fmt.Errorf("failed to update heartbeat in Redis: %w", err)
 	}
 
+	// Idempotent, and the reason a lazy prune is safe: an EG pruned while its
+	// key was briefly missing re-appears in the index within one heartbeat
+	if err := r.redis.HSet(ctx, registryIndexKey, r.egID, address); err != nil {
+		return fmt.Errorf("failed to update registry index: %w", err)
+	}
+
 	return nil
+}
+
+// pruneIndexEntry removes an EG whose registry key is definitively gone from the
+// index. The delete re-checks the key atomically: the caller's Get and this call
+// are separate round trips, and an EG that heartbeats in between is live again,
+// so an unconditional HDEL would hide it until its next heartbeat.
+// Failure is non-fatal: the next reader retries the prune.
+func (r *RedisRegistry) pruneIndexEntry(ctx context.Context, egID string) {
+	pruned, err := r.redis.HDelIfKeyAbsent(ctx, registryIndexKey, egID, registryKeyPrefix+egID)
+	if err != nil {
+		r.logger.Warn("Failed to prune stale EG from registry index",
+			zap.String("eg_id", egID),
+			zap.Error(err))
+		return
+	}
+
+	if pruned {
+		r.logger.Debug("Pruned stale EG from registry index", zap.String("eg_id", egID))
+	}
 }
 
 // GetHealthyEGs returns a list of all healthy EG instances
 // EGs are considered healthy if their registry key exists (TTL has not expired)
 func (r *RedisRegistry) GetHealthyEGs(ctx context.Context) ([]EGInfo, error) {
-	pattern := registryKeyPrefix + "*"
-	keys, err := r.redis.Keys(ctx, pattern)
+	index, err := r.redis.HGetAll(ctx, registryIndexKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query registry keys: %w", err)
+		return nil, fmt.Errorf("failed to query registry index: %w", err)
 	}
 
 	var healthyEGs []EGInfo
-	for _, key := range keys {
+	for egID := range index {
+		key := registryKeyPrefix + egID
+
 		data, err := r.redis.Get(ctx, key)
 		if err != nil {
+			// Transient Redis failure: keep the index field, the EG may be alive
 			r.logger.Warn("Failed to get registry data for key",
 				zap.String("key", key),
 				zap.Error(err))
 			continue
 		}
 
+		// Get maps a missing key to an empty value, so this is a definitive
+		// absence: the EG expired or died without deregistering
+		if data == "" {
+			r.pruneIndexEntry(ctx, egID)
+			continue
+		}
+
 		var info EGInfo
 		if err := json.Unmarshal([]byte(data), &info); err != nil {
+			// The key exists, so the EG is alive with corrupt or half-written
+			// data. Its next heartbeat rewrites the key, so keep the index field
 			r.logger.Warn("Failed to unmarshal registry data",
 				zap.String("key", key),
 				zap.Error(err))
@@ -219,20 +270,28 @@ func (r *RedisRegistry) GetEGAddress(ctx context.Context, egID string) (string, 
 // This includes all EGs with active registry keys (regardless of health/sharding status)
 // Used for detecting cluster presence when starting with sharding disabled
 func (r *RedisRegistry) GetClusterMembers(ctx context.Context) ([]string, error) {
-	pattern := registryKeyPrefix + "*"
-	keys, err := r.redis.Keys(ctx, pattern)
+	index, err := r.redis.HGetAll(ctx, registryIndexKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query registry keys: %w", err)
+		return nil, fmt.Errorf("failed to query registry index: %w", err)
 	}
 
-	memberIDs := make([]string, 0, len(keys))
-	for _, key := range keys {
-		// Extract eg_id from "registry:eg:eg1" -> "eg1"
-		// Key format: "registry:eg:<eg_id>"
-		if len(key) > len(registryKeyPrefix) {
-			egID := key[len(registryKeyPrefix):]
-			memberIDs = append(memberIDs, egID)
+	memberIDs := make([]string, 0, len(index))
+	for egID := range index {
+		exists, err := r.redis.Exists(ctx, registryKeyPrefix+egID)
+		if err != nil {
+			// Transient Redis failure: keep the index field, the EG may be alive
+			r.logger.Warn("Failed to check registry key for indexed EG",
+				zap.String("eg_id", egID),
+				zap.Error(err))
+			continue
 		}
+
+		if !exists {
+			r.pruneIndexEntry(ctx, egID)
+			continue
+		}
+
+		memberIDs = append(memberIDs, egID)
 	}
 
 	// Sort alphabetically for deterministic ordering

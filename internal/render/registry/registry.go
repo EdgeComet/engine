@@ -13,8 +13,13 @@ import (
 )
 
 const (
-	serviceKeyPrefix  = "service:render:"
-	serviceListKey    = "services:render:list"
+	serviceKeyPrefix = "service:render:"
+
+	// serviceListKey is a hash of service_id -> URL listing every registered
+	// render service. It replaces a KEYS scan as the discovery mechanism; the
+	// per-service keys under serviceKeyPrefix remain the liveness source of truth
+	serviceListKey = "services:render:list"
+
 	RegistryTTL       = 3 * time.Second // TTL for service registration (allows 2 missed heartbeats)
 	HeartbeatInterval = 1 * time.Second // Heartbeat update frequency
 )
@@ -133,7 +138,7 @@ func (sr *ServiceRegistry) UnregisterService(ctx context.Context, serviceID stri
 		return fmt.Errorf("failed to delete service: %w", err)
 	}
 
-	if err := sr.redis.HSet(ctx, serviceListKey, serviceID, ""); err != nil {
+	if err := sr.redis.HDel(ctx, serviceListKey, serviceID); err != nil {
 		sr.logger.Error("Failed to remove service from list",
 			zap.String("service_id", serviceID),
 			zap.Error(err))
@@ -171,33 +176,69 @@ func (sr *ServiceRegistry) GetService(ctx context.Context, serviceID string) (*S
 	return &info, nil
 }
 
-func (sr *ServiceRegistry) ListServices(ctx context.Context) ([]*ServiceInfo, error) {
-	keys, err := sr.redis.Keys(ctx, serviceKeyPrefix+"*")
+// pruneIndexEntry removes a service from the index, either because its registry
+// key is definitively gone or because the field carries the legacy soft-delete
+// marker. The delete re-checks the key atomically: the caller's Get and this call
+// are separate round trips, and a service that heartbeats in between is live
+// again, so an unconditional HDEL would hide it until its next heartbeat. That
+// same check is what keeps a live service with a blank URL from being dropped.
+// Failure is non-fatal: the next reader retries the prune.
+func (sr *ServiceRegistry) pruneIndexEntry(ctx context.Context, serviceID string) {
+	pruned, err := sr.redis.HDelIfKeyAbsent(ctx, serviceListKey, serviceID, serviceKeyPrefix+serviceID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list service keys: %w", err)
+		sr.logger.Warn("Failed to prune stale service from index",
+			zap.String("service_id", serviceID),
+			zap.Error(err))
+		return
 	}
 
-	if len(keys) == 0 {
+	if pruned {
+		sr.logger.Debug("Pruned stale service from index", zap.String("service_id", serviceID))
+	}
+}
+
+func (sr *ServiceRegistry) ListServices(ctx context.Context) ([]*ServiceInfo, error) {
+	index, err := sr.redis.HGetAll(ctx, serviceListKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list services from index: %w", err)
+	}
+
+	if len(index) == 0 {
 		return []*ServiceInfo{}, nil
 	}
 
-	services := make([]*ServiceInfo, 0, len(keys))
+	services := make([]*ServiceInfo, 0, len(index))
 
-	for _, key := range keys {
+	for serviceID, url := range index {
+		// Older builds soft-deleted a service by blanking its URL instead of
+		// removing the field
+		if url == "" {
+			sr.pruneIndexEntry(ctx, serviceID)
+			continue
+		}
+
+		key := serviceKeyPrefix + serviceID
+
 		data, err := sr.redis.Get(ctx, key)
 		if err != nil {
+			// Transient Redis failure: keep the index field, the service may be alive
 			sr.logger.Warn("Failed to get service data",
 				zap.String("key", key),
 				zap.Error(err))
 			continue
 		}
 
+		// Get maps a missing key to an empty value, so this is a definitive
+		// absence: the service expired or died without unregistering
 		if data == "" {
+			sr.pruneIndexEntry(ctx, serviceID)
 			continue
 		}
 
 		var info ServiceInfo
 		if err := json.Unmarshal([]byte(data), &info); err != nil {
+			// The key exists, so the service is alive with corrupt or half-written
+			// data. Its next heartbeat rewrites the key, so keep the index field
 			sr.logger.Warn("Failed to unmarshal service info",
 				zap.String("key", key),
 				zap.Error(err))
@@ -232,52 +273,4 @@ func (sr *ServiceRegistry) ListHealthyServices(ctx context.Context) ([]*ServiceI
 	}
 
 	return healthyServices, nil
-}
-
-func (sr *ServiceRegistry) Heartbeat(ctx context.Context, serviceID string, load int) error {
-	if serviceID == "" {
-		return fmt.Errorf("service ID is required")
-	}
-
-	info, err := sr.GetService(ctx, serviceID)
-	if err != nil {
-		return fmt.Errorf("failed to get current service info: %w", err)
-	}
-
-	if info == nil {
-		return fmt.Errorf("service not found: %s", serviceID)
-	}
-
-	info.Load = load
-	info.LastSeen = time.Now().UTC()
-
-	return sr.RegisterService(ctx, info)
-}
-
-func (sr *ServiceRegistry) CleanupStaleServices(ctx context.Context) error {
-	services, err := sr.ListServices(ctx)
-	if err != nil {
-		return err
-	}
-
-	staleThreshold := time.Now().UTC().Add(-1 * RegistryTTL)
-	staleCount := 0
-
-	for _, service := range services {
-		if service.LastSeen.Before(staleThreshold) {
-			if err := sr.UnregisterService(ctx, service.ID); err != nil {
-				sr.logger.Warn("Failed to cleanup stale service",
-					zap.String("service_id", service.ID),
-					zap.Error(err))
-			} else {
-				staleCount++
-			}
-		}
-	}
-
-	if staleCount > 0 {
-		sr.logger.Info("Cleaned up stale services", zap.Int("count", staleCount))
-	}
-
-	return nil
 }

@@ -220,7 +220,7 @@ var _ = Describe("Per-Host Concurrency Limiter", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			Expect(testEnv.RedisClient.Del(ctx, "service:render:rs-1").Err()).To(Succeed())
-			Expect(testEnv.RedisClient.SRem(ctx, "services:render:list", "rs-1").Err()).To(Succeed())
+			Expect(testEnv.RedisClient.HDel(ctx, "services:render:list", "rs-1").Err()).To(Succeed())
 
 			Eventually(func() int {
 				return testEnv.GetRSCapacityStatus().TotalFreeTabs

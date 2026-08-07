@@ -1089,7 +1089,10 @@ func (env *RecacheTestEnvironment) AddMockRSToRegistry(serviceID string, capacit
 
 	// Registry key format: service:render:{service_id}
 	serviceKey := fmt.Sprintf("service:render:%s", serviceID)
+	// ListServices discovers services through this hash, keyed service_id -> URL.
+	// An empty URL is the legacy soft-delete marker and would hide the service
 	serviceListKey := "services:render:list"
+	serviceURL := "http://127.0.0.1:8080"
 
 	// Create ServiceInfo structure
 	serviceInfo := map[string]interface{}{
@@ -1109,7 +1112,7 @@ func (env *RecacheTestEnvironment) AddMockRSToRegistry(serviceID string, capacit
 	// Set service info and add to service list
 	pipe := env.RedisClient.Pipeline()
 	pipe.Set(ctx, serviceKey, string(serviceJSON), 60*time.Second)
-	pipe.SAdd(ctx, serviceListKey, serviceID)
+	pipe.HSet(ctx, serviceListKey, serviceID, serviceURL)
 	_, err = pipe.Exec(ctx)
 
 	return err
@@ -1123,6 +1126,8 @@ func (env *RecacheTestEnvironment) AddMockEGToRegistry(address string) error {
 	// EG registry key format: registry:eg:{eg_id}
 	egID := "test-eg-1"
 	registryKey := fmt.Sprintf("registry:eg:%s", egID)
+	// GetHealthyEGs discovers EGs through this hash, keyed eg_id -> address
+	registryIndexKey := "registry:eg-index"
 
 	// Create EGInfo structure
 	egInfo := map[string]interface{}{
@@ -1137,8 +1142,12 @@ func (env *RecacheTestEnvironment) AddMockEGToRegistry(address string) error {
 		return err
 	}
 
-	// Set EG info with TTL
-	err = env.RedisClient.Set(ctx, registryKey, string(egJSON), 60*time.Second).Err()
+	// Set EG info with TTL and publish it to the discovery index
+	pipe := env.RedisClient.Pipeline()
+	pipe.Set(ctx, registryKey, string(egJSON), 60*time.Second)
+	pipe.HSet(ctx, registryIndexKey, egID, address)
+	_, err = pipe.Exec(ctx)
+
 	return err
 }
 

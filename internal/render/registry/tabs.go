@@ -25,7 +25,7 @@ func NewTabManager(redisClient *redis.Client, serviceID string, poolSize int, lo
 	return &TabManager{
 		redis:     redisClient,
 		serviceID: serviceID,
-		tabsKey:   fmt.Sprintf("tabs:%s", serviceID),
+		tabsKey:   tabsKeyPrefix + serviceID,
 		poolSize:  poolSize,
 		logger:    logger,
 	}
@@ -35,7 +35,7 @@ func NewTabManager(redisClient *redis.Client, serviceID string, poolSize int, lo
 func (tm *TabManager) RegisterTabs(ctx context.Context) error {
 	// Create all tabs as available (empty string)
 	for i := 0; i < tm.poolSize; i++ {
-		if err := tm.redis.HSet(ctx, tm.tabsKey, strconv.Itoa(i), ""); err != nil {
+		if err := tm.redis.HSet(ctx, tm.tabsKey, strconv.Itoa(i), availableTab); err != nil {
 			return fmt.Errorf("failed to register tab %d: %w", i, err)
 		}
 	}
@@ -77,7 +77,7 @@ func (tm *TabManager) SyncTabs(ctx context.Context, acquiredTabs map[int]string,
 
 	// Set all tabs: acquired with request ID, others as available ("")
 	for i := 0; i < poolSize; i++ {
-		value := ""
+		value := availableTab
 		if reqID, exists := acquiredTabs[i]; exists {
 			value = reqID
 		}

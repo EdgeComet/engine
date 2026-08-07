@@ -3,9 +3,9 @@ package recache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	neturl "net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +23,7 @@ import (
 	"github.com/edgecomet/engine/internal/edge/events"
 	"github.com/edgecomet/engine/internal/edge/orchestrator"
 	"github.com/edgecomet/engine/internal/edge/rsclient"
+	"github.com/edgecomet/engine/internal/render/registry"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -31,121 +32,12 @@ const (
 	redisCacheOperationTimeout = 5 * time.Second
 )
 
-// selectAndReserveScript atomically selects a render service with available capacity and reserves a tab
-const selectAndReserveScript = `
--- Atomically selects a healthy render service and reserves an available tab
--- ARGV[1] = request_id
--- ARGV[2] = strategy ("least_loaded", "most_available", or "round_robin")
--- ARGV[3] = reservation TTL (seconds, typically 2)
-
-local request_id = ARGV[1]
-local strategy = ARGV[2]
-local reservation_ttl = tonumber(ARGV[3])
-
--- 1. Find all render services
-local service_keys = redis.call('KEYS', 'service:render:*')
-if #service_keys == 0 then
-    return {false, 'no_services'}
-end
-
--- 2. Filter healthy services and collect tab availability info
-local candidates = {}
-for _, service_key in ipairs(service_keys) do
-    local service_data = redis.call('GET', service_key)
-    if service_data then
-        local service = cjson.decode(service_data)
-
-        -- Only consider services with available capacity (registry already handles staleness via TTL)
-        -- Check: capacity exists, is positive, and has available slots (load < capacity)
-        if service.capacity and service.capacity > 0 and (service.load or 0) < service.capacity then
-            local service_id = service.id
-            local tabs_key = 'tabs:' .. service_id
-
-            if redis.call('EXISTS', tabs_key) == 1 then
-                local tabs = redis.call('HGETALL', tabs_key)
-                local available_count = 0
-                local first_available = nil
-
-                for i = 1, #tabs, 2 do
-                    local tab_id = tonumber(tabs[i])
-                    local tab_value = tabs[i + 1]
-
-                    if tab_value == '' then
-                        available_count = available_count + 1
-                        if first_available == nil then
-                            first_available = tab_id
-                        end
-                    end
-                end
-
-                if available_count > 0 then
-                    -- Calculate load percentage with nil check
-                    local load = service.load or 0
-                    local load_pct = load / service.capacity
-
-                    table.insert(candidates, {
-                        service_id = service_id,
-                        service = service,
-                        tabs_key = tabs_key,
-                        available_count = available_count,
-                        first_available = first_available,
-                        load_pct = load_pct
-                    })
-                end
-            end
-        end
-    end
-end
-
-if #candidates == 0 then
-    return {false, 'no_capacity'}
-end
-
--- 3. Select best service based on strategy
-local selected = candidates[1]
-
-if strategy == 'least_loaded' then
-    for _, candidate in ipairs(candidates) do
-        if candidate.load_pct < selected.load_pct then
-            selected = candidate
-        end
-    end
-elseif strategy == 'most_available' then
-    for _, candidate in ipairs(candidates) do
-        if candidate.available_count > selected.available_count then
-            selected = candidate
-        end
-    end
-end
-
--- 4. Reserve the first available tab
-local tab_id = selected.first_available
-redis.call('HSET', selected.tabs_key, tostring(tab_id), request_id)
-redis.call('EXPIRE', selected.tabs_key, reservation_ttl)
-
--- 5. Return result: {service_id, tab_id, address, port}
-return {
-    selected.service_id,
-    tostring(tab_id),
-    selected.service.address,
-    tostring(selected.service.port)
-}
-`
-
-// TabReservation contains service and tab info
-type TabReservation struct {
-	ServiceID string
-	TabID     int
-	Address   string
-	Port      int
-}
-
 // RecacheService handles background cache recaching operations
 type RecacheService struct {
 	configManager    configtypes.EGConfigManager
 	cacheCoord       *orchestrator.CacheCoordinator
 	bypassSvc        *bypass.BypassService
-	redis            *redis.Client
+	tabSelector      *registry.TabSelector
 	rsClient         *rsclient.RSClient
 	metadataStore    *cache.MetadataStore
 	eventEmitter     events.EventEmitter
@@ -170,7 +62,7 @@ func NewRecacheService(
 		configManager: configManager,
 		cacheCoord:    cacheCoord,
 		bypassSvc:     bypassSvc,
-		redis:         redisClient,
+		tabSelector:   registry.NewTabSelector(redisClient, logger),
 		rsClient:      rsClient,
 		metadataStore: metadataStore,
 		eventEmitter:  eventEmitter,
@@ -633,83 +525,22 @@ func (rs *RecacheService) buildRenderResult(renderResp *types.RenderResponse) *o
 }
 
 // selectServiceAndReserveTab atomically selects a healthy render service and reserves an available tab
-func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, requestID string) (*TabReservation, error) {
+func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, requestID string) (*registry.TabReservation, error) {
 	redisCtx, cancel := context.WithTimeout(context.Background(), redisTabOperationTimeout)
 	defer cancel()
 
 	// Get selection strategy from config (default applied in config.applyDefaults())
 	strategy := rs.configManager.GetConfig().Registry.SelectionStrategy
 
-	// Execute Lua script to atomically select service and reserve tab
-	result, err := rs.redis.Eval(
-		redisCtx,
-		selectAndReserveScript,
-		[]string{},
-		requestID,
-		strategy, // selection strategy from config
-		2,
-	)
-
+	reservation, err := rs.tabSelector.SelectAndReserve(redisCtx, requestID, strategy)
 	if err != nil {
-		rs.logger.Error("Lua script execution failed", zap.Error(err))
-		return nil, fmt.Errorf("failed to execute service selection script: %w", err)
-	}
-
-	// Parse result
-	resultSlice, ok := result.([]interface{})
-	if !ok || len(resultSlice) < 2 {
-		rs.logger.Error("Invalid script result format")
-		return nil, fmt.Errorf("invalid script result")
-	}
-
-	// Check for error codes
-	if resultSlice[0] == nil || resultSlice[0] == false {
-		reason := "unknown"
-		if len(resultSlice) > 1 {
-			if r, ok := resultSlice[1].(string); ok {
-				reason = r
-			}
+		// Saturation and an empty registry are expected states, not faults
+		if errors.Is(err, registry.ErrNoServices) || errors.Is(err, registry.ErrNoCapacity) {
+			rs.logger.Warn("Service selection failed", zap.Error(err))
+		} else {
+			rs.logger.Error("Service selection failed", zap.Error(err))
 		}
-
-		rs.logger.Warn("Service selection failed", zap.String("reason", reason))
-
-		if reason == "no_services" {
-			return nil, fmt.Errorf("no healthy services available")
-		}
-		if reason == "no_capacity" {
-			return nil, fmt.Errorf("all services at capacity")
-		}
-		return nil, fmt.Errorf("service selection failed: %s", reason)
-	}
-
-	// Parse successful result
-	if len(resultSlice) < 4 {
-		rs.logger.Error("Incomplete result from script", zap.Int("length", len(resultSlice)))
-		return nil, fmt.Errorf("incomplete script result")
-	}
-
-	serviceID, _ := resultSlice[0].(string)
-	tabIDStr, _ := resultSlice[1].(string)
-	address, _ := resultSlice[2].(string)
-	portStr, _ := resultSlice[3].(string)
-
-	tabID, err := strconv.Atoi(tabIDStr)
-	if err != nil {
-		rs.logger.Error("Invalid tab_id", zap.String("tab_id_str", tabIDStr), zap.Error(err))
-		return nil, fmt.Errorf("invalid tab_id: %w", err)
-	}
-
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		rs.logger.Error("Invalid port", zap.String("port_str", portStr), zap.Error(err))
-		return nil, fmt.Errorf("invalid port: %w", err)
-	}
-
-	reservation := &TabReservation{
-		ServiceID: serviceID,
-		TabID:     tabID,
-		Address:   address,
-		Port:      port,
+		return nil, err
 	}
 
 	rs.logger.Debug("Selected service and reserved tab",
@@ -722,14 +553,12 @@ func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, reques
 }
 
 // releaseTabReservation clears the reserved tab in Redis
-func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation *TabReservation) {
+func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation *registry.TabReservation) {
 	if reservation == nil {
 		return
 	}
 
-	tabsKey := fmt.Sprintf("tabs:%s", reservation.ServiceID)
-	err := rs.redis.HSet(ctx, tabsKey, fmt.Sprintf("%d", reservation.TabID), "")
-	if err != nil {
+	if err := rs.tabSelector.Release(ctx, reservation); err != nil {
 		rs.logger.Error("Failed to release tab reservation",
 			zap.String("service_id", reservation.ServiceID),
 			zap.Int("tab_id", reservation.TabID),

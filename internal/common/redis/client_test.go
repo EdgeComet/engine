@@ -173,26 +173,6 @@ func TestClientBasicOperations(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("keys pattern matching", func(t *testing.T) {
-		testKeys := []string{"test:pattern:1", "test:pattern:2", "test:other:1"}
-
-		for _, key := range testKeys {
-			err := client.Set(ctx, key, "value", time.Minute)
-			require.NoError(t, err)
-		}
-
-		keys, err := client.Keys(ctx, "test:pattern:*")
-		require.NoError(t, err)
-		assert.Len(t, keys, 2)
-
-		keys, err = client.Keys(ctx, "test:*")
-		require.NoError(t, err)
-		assert.Len(t, keys, 3)
-
-		err = client.Del(ctx, testKeys...)
-		assert.NoError(t, err)
-	})
-
 	t.Run("delete multiple keys", func(t *testing.T) {
 		keys := []string{"test:del:1", "test:del:2", "test:del:3"}
 

@@ -170,6 +170,34 @@ func (c *Client) HDel(ctx context.Context, key string, fields ...string) error {
 	return nil
 }
 
+// hdelIfKeyAbsentScript removes a hash field only while guardKey is still gone,
+// so the check and the delete cannot interleave with a concurrent re-register
+const hdelIfKeyAbsentScript = `
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return 0
+end
+return redis.call('HDEL', KEYS[1], ARGV[1])
+`
+
+// HDelIfKeyAbsent atomically removes field from hashKey, but only if guardKey does
+// not exist. Discovery indexes are pruned this way: a separate EXISTS-then-HDEL
+// would delete the field of an instance that re-registered in between, hiding a
+// live member until its next heartbeat. Returns true if the field was removed.
+func (c *Client) HDelIfKeyAbsent(ctx context.Context, hashKey, field, guardKey string) (bool, error) {
+	result, err := c.rdb.Eval(ctx, hdelIfKeyAbsentScript, []string{hashKey, guardKey}, field).Result()
+	if err != nil {
+		c.logger.Error("Redis conditional HDEL failed",
+			zap.String("hash_key", hashKey),
+			zap.String("field", field),
+			zap.String("guard_key", guardKey),
+			zap.Error(err))
+		return false, fmt.Errorf("redis conditional hdel failed: %w", err)
+	}
+
+	deleted, _ := result.(int64)
+	return deleted > 0, nil
+}
+
 func (c *Client) Exists(ctx context.Context, key string) (bool, error) {
 	result, err := c.rdb.Exists(ctx, key).Result()
 	if err != nil {
@@ -230,17 +258,6 @@ func (c *Client) HGetAll(ctx context.Context, key string) (map[string]string, er
 			zap.String("key", key),
 			zap.Error(err))
 		return nil, fmt.Errorf("redis hgetall failed: %w", err)
-	}
-	return result, nil
-}
-
-func (c *Client) Keys(ctx context.Context, pattern string) ([]string, error) {
-	result, err := c.rdb.Keys(ctx, pattern).Result()
-	if err != nil {
-		c.logger.Error("Redis KEYS failed",
-			zap.String("pattern", pattern),
-			zap.Error(err))
-		return nil, fmt.Errorf("redis keys failed: %w", err)
 	}
 	return result, nil
 }

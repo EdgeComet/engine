@@ -206,7 +206,11 @@ func TestServiceRegistry(t *testing.T) {
 		}
 		data, err := json.Marshal(staleService)
 		require.NoError(t, err)
-		err = client.Set(ctx, "service:render:unhealthy-1", data, 0)
+		err = client.Set(ctx, serviceKeyPrefix+staleService.ID, data, 0)
+		require.NoError(t, err)
+		// ListServices discovers services through the index, so a hand-written
+		// registry key needs its index field too
+		err = client.HSet(ctx, serviceListKey, staleService.ID, staleService.URL())
 		require.NoError(t, err)
 
 		healthy, err := registry.ListHealthyServices(ctx)
@@ -218,79 +222,6 @@ func TestServiceRegistry(t *testing.T) {
 		}
 	})
 
-	t.Run("heartbeat", func(t *testing.T) {
-		defer cleanup()
-
-		info := &ServiceInfo{
-			ID:       "heartbeat-test",
-			Address:  "192.168.1.100",
-			Port:     8080,
-			Capacity: 100,
-			Load:     10,
-		}
-
-		err := registry.RegisterService(ctx, info)
-		require.NoError(t, err)
-
-		err = registry.Heartbeat(ctx, info.ID, 50)
-		require.NoError(t, err)
-
-		updated, err := registry.GetService(ctx, info.ID)
-		require.NoError(t, err)
-		require.NotNil(t, updated)
-
-		assert.Equal(t, 50, updated.Load)
-		assert.WithinDuration(t, time.Now(), updated.LastSeen, time.Second)
-	})
-
-	t.Run("heartbeat non-existent service", func(t *testing.T) {
-		err := registry.Heartbeat(ctx, "non-existent", 0)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "service not found")
-	})
-}
-
-func TestCleanupStaleServices(t *testing.T) {
-	client := setupTestRedisClient(t)
-	if client == nil {
-		t.Skip("Redis not available for testing")
-		return
-	}
-	defer client.Close()
-
-	log, err := logger.NewDefaultLogger()
-	require.NoError(t, err)
-	registry := NewServiceRegistry(client, log.Logger)
-	ctx := context.Background()
-
-	cleanup := func() {
-		services, _ := registry.ListServices(ctx)
-		for _, service := range services {
-			registry.UnregisterService(ctx, service.ID)
-		}
-	}
-	defer cleanup()
-
-	info := &ServiceInfo{
-		ID:       "stale-service",
-		Address:  "192.168.1.100",
-		Port:     8080,
-		LastSeen: time.Now().Add(-5 * time.Minute),
-	}
-
-	data, err := json.Marshal(info)
-	require.NoError(t, err)
-
-	serviceKey := "service:render:" + info.ID
-	err = client.Set(ctx, serviceKey, data, 5*time.Minute)
-	require.NoError(t, err)
-
-	err = registry.CleanupStaleServices(ctx)
-	assert.NoError(t, err)
-
-	service, err := registry.GetService(ctx, info.ID)
-	assert.NoError(t, err)
-	assert.Nil(t, service)
 }
 
 func setupTestRedisClient(t *testing.T) *redis.Client {
