@@ -117,6 +117,7 @@ func (h *HARRenderHandler) handleHARRender(ctx *fasthttp.RequestCtx) {
 		ViewportHeight: dimConfig.Height,
 		UserAgent:      dimConfig.RenderUA,
 		Timeout:        timeout,
+		RenderKey:      host.RenderKey,
 	}
 
 	h.logger.Debug("Sending render request",

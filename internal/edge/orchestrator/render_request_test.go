@@ -29,7 +29,7 @@ func TestBuildRenderRequest(t *testing.T) {
 		RenderUA: "TestBot/1.0",
 	}
 
-	req := BuildRenderRequest("https://example.com/page", "req-123", 5, resolved, dimension)
+	req := BuildRenderRequest("https://example.com/page", "req-123", "render-key-123", 5, resolved, dimension)
 
 	assert.Equal(t, "https://example.com/page", req.URL)
 	assert.Equal(t, "req-123", req.RequestID)
@@ -44,6 +44,7 @@ func TestBuildRenderRequest(t *testing.T) {
 	assert.Equal(t, []string{"Image", "Font"}, req.BlockedResourceTypes)
 	assert.False(t, req.IncludeHAR)
 	assert.Nil(t, req.Headers)
+	assert.Equal(t, "render-key-123", req.RenderKey)
 }
 
 func TestBuildRenderRequest_NilAdditionalWait(t *testing.T) {
@@ -60,8 +61,9 @@ func TestBuildRenderRequest_NilAdditionalWait(t *testing.T) {
 		RenderUA: "MobileBot/1.0",
 	}
 
-	req := BuildRenderRequest("https://example.com/m", "req-456", 2, resolved, dimension)
+	req := BuildRenderRequest("https://example.com/m", "req-456", "", 2, resolved, dimension)
 
+	assert.Empty(t, req.RenderKey)
 	assert.Equal(t, time.Duration(0), req.ExtraWait)
 	assert.Equal(t, "load", req.WaitFor)
 	assert.Equal(t, 15*time.Second, req.Timeout)

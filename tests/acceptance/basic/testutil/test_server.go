@@ -134,23 +134,37 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>`
 
-// TestServer manages a local HTTP server for serving test fixtures
+// TestServer manages a local HTTP server for serving test fixtures.
+// It also runs a second origin on thirdPartyPort, which stands in for a domain the
+// rendered page merely references (CDN, analytics) and is never an EdgeComet host.
 type TestServer struct {
-	server      *http.Server
-	port        int
-	baseURL     string
-	shutdown    chan struct{}
-	redisClient *redis.Client
+	server             *http.Server
+	port               int
+	baseURL            string
+	shutdown           chan struct{}
+	thirdPartyServer   *http.Server
+	thirdPartyPort     int
+	thirdPartyBaseURL  string
+	thirdPartyShutdown chan struct{}
+	redisClient        *redis.Client
 }
 
 // NewTestServer creates a new test server instance
-func NewTestServer(port int, redisClient *redis.Client) *TestServer {
+func NewTestServer(port, thirdPartyPort int, redisClient *redis.Client) *TestServer {
 	return &TestServer{
-		port:        port,
-		baseURL:     fmt.Sprintf("http://localhost:%d", port),
-		shutdown:    make(chan struct{}),
-		redisClient: redisClient,
+		port:               port,
+		baseURL:            fmt.Sprintf("http://localhost:%d", port),
+		shutdown:           make(chan struct{}),
+		thirdPartyPort:     thirdPartyPort,
+		thirdPartyBaseURL:  fmt.Sprintf("http://%s:%d", thirdPartyHost, thirdPartyPort),
+		thirdPartyShutdown: make(chan struct{}),
+		redisClient:        redisClient,
 	}
+}
+
+// ThirdPartyBaseURL returns the base URL of the third-party origin.
+func (ts *TestServer) ThirdPartyBaseURL() string {
+	return ts.thirdPartyBaseURL
 }
 
 // Start starts the test server
@@ -1131,6 +1145,8 @@ startxref
 		fileHandler.ServeHTTP(w, r)
 	}))
 
+	registerRenderKeyRoutes(mux, ts.thirdPartyBaseURL)
+
 	ts.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ts.port),
 		Handler: mux,
@@ -1144,8 +1160,23 @@ startxref
 		close(ts.shutdown)
 	}()
 
-	// Wait for server to start
-	return ts.waitForReady(30 * time.Second)
+	ts.thirdPartyServer = &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", thirdPartyHost, ts.thirdPartyPort),
+		Handler: newThirdPartyMux(),
+	}
+
+	go func() {
+		if err := ts.thirdPartyServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Third-party test server failed to start: %v\n", err)
+		}
+		close(ts.thirdPartyShutdown)
+	}()
+
+	// Wait for both origins to start
+	if err := ts.waitForReady(30 * time.Second); err != nil {
+		return err
+	}
+	return waitForHealth(ts.thirdPartyBaseURL, 30*time.Second)
 }
 
 // loadContentChangeParagraphs reads one committed corpus file, one paragraph per line.
@@ -1230,6 +1261,18 @@ func (ts *TestServer) Stop() error {
 		fmt.Println("Warning: Test server shutdown timed out")
 	}
 
+	if ts.thirdPartyServer != nil {
+		if tpErr := ts.thirdPartyServer.Shutdown(ctx); tpErr != nil && err == nil {
+			err = tpErr
+		}
+
+		select {
+		case <-ts.thirdPartyShutdown:
+		case <-time.After(10 * time.Second):
+			fmt.Println("Warning: Third-party test server shutdown timed out")
+		}
+	}
+
 	return err
 }
 
@@ -1240,11 +1283,16 @@ func (ts *TestServer) BaseURL() string {
 
 // waitForReady waits for the server to be ready to accept connections
 func (ts *TestServer) waitForReady(timeout time.Duration) error {
+	return waitForHealth(ts.baseURL, timeout)
+}
+
+// waitForHealth polls an origin's health endpoint until it answers or the timeout expires.
+func waitForHealth(baseURL string, timeout time.Duration) error {
 	client := &http.Client{Timeout: 2 * time.Second}
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(ts.baseURL + "/health")
+		resp, err := client.Get(baseURL + "/health")
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -1255,7 +1303,7 @@ func (ts *TestServer) waitForReady(timeout time.Duration) error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return fmt.Errorf("test server did not start within %v", timeout)
+	return fmt.Errorf("test server %s did not start within %v", baseURL, timeout)
 }
 
 // IsRunning checks if the server is currently running

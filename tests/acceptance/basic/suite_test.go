@@ -159,7 +159,7 @@ func (te *TestEnvironment) StartServices() error {
 	By("Starting local test pages server")
 
 	// Start local test pages server using port from config
-	te.TestServer = testutil.NewTestServer(te.Config.TestServer.Port, te.RedisClient)
+	te.TestServer = testutil.NewTestServer(te.Config.TestServer.Port, te.Config.TestServer.ThirdPartyPort, te.RedisClient)
 	if err := te.TestServer.Start(); err != nil {
 		return fmt.Errorf("failed to start test pages server: %v", err)
 	}

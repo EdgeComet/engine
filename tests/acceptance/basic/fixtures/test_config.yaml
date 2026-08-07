@@ -6,6 +6,9 @@
 test_server:
   port: 9081
   address: "localhost:9081"
+  # Second origin on a different host:port, used as the third-party origin for
+  # subresource tests. Never configured as an EdgeComet host.
+  third_party_port: 9082
 
 # Edge Gateway test configuration
 edge_gateway:

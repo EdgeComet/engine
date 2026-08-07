@@ -180,13 +180,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Dimensions[dimensionName]
-	renderReq := orchestrator.BuildRenderRequest(url, requestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
-	if host.RenderKey != "" {
-		if renderReq.Headers == nil {
-			renderReq.Headers = make(map[string][]string)
-		}
-		renderReq.Headers[types.HeaderRenderKey] = []string{host.RenderKey}
-	}
+	renderReq := orchestrator.BuildRenderRequest(url, requestID, host.RenderKey, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)

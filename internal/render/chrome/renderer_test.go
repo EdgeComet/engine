@@ -56,3 +56,97 @@ func TestConsoleMessageCapture(t *testing.T) {
 		assert.Equal(t, "warning", types.ConsoleTypeWarning)
 	})
 }
+
+func TestBuildInjectedHeaders(t *testing.T) {
+	t.Run("no headers and no key returns nil", func(t *testing.T) {
+		injected := buildInjectedHeaders(&types.RenderRequest{})
+
+		assert.Nil(t, injected)
+	})
+
+	t.Run("key only", func(t *testing.T) {
+		injected := buildInjectedHeaders(&types.RenderRequest{RenderKey: "sk_test_123"})
+
+		assert.Len(t, injected, 1)
+		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
+	})
+
+	t.Run("client headers only", func(t *testing.T) {
+		injected := buildInjectedHeaders(&types.RenderRequest{
+			Headers: map[string][]string{
+				"Authorization": {"Bearer token"},
+				"Cookie":        {"a=1", "b=2"},
+			},
+		})
+
+		assert.Len(t, injected, 2)
+		assert.Equal(t, []string{"Bearer token"}, injected["Authorization"])
+		assert.Equal(t, []string{"a=1", "b=2"}, injected["Cookie"])
+		assert.NotContains(t, injected, types.HeaderRenderKey)
+	})
+
+	t.Run("client headers and key", func(t *testing.T) {
+		injected := buildInjectedHeaders(&types.RenderRequest{
+			Headers:   map[string][]string{"Authorization": {"Bearer token"}},
+			RenderKey: "sk_test_123",
+		})
+
+		assert.Len(t, injected, 2)
+		assert.Equal(t, []string{"Bearer token"}, injected["Authorization"])
+		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
+	})
+
+	t.Run("forwarded render key is replaced by the engine value", func(t *testing.T) {
+		injected := buildInjectedHeaders(&types.RenderRequest{
+			Headers:   map[string][]string{"x-render-key": {"client-supplied"}},
+			RenderKey: "sk_test_123",
+		})
+
+		assert.Len(t, injected, 1, "only one spelling may survive")
+		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
+		assert.NotContains(t, injected, "x-render-key")
+	})
+
+	t.Run("client headers are not mutated", func(t *testing.T) {
+		clientHeaders := map[string][]string{"x-render-key": {"client-supplied"}}
+		buildInjectedHeaders(&types.RenderRequest{Headers: clientHeaders, RenderKey: "sk_test_123"})
+
+		assert.Equal(t, map[string][]string{"x-render-key": {"client-supplied"}}, clientHeaders)
+	})
+}
+
+func TestIsSameHost(t *testing.T) {
+	const targetOrigin = "https://example.com"
+
+	t.Run("same origin", func(t *testing.T) {
+		assert.True(t, isSameHost("https://example.com/api/data", targetOrigin))
+	})
+
+	t.Run("different scheme", func(t *testing.T) {
+		assert.False(t, isSameHost("http://example.com/api/data", targetOrigin))
+	})
+
+	t.Run("different port", func(t *testing.T) {
+		assert.False(t, isSameHost("https://example.com:8443/api/data", targetOrigin))
+	})
+
+	t.Run("sibling subdomain", func(t *testing.T) {
+		assert.False(t, isSameHost("https://api.example.com/data", targetOrigin))
+	})
+
+	t.Run("parent domain of a subdomain target", func(t *testing.T) {
+		assert.False(t, isSameHost("https://example.com/data", "https://www.example.com"))
+	})
+
+	t.Run("different host", func(t *testing.T) {
+		assert.False(t, isSameHost("https://cdn.other.com/lib.js", targetOrigin))
+	})
+
+	t.Run("empty target origin", func(t *testing.T) {
+		assert.False(t, isSameHost("https://example.com/api/data", ""))
+	})
+
+	t.Run("unparseable request URL", func(t *testing.T) {
+		assert.False(t, isSameHost("://not a url", targetOrigin))
+	})
+}

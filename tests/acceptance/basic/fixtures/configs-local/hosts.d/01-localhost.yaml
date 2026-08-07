@@ -749,3 +749,14 @@ hosts:
             wait_for: "networkIdle"
           cache:
             ttl: 0s
+
+      # --- RENDER KEY FORWARDING TESTS (for render_key_test.go) ---
+      # The origin echoes the X-Render-Key it received. networkIdle is required so both
+      # echo responses reach the DOM before capture; caching is off so every spec renders.
+      - match: "/render-key-test/*"
+        action: "render"
+        render:
+          events:
+            wait_for: "networkIdle"
+          cache:
+            ttl: 0s

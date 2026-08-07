@@ -629,14 +629,8 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 	}
 
 	// Build render request with TabID (use resolved config to respect URL pattern overrides)
-	req := BuildRenderRequest(renderCtx.TargetURL, renderCtx.RequestID, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
+	req := BuildRenderRequest(renderCtx.TargetURL, renderCtx.RequestID, renderCtx.Host.RenderKey, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 	req.Headers = renderCtx.ClientHeaders
-	if renderCtx.Host != nil && renderCtx.Host.RenderKey != "" {
-		if req.Headers == nil {
-			req.Headers = make(map[string][]string)
-		}
-		req.Headers[types.HeaderRenderKey] = []string{renderCtx.Host.RenderKey}
-	}
 
 	// Call render service with context
 	ctx, cancel := renderCtx.GetContext()

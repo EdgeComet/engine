@@ -12,8 +12,9 @@ import (
 // TestEnvironmentConfig represents the unified test environment configuration
 type TestEnvironmentConfig struct {
 	TestServer struct {
-		Port    int    `yaml:"port"`
-		Address string `yaml:"address"`
+		Port           int    `yaml:"port"`
+		Address        string `yaml:"address"`
+		ThirdPartyPort int    `yaml:"third_party_port"`
 	} `yaml:"test_server"`
 
 	EdgeGateway struct {
@@ -118,6 +119,12 @@ func (c *TestEnvironmentConfig) RSBaseURL() string {
 // TestPagesURL returns the test pages server base URL
 func (c *TestEnvironmentConfig) TestPagesURL() string {
 	return fmt.Sprintf("http://localhost:%d", c.TestServer.Port)
+}
+
+// ThirdPartyURL returns the base URL of the third-party origin. Both the hostname and the
+// port differ from TestPagesURL, so the renderer's same-host check must reject it.
+func (c *TestEnvironmentConfig) ThirdPartyURL() string {
+	return fmt.Sprintf("http://%s:%d", thirdPartyHost, c.TestServer.ThirdPartyPort)
 }
 
 // StartupTimeout returns the startup timeout as duration

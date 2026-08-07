@@ -235,6 +235,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Tasks {
 	timeOrigin := time.Now().UnixMilli()
 	targetOrigin := extractOrigin(req.URL)
+	injectedHeaders := buildInjectedHeaders(req)
 
 	// Track active fetch handler goroutines
 	var fetchHandlerCount int64
@@ -294,9 +295,9 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 									zap.String("url", event.Request.URL),
 									zap.Error(err))
 							}
-						} else if len(req.Headers) > 0 && isSameHost(event.Request.URL, targetOrigin) {
-							// Same-origin request - inject client headers
-							headers := mergeRequestHeaders(event.Request.Headers, req.Headers)
+						} else if len(injectedHeaders) > 0 && isSameHost(event.Request.URL, targetOrigin) {
+							// Same-origin request - inject client headers and the render key
+							headers := mergeRequestHeaders(event.Request.Headers, injectedHeaders)
 							err := fetch.ContinueRequest(event.RequestID).WithHeaders(headers).Do(ctxExecutor)
 							if err != nil {
 								ci.logger.Warn("Failed to continue request with headers, failing instead",
@@ -782,6 +783,33 @@ func isSameHost(requestURL, targetOrigin string) bool {
 
 	return reqParsed.Scheme == targetParsed.Scheme &&
 		reqParsed.Host == targetParsed.Host
+}
+
+// buildInjectedHeaders combines forwarded client headers with engine-managed headers.
+// The render key is applied last so a forwarded client header of the same name cannot
+// override it, matching the bypass path. Returns nil when there is nothing to inject.
+func buildInjectedHeaders(req *types.RenderRequest) map[string][]string {
+	if len(req.Headers) == 0 && req.RenderKey == "" {
+		return nil
+	}
+
+	injected := make(map[string][]string, len(req.Headers)+1)
+	for name, values := range req.Headers {
+		injected[name] = values
+	}
+
+	if req.RenderKey != "" {
+		// Drop any forwarded spelling first: map keys are case-sensitive, HTTP header names are
+		// not, so two spellings would send duplicate X-Render-Key entries to the origin.
+		for name := range injected {
+			if strings.EqualFold(name, types.HeaderRenderKey) {
+				delete(injected, name)
+			}
+		}
+		injected[types.HeaderRenderKey] = []string{req.RenderKey}
+	}
+
+	return injected
 }
 
 // mergeRequestHeaders merges original Chrome headers with injected client headers.

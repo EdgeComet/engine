@@ -227,7 +227,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			Expect(testEnv.CacheExists(cacheKey)).To(BeFalse())
 
 			By("Restarting test server for subsequent tests")
-			testEnv.TestServer = testutil.NewTestServer(testEnv.Config.TestServer.Port, testEnv.RedisClient)
+			testEnv.TestServer = testutil.NewTestServer(testEnv.Config.TestServer.Port, testEnv.Config.TestServer.ThirdPartyPort, testEnv.RedisClient)
 			err = testEnv.TestServer.Start()
 			Expect(err).To(BeNil())
 		})

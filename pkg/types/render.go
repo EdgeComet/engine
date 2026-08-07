@@ -120,6 +120,10 @@ type RenderRequest struct {
 
 	// Client request headers forwarding (same-origin only)
 	Headers map[string][]string `json:"headers,omitempty"` // Client request headers to forward to origin
+
+	// RenderKey is the host's render key, sent as X-Render-Key on same-origin requests so the
+	// origin can verify the request originated from EdgeComet. Mirrors the bypass path.
+	RenderKey string `json:"render_key,omitempty"`
 }
 
 // Error type constants - Infrastructure errors

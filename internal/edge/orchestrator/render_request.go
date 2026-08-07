@@ -9,7 +9,7 @@ import (
 
 // BuildRenderRequest creates a RenderRequest from resolved config and dimension.
 // Caller-specific fields (Headers, IncludeHAR) must be set separately.
-func BuildRenderRequest(url, requestID string, tabID int, resolvedRender *config.ResolvedRenderConfig, dimension *types.Dimension) *types.RenderRequest {
+func BuildRenderRequest(url, requestID, renderKey string, tabID int, resolvedRender *config.ResolvedRenderConfig, dimension *types.Dimension) *types.RenderRequest {
 	var extraWait time.Duration
 	if resolvedRender.Events.AdditionalWait != nil {
 		extraWait = time.Duration(*resolvedRender.Events.AdditionalWait)
@@ -27,5 +27,6 @@ func BuildRenderRequest(url, requestID string, tabID int, resolvedRender *config
 		ExtraWait:            extraWait,
 		BlockedPatterns:      resolvedRender.BlockedPatterns,
 		BlockedResourceTypes: resolvedRender.BlockedResourceTypes,
+		RenderKey:            renderKey,
 	}
 }
