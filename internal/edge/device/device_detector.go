@@ -52,13 +52,24 @@ func (dd *DeviceDetector) DetectDimension(renderCtx *edgectx.RenderContext) (str
 
 	// Sort by specificity aligned with URL rule approach:
 	// 1. Block dimensions first
-	// 2. Pattern type: Exact > Wildcard > Regexp
-	// 3. Literal character count (more = more specific)
-	// 4. Dimension ID (deterministic tie-break)
+	// 2. Catch-all patterns ("*") last - they are the fallback, never a match
+	// 3. Pattern type: Exact > Wildcard > Regexp
+	// 4. Literal character count (more = more specific)
+	// 5. Dimension ID (deterministic tie-break)
 	sort.Slice(allPatterns, func(i, j int) bool {
 		// Block dimensions always come first
 		if allPatterns[i].isBlock != allPatterns[j].isBlock {
 			return allPatterns[i].isBlock
+		}
+
+		// A catch-all carries no literal characters, so type priority alone would rank it
+		// above every regexp pattern and shadow them. Bot aliases rely on regexps for all
+		// versioned user agents, so a host combining match_ua: ["*"] with alias-driven
+		// dimensions would never match those bots. Keep it strictly last instead.
+		iCatchAll := allPatterns[i].literalLen == 0
+		jCatchAll := allPatterns[j].literalLen == 0
+		if iCatchAll != jCatchAll {
+			return jCatchAll
 		}
 
 		iType := allPatterns[i].compiledPattern.Type

@@ -392,7 +392,11 @@ func TestDeviceDetector_DetectDimension_TieBreakByDimensionID(t *testing.T) {
 	assert.True(t, matched)
 }
 
-func TestDeviceDetector_DetectDimension_RegexpBeatsWildcardAcrossDimensions(t *testing.T) {
+// Named for what it actually asserts: the block dimension wins because it is a block
+// dimension, not because its pattern is a regexp. Regexp-vs-wildcard ordering is covered
+// by TestDeviceDetector_DetectDimension_WildcardBeatsRegexpWhenBothMatch and the catch-all
+// cases below.
+func TestDeviceDetector_DetectDimension_BlockDimensionBeatsWildcardAcrossDimensions(t *testing.T) {
 	detector := NewDeviceDetector()
 	logger := zap.NewNop()
 
@@ -427,6 +431,115 @@ func TestDeviceDetector_DetectDimension_RegexpBeatsWildcardAcrossDimensions(t *t
 	dimension, matched := detector.DetectDimension(renderCtx)
 	assert.Equal(t, "blocked", dimension, "Block dimension takes priority regardless of pattern type")
 	assert.True(t, matched)
+}
+
+// A wildcard carrying literal characters is still more specific than a regexp.
+func TestDeviceDetector_DetectDimension_WildcardBeatsRegexpWhenBothMatch(t *testing.T) {
+	dims := map[string]types.Dimension{
+		"desktop": {ID: 1, MatchUA: []string{"*ScrapeBot*"}},
+		"mobile":  {ID: 2, MatchUA: []string{"~.*ScrapeBot.*"}},
+	}
+
+	dimension, matched := detectWithDimensions(t, dims, "Mozilla/5.0 (compatible; ScrapeBot/2.0)")
+	assert.True(t, matched)
+	assert.Equal(t, "desktop", dimension, "Wildcard with literals outranks regexp")
+}
+
+// A bare catch-all is the fallback and must never shadow a regexp that matches.
+func TestDeviceDetector_DetectDimension_CatchAllNeverShadowsRegexp(t *testing.T) {
+	dims := map[string]types.Dimension{
+		"bypass":  {ID: 0, Action: types.ActionBypass, MatchUA: []string{"*"}},
+		"desktop": {ID: 1, MatchUA: []string{"~.*ScrapeBot.*"}},
+	}
+
+	dimension, matched := detectWithDimensions(t, dims, "Mozilla/5.0 (compatible; ScrapeBot/2.0)")
+	assert.True(t, matched)
+	assert.Equal(t, "desktop", dimension, "Catch-all must sort after a matching regexp")
+}
+
+// A catch-all still catches user agents nothing else matches.
+func TestDeviceDetector_DetectDimension_CatchAllMatchesUnknownUA(t *testing.T) {
+	dims := map[string]types.Dimension{
+		"bypass":  {ID: 0, Action: types.ActionBypass, MatchUA: []string{"*"}},
+		"desktop": {ID: 1, MatchUA: []string{"~.*ScrapeBot.*"}},
+	}
+
+	dimension, matched := detectWithDimensions(t, dims, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0")
+	assert.True(t, matched)
+	assert.Equal(t, "bypass", dimension, "Catch-all remains the fallback")
+}
+
+// Production shape: a catch-all bypass dimension alongside alias-driven render dimensions.
+// Bot aliases express every versioned user agent as a regexp, so a catch-all sorted above
+// regexps would send all modern crawlers to bypass and never render them.
+func TestDeviceDetector_DetectDimension_CatchAllWithAliasDrivenDimensions(t *testing.T) {
+	dims := map[string]types.Dimension{
+		"bypass": {ID: 0, Action: types.ActionBypass, MatchUA: []string{"*"}},
+		"mobile": {ID: 1, MatchUA: []string{
+			"$GooglebotSearchMobile", "$GoogleBotAdsMobileWeb", "$BingbotMobile", "$AIBots",
+		}},
+		"desktop": {ID: 2, MatchUA: []string{
+			"$GooglebotSearchDesktop", "$GoogleBotAds", "$BingbotDesktop",
+		}},
+	}
+	require.NoError(t, config.ExpandDimensionAliases(dims, "test", zap.NewNop()))
+
+	tests := []struct {
+		name      string
+		userAgent string
+		expected  string
+	}{
+		{
+			name:      "Googlebot desktop matches an exact alias pattern",
+			userAgent: "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			expected:  "desktop",
+		},
+		{
+			name:      "Googlebot mobile matches only a regexp alias pattern",
+			userAgent: "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+			expected:  "mobile",
+		},
+		{
+			name:      "ClaudeBot matches only a regexp alias pattern",
+			userAgent: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+			expected:  "mobile",
+		},
+		{
+			name:      "ChatGPT-User matches only a regexp alias pattern",
+			userAgent: "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+			expected:  "mobile",
+		},
+		{
+			name:      "Regular browser falls through to the catch-all",
+			userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			expected:  "bypass",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dimension, matched := detectWithDimensions(t, dims, tt.userAgent)
+			assert.True(t, matched)
+			assert.Equal(t, tt.expected, dimension)
+		})
+	}
+}
+
+// detectWithDimensions compiles the dimensions and resolves a user agent against them.
+func detectWithDimensions(t *testing.T, dimensions map[string]types.Dimension, userAgent string) (string, bool) {
+	t.Helper()
+
+	for name, dimension := range dimensions {
+		require.NoError(t, dimension.CompileMatchUAPatterns())
+		dimensions[name] = dimension
+	}
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.Header.SetUserAgent(userAgent)
+	renderCtx := edgectx.NewRenderContext("test-request", ctx, zap.NewNop(), 30*time.Second).
+		WithHost(&types.Host{Dimensions: dimensions})
+
+	return NewDeviceDetector().DetectDimension(renderCtx)
 }
 
 func TestDeviceDetector_DetectDimension_UnknownUANoPatterns(t *testing.T) {
