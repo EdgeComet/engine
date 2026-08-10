@@ -531,6 +531,12 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 
 		network.Enable(),
 
+		// Route requests straight to the network instead of through a page's service worker.
+		// Service worker fetches originate from their own CDP target, so the interception below
+		// never sees them and cannot inject the render key: origins that gate on X-Render-Key
+		// reject those requests.
+		network.SetBypassServiceWorker(true),
+
 		// Enable fetch interception for request blocking
 		fetch.Enable(),
 
