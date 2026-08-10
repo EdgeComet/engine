@@ -111,6 +111,9 @@ type CacheDaemon struct {
 
 	// Reload hook (optional, set by enterprise version)
 	reloadFunc func(ctx context.Context) error
+
+	// Precache drop sink (optional, set by enterprise version)
+	precacheDropSink PrecacheDropSink
 }
 
 // NewCacheDaemon creates a new cache daemon instance
@@ -582,6 +585,58 @@ func (d *CacheDaemon) SetReloadFunc(fn func(ctx context.Context) error) {
 		d.resyncDerivedCaches()
 		return nil
 	}
+}
+
+// Error types recorded on daemon-emitted precache drops. They name a terminal loss inside the
+// daemon's own queueing, as opposed to the per-attempt failures the edge gateway classifies:
+// an entry that exhausted its retries leaves one drop behind several attempt failures.
+const (
+	dropErrorTypeMaxRetries     = "dropped_max_retries"
+	dropErrorTypeUnresolvedHost = "dropped_unresolved_host"
+	dropErrorTypeQueueOverflow  = "dropped_queue_overflow"
+)
+
+// PrecacheDrop describes one recache entry the daemon gave up on for good.
+type PrecacheDrop struct {
+	URL          string
+	HostID       int
+	DimensionID  int
+	ErrorType    string
+	ErrorMessage string
+}
+
+// PrecacheDropSink receives every entry the daemon drops. The enterprise build installs a sink
+// that persists the drop as an event; the open-source build leaves it nil and drops stay
+// log-only.
+//
+// Contract: an implementation MUST be safe for concurrent use - the scheduler's gate loop and
+// the detached dispatch goroutines all call it, so a sink that appends to a slice without a lock
+// is a data race - MUST return promptly - hand the drop to a buffered channel and let another
+// goroutine do the work - and MUST NOT call back into any CacheDaemon method. The
+// unresolved-host drop fires while the scheduler holds reloadMu for read across its entire gate
+// loop, and sync.RWMutex is not reentrant: a sink that re-acquires it deadlocks the tick as
+// soon as a reload is waiting for the write lock.
+type PrecacheDropSink func(drop PrecacheDrop)
+
+// SetPrecacheDropSink installs the drop sink; nil clears it, which is the open-source default.
+// Call it before Start(). Like reloadFunc the field is written without synchronisation, so
+// swapping it on a running daemon races the scheduler.
+func (d *CacheDaemon) SetPrecacheDropSink(sink PrecacheDropSink) {
+	d.precacheDropSink = sink
+}
+
+// emitPrecacheDrop reports a terminal loss to the sink, or does nothing when none is installed.
+func (d *CacheDaemon) emitPrecacheDrop(entry InternalQueueEntry, errorType, errorMessage string) {
+	if d.precacheDropSink == nil {
+		return
+	}
+	d.precacheDropSink(PrecacheDrop{
+		URL:          entry.URL,
+		HostID:       entry.HostID,
+		DimensionID:  entry.DimensionID,
+		ErrorType:    errorType,
+		ErrorMessage: errorMessage,
+	})
 }
 
 // getStaleTTL resolves the stale TTL in seconds from host config -> global config -> 0

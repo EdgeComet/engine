@@ -16,6 +16,13 @@ type InternalQueueEntry struct {
 	QueuedAt       time.Time
 	LastAttempt    time.Time
 	NextRetryAfter time.Time
+
+	// LastErrorType and LastErrorMessage retain how the edge gateway classified the most
+	// recent failed attempt. A dispatch-level failure (no healthy EG, panic) carries no
+	// classification, so without this the terminal discard would report whichever error
+	// happened last rather than the diagnosis an EG actually made.
+	LastErrorType    string
+	LastErrorMessage string
 }
 
 // InternalQueue is a thread-safe in-memory queue for recache tasks

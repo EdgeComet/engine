@@ -21,6 +21,7 @@ func TestBuildRenderResult_AllFieldsPopulated(t *testing.T) {
 		ChromeID:   "chrome-1",
 		Metrics: types.PageMetrics{
 			StatusCode: 200,
+			FinalURL:   "https://example.com/final",
 		},
 		Headers: headers,
 	}
@@ -30,13 +31,34 @@ func TestBuildRenderResult_AllFieldsPopulated(t *testing.T) {
 
 	assert.Equal(t, []byte(renderResp.HTML), result.HTML)
 	assert.Equal(t, 200, result.StatusCode)
-	assert.Equal(t, "", result.RedirectLocation)
+	assert.Equal(t, "https://example.com/final", result.RedirectLocation,
+		"RedirectLocation mirrors the live path: it comes from Metrics.FinalURL, unconditionally")
 	assert.Equal(t, 2*time.Second, result.RenderTime)
-	assert.Equal(t, "recache", result.ChromeID)
+	assert.Equal(t, "chrome-1", result.ChromeID,
+		"the real Chrome instance must be recorded, not the literal \"recache\"")
 	assert.Equal(t, renderResp.Metrics, result.Metrics)
 
 	require.NotNil(t, result.Headers, "Headers must be forwarded")
 	assert.Equal(t, headers, result.Headers)
+}
+
+// The render service reports a structured error type even on responses the EG accepts
+// (soft_timeout renders return HTML). Dropping it lost the only machine-readable cause.
+func TestBuildRenderResult_ErrorFieldsCopied(t *testing.T) {
+	renderResp := &types.RenderResponse{
+		HTML:      "<html></html>",
+		ErrorType: types.ErrorTypeSoftTimeout,
+		Error:     "navigation timed out after 10s",
+		Metrics: types.PageMetrics{
+			StatusCode: 200,
+		},
+	}
+
+	rs := &RecacheService{}
+	result := rs.buildRenderResult(renderResp)
+
+	assert.Equal(t, types.ErrorTypeSoftTimeout, result.ErrorType)
+	assert.Equal(t, "navigation timed out after 10s", result.ErrorMessage)
 }
 
 func TestBuildRenderResult_NilHeaders(t *testing.T) {

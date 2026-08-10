@@ -174,7 +174,9 @@ func createEncoder(format string) zapcore.Encoder {
 	if format == configtypes.LogFormatJSON {
 		cfg := zap.NewProductionEncoderConfig()
 		cfg.TimeKey = "ts"
-		cfg.EncodeTime = zapcore.ISO8601TimeEncoder
+		// Log shipping parses ts as RFC3339. ISO8601TimeEncoder writes a Z0700
+		// offset, which only coincides with RFC3339 while the host is on UTC.
+		cfg.EncodeTime = zapcore.RFC3339NanoTimeEncoder
 		return zapcore.NewJSONEncoder(cfg)
 	}
 

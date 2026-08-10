@@ -612,6 +612,62 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 	return result, nil
 }
 
+// RenderResponseFailureReason identifies which response-validity rule a render service
+// response violated. The RS-reported ErrorType is not a usable discriminator (it is empty
+// on the status-not-captured and empty-HTML cases), so callers switch on this instead.
+type RenderResponseFailureReason int
+
+const (
+	RenderFailureNotSuccessful RenderResponseFailureReason = iota
+	RenderFailureStatusNotCaptured
+	RenderFailureEmptyHTML
+)
+
+// RenderResponseFailure describes an unusable render service response.
+type RenderResponseFailure struct {
+	Reason     RenderResponseFailureReason
+	ErrorType  string // RS ErrorType verbatim for RenderFailureNotSuccessful, a types.ErrorType* constant otherwise
+	Message    string
+	StatusCode int // as reported by the render service; 0 when not captured
+}
+
+// ValidateRenderResponse returns the first response-validity violation, or nil when the
+// response is usable. Shared by the live render path and recache so the two cannot drift.
+// Check order is load-bearing and the helper deliberately does not log: the live path logs
+// a different message per reason, and the empty-HTML case logs nothing at all.
+func ValidateRenderResponse(resp *types.RenderResponse) *RenderResponseFailure {
+	statusCode := resp.Metrics.StatusCode
+
+	if !resp.Success {
+		return &RenderResponseFailure{
+			Reason:     RenderFailureNotSuccessful,
+			ErrorType:  resp.ErrorType,
+			Message:    fmt.Sprintf("render failed: %s", resp.Error),
+			StatusCode: statusCode,
+		}
+	}
+
+	if statusCode == 0 {
+		return &RenderResponseFailure{
+			Reason:    RenderFailureStatusNotCaptured,
+			ErrorType: types.ErrorTypeStatusCaptureFailed,
+			Message:   "status code not captured",
+		}
+	}
+
+	// Empty HTML is legitimate for redirects only
+	if len(resp.HTML) == 0 && (statusCode < 300 || statusCode >= 400) {
+		return &RenderResponseFailure{
+			Reason:     RenderFailureEmptyHTML,
+			ErrorType:  types.ErrorTypeEmptyResponse,
+			Message:    "render service returned empty HTML",
+			StatusCode: statusCode,
+		}
+	}
+
+	return nil
+}
+
 // performActualRenderWithTab communicates with the render service using tab reservation and returns render result with all metrics
 func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.RenderContext, reservation *registry.TabReservation) (*RenderServiceResult, error) {
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)
@@ -646,29 +702,23 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 		return nil, fmt.Errorf("render service call failed: %w", err)
 	}
 
-	// Check response success
-	if !resp.Success {
-		renderCtx.Logger.Warn("Render service returned failure",
-			zap.String("rs", reservation.ServiceID),
-			zap.Int("tab_id", reservation.TabID),
-			zap.String("error", resp.Error))
-		return nil, fmt.Errorf("render failed: %s", resp.Error)
+	if failure := ValidateRenderResponse(resp); failure != nil {
+		switch failure.Reason {
+		case RenderFailureNotSuccessful:
+			renderCtx.Logger.Warn("Render service returned failure",
+				zap.String("rs", reservation.ServiceID),
+				zap.Int("tab_id", reservation.TabID),
+				zap.String("error", resp.Error))
+		case RenderFailureStatusNotCaptured:
+			renderCtx.Logger.Warn("Status code not captured by render service, falling back to bypass",
+				zap.String("rs", reservation.ServiceID),
+				zap.Int("tab_id", reservation.TabID),
+				zap.String("url", renderCtx.TargetURL))
+		}
+		return nil, errors.New(failure.Message)
 	}
 
-	// Check if status code was captured (0 means failed to capture)
 	statusCode := resp.Metrics.StatusCode
-	if statusCode == 0 {
-		renderCtx.Logger.Warn("Status code not captured by render service, falling back to bypass",
-			zap.String("rs", reservation.ServiceID),
-			zap.Int("tab_id", reservation.TabID),
-			zap.String("url", renderCtx.TargetURL))
-		return nil, fmt.Errorf("status code not captured")
-	}
-
-	// Validate HTML content (allow empty for redirects)
-	if len(resp.HTML) == 0 && (statusCode < 300 || statusCode >= 400) {
-		return nil, fmt.Errorf("render service returned empty HTML")
-	}
 
 	renderCtx.Logger.Info("Render service returned HTML successfully",
 		zap.String("rs", reservation.ServiceID),
@@ -770,10 +820,7 @@ func redirectLocationFromMetadata(meta *cache.CacheMetadata) string {
 	if !isRedirectStatusCode(meta.StatusCode) {
 		return ""
 	}
-	if locations, ok := getHeaderCaseInsensitive(meta.Headers, "Location"); ok && len(locations) > 0 {
-		return locations[0]
-	}
-	return ""
+	return LocationHeaderValue(meta.Headers)
 }
 
 // tryPullFromRemoteSmartly attempts to pull cache from remote with smart storage decision
@@ -1182,9 +1229,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	duration := time.Since(startTime)
 	redirectTo := ""
 	if isRedirectStatusCode(bypassResp.StatusCode) {
-		if locations, ok := getHeaderCaseInsensitive(bypassResp.Headers, "Location"); ok && len(locations) > 0 {
-			redirectTo = locations[0]
-		}
+		redirectTo = LocationHeaderValue(bypassResp.Headers)
 	}
 
 	return &RenderResult{

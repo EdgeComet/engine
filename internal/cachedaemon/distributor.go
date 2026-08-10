@@ -15,14 +15,64 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/recache"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // Recache outcome status labels for edgecomet_cd_recache_requests_total.
 const (
 	recacheStatusSuccess = "success"
+	recacheStatusSkipped = "skipped"
 	recacheStatusTimeout = "timeout"
 	recacheStatusError   = "error"
 )
+
+// recacheOutcome classifies what one recache request achieved at the edge gateway.
+type recacheOutcome int
+
+const (
+	// outcomeCached: the edge gateway refreshed the cache entry.
+	outcomeCached recacheOutcome = iota
+	// outcomeSkipped: the resolved configuration declines to cache this URL. Terminal, and
+	// nothing a retry would change.
+	outcomeSkipped
+	// outcomeFailed: the attempt failed; permanent decides whether retrying is worth anything.
+	outcomeFailed
+)
+
+// recacheAttempt is the classified result of one recache request to an edge gateway.
+type recacheAttempt struct {
+	outcome recacheOutcome
+	// permanent marks a failure no retry can resolve. The edge gateway has already recorded
+	// its own event row for it, so the daemon neither retries nor emits a drop.
+	permanent bool
+	// errorType is the edge gateway's classification, empty when the answer carried none.
+	errorType string
+	// err is non-nil exactly when outcome is outcomeFailed.
+	err error
+}
+
+// stampOn records this attempt's classification on the entry so a later terminal discard names
+// the edge gateway's real diagnosis rather than whichever dispatch-level error came last.
+func (a recacheAttempt) stampOn(entry InternalQueueEntry) InternalQueueEntry {
+	// Only a classified attempt overwrites the stamp. A dispatch-level failure - timeout, panic,
+	// no answer at all - carries no classification, and letting it blank the field would leave the
+	// terminal discard reporting "HTTP request failed" for an entry an edge gateway had already
+	// diagnosed. The immediate cause still reaches the log through markEntryFailed's zap.Error.
+	if a.errorType == "" {
+		return entry
+	}
+	entry.LastErrorType = a.errorType
+	if a.err != nil {
+		entry.LastErrorMessage = a.err.Error()
+	}
+	return entry
+}
+
+// failedAttempt classifies a failure the edge gateway never got to describe - no answer reached
+// us at all - so another attempt is the only reasonable response.
+func failedAttempt(err error) recacheAttempt {
+	return recacheAttempt{outcome: outcomeFailed, err: err}
+}
 
 // readyItem pairs a queue entry with the per-host concurrency slot reserved
 // for it. The slot is acquired by the scheduler before dispatch and released
@@ -38,11 +88,10 @@ type readyItem struct {
 	isRender bool
 }
 
-// RecacheResult represents the result of a single recache attempt
+// RecacheResult pairs a queue entry with the classified result of dispatching it.
 type RecacheResult struct {
 	Entry   InternalQueueEntry
-	Success bool
-	Error   error
+	Attempt recacheAttempt
 }
 
 // DistributeToEGs distributes a batch of recache requests across healthy EG instances.
@@ -123,11 +172,7 @@ func (d *CacheDaemon) releaseAndReenqueue(batch []readyItem, cause error) {
 			continue
 		}
 		if !d.internalQueue.Enqueue(entry) {
-			d.logger.Error("Internal queue full while re-enqueueing after EG dispatch failure; entry dropped",
-				zap.Int("host_id", entry.HostID),
-				zap.String("url", entry.URL),
-				zap.Int("dimension_id", entry.DimensionID),
-				zap.Int("retry_count", entry.RetryCount))
+			d.recordQueueFullDrop(entry, queueFullReasonEGDispatch)
 			discarded++
 			continue
 		}
@@ -147,12 +192,16 @@ func (d *CacheDaemon) markEntryFailed(entry InternalQueueEntry, cause error) (In
 	now := time.Now().UTC()
 	entry.LastAttempt = now
 	if entry.RetryCount >= d.daemonConfig.InternalQueue.MaxRetries {
+		lastCause := lastFailureCause(entry, cause)
 		d.logger.Error("Recache failed after max retries, discarding",
 			zap.Int("host_id", entry.HostID),
 			zap.String("url", entry.URL),
 			zap.Int("dimension_id", entry.DimensionID),
 			zap.Int("retry_count", entry.RetryCount),
+			zap.String("last_error_type", entry.LastErrorType),
+			zap.String("last_error", lastCause),
 			zap.Error(cause))
+		d.emitPrecacheDrop(entry, dropErrorTypeMaxRetries, lastCause)
 		return entry, false
 	}
 	delay := d.retryBaseDelay * (1 << (entry.RetryCount - 1))
@@ -163,8 +212,25 @@ func (d *CacheDaemon) markEntryFailed(entry InternalQueueEntry, cause error) (In
 		zap.Int("dimension_id", entry.DimensionID),
 		zap.Int("retry_count", entry.RetryCount),
 		zap.Duration("retry_after", delay),
+		zap.String("last_error_type", entry.LastErrorType),
 		zap.Error(cause))
 	return entry, true
+}
+
+// lastFailureCause renders the most informative account of why an entry is being given up on:
+// the edge gateway's own classification when one ever reached us, and the dispatch-level error
+// otherwise (no EG answered, so no classification exists to prefer).
+func lastFailureCause(entry InternalQueueEntry, cause error) string {
+	if entry.LastErrorMessage == "" {
+		if cause == nil {
+			return ""
+		}
+		return cause.Error()
+	}
+	if entry.LastErrorType == "" {
+		return entry.LastErrorMessage
+	}
+	return entry.LastErrorType + ": " + entry.LastErrorMessage
 }
 
 // SendBatchToEG sends a batch of recache requests to a single EG concurrently.
@@ -204,20 +270,16 @@ func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []readyItem, results
 					// coordinator's accounting stays balanced.
 					d.logger.Error("recovered panic in recache URL dispatch",
 						zap.String("url", it.entry.URL), zap.Any("panic", r))
-					results <- RecacheResult{Entry: it.entry, Success: false,
-						Error: fmt.Errorf("dispatch panic: %v", r)}
+					results <- RecacheResult{Entry: it.entry,
+						Attempt: failedAttempt(fmt.Errorf("dispatch panic: %v", r))}
 				}
 			}()
 
 			start := time.Now()
-			err := d.SendRecacheRequest(egAddress, it.entry)
-			d.recordRecacheOutcome(it.entry, err, time.Since(start))
+			attempt := d.SendRecacheRequest(egAddress, it.entry)
+			d.recordRecacheOutcome(it.entry, attempt, time.Since(start))
 
-			results <- RecacheResult{
-				Entry:   it.entry,
-				Success: err == nil,
-				Error:   err,
-			}
+			results <- RecacheResult{Entry: it.entry, Attempt: attempt}
 		}(item)
 	}
 
@@ -225,8 +287,8 @@ func (d *CacheDaemon) SendBatchToEG(egAddress string, batch []readyItem, results
 	batchWG.Wait()
 }
 
-// SendRecacheRequest sends a single recache request to an EG
-func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEntry) error {
+// SendRecacheRequest sends a single recache request to an EG and classifies the answer.
+func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEntry) recacheAttempt {
 	url := fmt.Sprintf("http://%s/internal/cache/recache", egAddress)
 
 	// Build request body
@@ -238,7 +300,7 @@ func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEn
 	}
 	bodyJSON, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request body: %w", err)
+		return failedAttempt(fmt.Errorf("failed to marshal request body: %w", err))
 	}
 
 	// Acquire request/response from pool
@@ -257,46 +319,112 @@ func (d *CacheDaemon) SendRecacheRequest(egAddress string, entry InternalQueueEn
 	// Execute request with timeout
 	err = d.httpClient.DoTimeout(req, resp, time.Duration(d.daemonConfig.Recache.TimeoutPerURL))
 	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
+		return failedAttempt(fmt.Errorf("HTTP request failed: %w", err))
 	}
 
-	// Check status code
-	if resp.StatusCode() != 200 {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode())
+	attempt := classifyRecacheResponse(resp.StatusCode(), resp.Body())
+	if attempt.outcome != outcomeFailed {
+		d.logger.Debug("Recache request completed",
+			zap.String("eg_address", egAddress),
+			zap.Int("host_id", entry.HostID),
+			zap.String("url", entry.URL),
+			zap.Int("dimension_id", entry.DimensionID),
+			zap.Bool("skipped", attempt.outcome == outcomeSkipped))
 	}
 
-	d.logger.Debug("Recache request successful",
-		zap.String("eg_address", egAddress),
-		zap.Int("host_id", entry.HostID),
-		zap.String("url", entry.URL),
-		zap.Int("dimension_id", entry.DimensionID))
+	return attempt
+}
 
-	return nil
+// recacheEnvelope is httputil.APIResponse with the data payload left opaque, so a body whose
+// data is not a recache outcome decodes far enough to be recognised as such instead of
+// aborting the whole parse.
+type recacheEnvelope struct {
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
+// classifyRecacheResponse turns an edge gateway's answer into a retry decision. The outcome
+// payload is authoritative when present; anything else - an edge gateway predating the outcome
+// protocol, a 400/401 error envelope, a non-JSON body - degrades to the status code alone,
+// which is all the daemon ever used before. Mixed-version deploys therefore behave exactly as
+// they did, rather than misreading silence as a permanent failure.
+func classifyRecacheResponse(statusCode int, body []byte) recacheAttempt {
+	envelope, data, ok := decodeRecacheOutcome(body)
+	if !ok {
+		return classifyRecacheStatus(statusCode)
+	}
+
+	switch data.Outcome {
+	case types.RecacheOutcomeCached:
+		return recacheAttempt{outcome: outcomeCached}
+	case types.RecacheOutcomeSkipped:
+		return recacheAttempt{outcome: outcomeSkipped}
+	case types.RecacheOutcomeFailed:
+		message := envelope.Message
+		if message == "" {
+			message = fmt.Sprintf("recache failed with status %d", statusCode)
+		}
+		return recacheAttempt{
+			outcome: outcomeFailed,
+			// The status is the retry instruction and the flag restates it; honour either,
+			// so a disagreement never turns a permanent failure into three more attempts.
+			permanent: data.Permanent || statusCode == fasthttp.StatusUnprocessableEntity,
+			errorType: data.ErrorType,
+			err:       errors.New(message),
+		}
+	default:
+		return classifyRecacheStatus(statusCode)
+	}
+}
+
+// decodeRecacheOutcome extracts the outcome payload, reporting whether one was actually there.
+func decodeRecacheOutcome(body []byte) (recacheEnvelope, types.RecacheOutcomeData, bool) {
+	var envelope recacheEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil || len(envelope.Data) == 0 {
+		return envelope, types.RecacheOutcomeData{}, false
+	}
+
+	var data types.RecacheOutcomeData
+	if err := json.Unmarshal(envelope.Data, &data); err != nil || data.Outcome == "" {
+		return envelope, types.RecacheOutcomeData{}, false
+	}
+	return envelope, data, true
+}
+
+// classifyRecacheStatus is the pre-outcome-protocol reading of a response: 200 succeeded,
+// everything else is worth another attempt.
+func classifyRecacheStatus(statusCode int) recacheAttempt {
+	if statusCode == fasthttp.StatusOK {
+		return recacheAttempt{outcome: outcomeCached}
+	}
+	return failedAttempt(fmt.Errorf("unexpected status code: %d", statusCode))
 }
 
 // recordRecacheOutcome records per-URL dispatch timing and outcome to
 // Prometheus. RecordRecacheDuration was previously never wired, which is why
 // recache_duration_seconds read all-zero in production. The status label lets
 // operators see the straggler (timeout) rate directly.
-func (d *CacheDaemon) recordRecacheOutcome(entry InternalQueueEntry, err error, elapsed time.Duration) {
+func (d *CacheDaemon) recordRecacheOutcome(entry InternalQueueEntry, attempt recacheAttempt, elapsed time.Duration) {
 	if d.metricsCollector == nil {
 		return
 	}
 	d.metricsCollector.RecordRecacheDuration(elapsed)
 
 	status := recacheStatusSuccess
-	if err != nil {
-		if isTimeoutErr(err) {
-			status = recacheStatusTimeout
-		} else {
-			status = recacheStatusError
-		}
+	switch {
+	case attempt.outcome == outcomeSkipped:
+		status = recacheStatusSkipped
+	case attempt.outcome == outcomeFailed && isTimeoutErr(attempt.err):
+		status = recacheStatusTimeout
+	case attempt.outcome == outcomeFailed:
+		status = recacheStatusError
 	}
+
 	queueType := entry.Priority
 	if queueType == "" {
 		queueType = redis.PriorityNormal
 	}
-	d.metricsCollector.RecordRecacheRequest(status, queueType)
+	d.metricsCollector.RecordRecacheRequest(status, queueType, entry.HostID)
 }
 
 // isTimeoutErr reports whether err is (or wraps) a request deadline/timeout, so
@@ -318,32 +446,41 @@ func isTimeoutErr(err error) bool {
 }
 
 // HandleRecacheResults processes results and implements retry logic.
-// Failed entries are marked with backoff via markEntryFailed and re-enqueued;
+// Retryable failures are marked with backoff via markEntryFailed and re-enqueued;
 // entries past MaxRetries are discarded. If the internal queue is full when
 // re-enqueueing, the entry is dropped with an error log instead of disappearing
-// silently.
+// silently. Outcomes the edge gateway called terminal - cached, declined by
+// configuration, or a failure it marked permanent - end here without another attempt.
 func (d *CacheDaemon) HandleRecacheResults(resultsChan chan RecacheResult) {
 	successCount := 0
+	skippedCount := 0
+	permanentCount := 0
 	retryCount := 0
 	discardCount := 0
 
 	for result := range resultsChan {
-		if result.Success {
+		if result.Attempt.outcome == outcomeCached {
 			successCount++
 			continue
 		}
+		if result.Attempt.outcome == outcomeSkipped {
+			skippedCount++
+			continue
+		}
+		if result.Attempt.permanent {
+			// Retrying cannot change the edge gateway's answer, and it already recorded
+			// the failure itself, so the daemon adds neither an attempt nor a drop.
+			permanentCount++
+			continue
+		}
 
-		entry, retry := d.markEntryFailed(result.Entry, result.Error)
+		entry, retry := d.markEntryFailed(result.Attempt.stampOn(result.Entry), result.Attempt.err)
 		if !retry {
 			discardCount++
 			continue
 		}
 		if !d.internalQueue.Enqueue(entry) {
-			d.logger.Error("Internal queue full while re-enqueueing failed recache; entry dropped",
-				zap.Int("host_id", entry.HostID),
-				zap.String("url", entry.URL),
-				zap.Int("dimension_id", entry.DimensionID),
-				zap.Int("retry_count", entry.RetryCount))
+			d.recordQueueFullDrop(entry, queueFullReasonRecacheFailed)
 			discardCount++
 			continue
 		}
@@ -352,6 +489,8 @@ func (d *CacheDaemon) HandleRecacheResults(resultsChan chan RecacheResult) {
 
 	d.logger.Info("Recache batch results",
 		zap.Int("success", successCount),
+		zap.Int("skipped", skippedCount),
+		zap.Int("permanent_failure", permanentCount),
 		zap.Int("retry", retryCount),
 		zap.Int("discard", discardCount))
 }

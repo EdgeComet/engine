@@ -64,7 +64,7 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 			Name:      "recache_requests_total",
 			Help:      "Total number of recache requests",
 		},
-		[]string{"status", "queue_type"},
+		[]string{"status", "queue_type", "host_id"},
 	)
 
 	pm.queueDepth = prometheus.NewGaugeVec(
@@ -179,8 +179,8 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 	return pm
 }
 
-func (pm *PrometheusMetrics) RecordRecacheRequest(status, queueType string) {
-	pm.recacheRequestsTotal.WithLabelValues(status, queueType).Inc()
+func (pm *PrometheusMetrics) RecordRecacheRequest(status, queueType string, hostID int) {
+	pm.recacheRequestsTotal.WithLabelValues(status, queueType, strconv.Itoa(hostID)).Inc()
 }
 
 func (pm *PrometheusMetrics) SetQueueDepth(queueType string, depth int) {

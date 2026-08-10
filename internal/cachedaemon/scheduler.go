@@ -20,6 +20,10 @@ import (
 // real ceiling is Sum(MaxConcurrent) * 100 URLs/tick.
 const maxDrainIterationsPerTick = 100
 
+// unresolvedHostMessage explains a gate discard for the event ledger. The usual cause is a
+// queue entry that outlived the host or dimension it names - a cluster move, or a config edit.
+const unresolvedHostMessage = "host or dimension not present in daemon configuration"
+
 // Run is the main scheduler loop that processes recache queues.
 // Runs in a separate goroutine and respects context cancellation.
 //
@@ -331,7 +335,7 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 	for _, entry := range batch {
 		if !entry.NextRetryAfter.IsZero() && now.Before(entry.NextRetryAfter) {
 			if !d.internalQueue.Enqueue(entry) {
-				d.logQueueFullDrop(entry, "backoff")
+				d.recordQueueFullDrop(entry, queueFullReasonBackoff)
 				droppedQueueFull++
 				continue
 			}
@@ -350,13 +354,14 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 				zap.Int("host_id", entry.HostID),
 				zap.Int("dimension_id", entry.DimensionID),
 				zap.String("url", entry.URL))
+			d.emitPrecacheDrop(entry, dropErrorTypeUnresolvedHost, unresolvedHostMessage)
 			discardedUnknown++
 			continue
 		}
 
 		if skipHosts[entry.HostID] {
 			if !d.internalQueue.Enqueue(entry) {
-				d.logQueueFullDrop(entry, "concurrency")
+				d.recordQueueFullDrop(entry, queueFullReasonConcurrency)
 				droppedQueueFull++
 				continue
 			}
@@ -368,7 +373,7 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 		if !ok {
 			skipHosts[entry.HostID] = true
 			if !d.internalQueue.Enqueue(entry) {
-				d.logQueueFullDrop(entry, "concurrency")
+				d.recordQueueFullDrop(entry, queueFullReasonConcurrency)
 				droppedQueueFull++
 				continue
 			}
@@ -382,7 +387,7 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 			if rsBudget <= 0 {
 				d.concurrencyLimiter.Release(slot)
 				if !d.internalQueue.Enqueue(entry) {
-					d.logQueueFullDrop(entry, "rs_budget")
+					d.recordQueueFullDrop(entry, queueFullReasonRSBudget)
 					droppedQueueFull++
 					continue
 				}
@@ -457,16 +462,34 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 	return dispatched
 }
 
-// logQueueFullDrop records an internal-queue overflow. The entry is dropped
-// because the queue is at MaxSize when we tried to re-enqueue it after a
-// gate rejection. Operators see one error log per dropped entry so the loss
-// is observable.
-func (d *CacheDaemon) logQueueFullDrop(entry InternalQueueEntry, reason string) {
-	d.logger.Error("Internal queue full while re-enqueueing deferred entry; entry dropped",
+// Reasons an entry was being re-enqueued when the internal queue turned out to be full. The
+// reason is the only thing distinguishing otherwise identical overflow drops.
+const (
+	queueFullReasonBackoff       = "backoff"
+	queueFullReasonConcurrency   = "concurrency"
+	queueFullReasonRSBudget      = "rs_budget"
+	queueFullReasonEGDispatch    = "eg_dispatch_failure"
+	queueFullReasonRecacheFailed = "recache_failed"
+)
+
+// recordQueueFullDrop records an internal-queue overflow. The entry is dropped
+// because the queue was at MaxSize when we tried to re-enqueue it; reason names
+// what it was being re-enqueued for. Operators see one error log per dropped
+// entry, and the drop sink one event, so the loss is observable either way.
+func (d *CacheDaemon) recordQueueFullDrop(entry InternalQueueEntry, reason string) {
+	d.logger.Error("Internal queue full while re-enqueueing entry; entry dropped",
 		zap.Int("host_id", entry.HostID),
 		zap.String("url", entry.URL),
 		zap.Int("dimension_id", entry.DimensionID),
+		zap.Int("retry_count", entry.RetryCount),
 		zap.String("reason", reason))
+	d.emitPrecacheDrop(entry, dropErrorTypeQueueOverflow, queueOverflowMessage(reason))
+}
+
+// queueOverflowMessage describes an overflow drop for the event ledger, where the reason has no
+// field of its own.
+func queueOverflowMessage(reason string) string {
+	return "internal queue full while re-enqueueing entry (" + reason + ")"
 }
 
 // zpopAndEnqueue pops up to pullCap entries from the Redis ZSET for

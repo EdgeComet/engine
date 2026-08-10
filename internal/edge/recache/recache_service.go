@@ -33,10 +33,12 @@ const (
 )
 
 // ErrRecacheSkipped marks a recache the configuration declines by design: bypass caching is off
-// for the URL, its TTL is zero, or the response status is one the cache rejects. The outcome is
-// terminal - a retry resolves to the same decision - so the handler answers 200 and logs at info.
+// for the URL, the resolved cache TTL is zero (bypass or render - the live path caches in neither
+// case), or a render cache entry already owns the key. The outcome is terminal - a retry resolves
+// to the same decision - so the handler answers 200 and logs at info.
 // Reporting it as a failure made the daemon retry to MaxRetries, and every attempt raised an
 // error on both services, which is what drowned Rollbar.
+// Origin failures are NOT skips: they are classified via recacheError so they stay countable.
 var ErrRecacheSkipped = errors.New("recache skipped")
 
 // RecacheService handles background cache recaching operations
@@ -83,14 +85,26 @@ func NewRecacheService(
 // to cache. mode optionally overrides the configured action: "render" forces a
 // Chrome render (stored as render cache), "bypass" forces an origin fetch (stored
 // as bypass cache), and "" respects the dimension/url-rule action.
-func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID, dimensionID int, mode string) error {
-	startTime := time.Now()
+func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID, dimensionID int, mode string) (err error) {
+	attempt := &precacheAttempt{url: url, hostID: hostID, dimensionID: dimensionID, startTime: time.Now()}
+
+	// Emission sits on the way out rather than at every failure return: each terminal failure
+	// leaves through here, and the attempt carries whatever the flow resolved before it failed.
+	defer func() {
+		if failure := classifiedFailure(err); failure != nil {
+			rs.emitPrecacheFailure(attempt, failure)
+		}
+	}()
 
 	// Get host config
 	host := rs.getHostByID(hostID)
 	if host == nil {
-		return fmt.Errorf("host not found: %d", hostID)
+		// Retryable: a cluster move reaches the EGs asynchronously, so a host unknown now can
+		// become known inside the daemon's retry window.
+		return retryableFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("host not found: %d", hostID))
 	}
+	attempt.host = host
 
 	// Validate dimension ID and get dimension name
 	var dimensionName string
@@ -103,22 +117,27 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		}
 	}
 	if !dimensionFound {
-		return fmt.Errorf("dimension %d not found for host %d", dimensionID, hostID)
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("dimension %d not found for host %d", dimensionID, hostID))
 	}
+	attempt.dimension = dimensionName
 
 	// SSRF protection: validate URL hostname
 	parsedURL, err := neturl.Parse(url)
 	if err != nil {
-		return fmt.Errorf("failed to parse recache URL: %w", err)
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("failed to parse recache URL: %v", err)).withCause(err)
 	}
 	if err := urlutil.ValidateHostNotPrivateIP(parsedURL.Hostname()); err != nil {
-		return fmt.Errorf("SSRF protection: %w", err)
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("SSRF protection: %v", err)).withCause(err)
 	}
 
 	// Verify URL hostname matches one of the host's configured domains
 	urlHostname := strings.ToLower(parsedURL.Hostname())
 	if !hostHasDomain(host, urlHostname) {
-		return fmt.Errorf("URL hostname %q does not match any configured domain for host %d", urlHostname, hostID)
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("URL hostname %q does not match any configured domain for host %d", urlHostname, hostID))
 	}
 
 	// Generate request ID and build render context early. Route through the
@@ -128,12 +147,13 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	requestID := requestid.GenerateRequestID(fmt.Sprintf("recache-%d-%d", hostID, dimensionID))
 	renderCtx, err := rs.buildRecacheContext(url, host, dimensionID, dimensionName, requestID)
 	if err != nil {
-		return err
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus, err.Error()).withCause(err)
 	}
+	attempt.renderCtx = renderCtx
 
-	rs.logger.Info("Processing recache request",
-		zap.String("url", url),
-		zap.Int("host_id", hostID),
+	// Debug, not Info: the handler already logged this request at Info before dispatch. This line
+	// only adds the dimension name and the scoped fields, which is detail, not a second event.
+	renderCtx.Logger.Debug("Recache context resolved",
 		zap.Int("dimension_id", dimensionID),
 		zap.String("dimension_name", dimensionName))
 
@@ -161,22 +181,34 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// unsupported url_rule-bypass + mode:render combination rather than rendering with
 	// a zero-valued config.
 	if mode == types.RecacheModeRender && renderCtx.ResolvedConfig.Render.Timeout == 0 {
-		return fmt.Errorf("mode:render unsupported for URL %q: render config unresolved (bypass set via url_rule)", url)
+		return permanentFailure(types.ErrorTypeInvalidRequest, noOriginStatus,
+			fmt.Sprintf("mode:render unsupported for URL %q: render config unresolved (bypass set via url_rule)", url))
 	}
 
 	// Route to bypass recache if the effective action is bypass
 	if renderCtx.ResolvedConfig.Action == types.ActionBypass {
-		return rs.processBypassRecache(ctx, url, renderCtx, startTime)
+		return rs.processBypassRecache(ctx, url, renderCtx, attempt.startTime)
+	}
+
+	// A render with no configured TTL has nothing to write: the live path gates its cache write
+	// on Cache.TTL > 0 (render_orchestrator.go) and a URL matched by a status url_rule carries no
+	// resolved cache section at all. Terminal by configuration, exactly like the bypass sibling.
+	if renderCtx.ResolvedConfig.Cache.TTL == 0 {
+		return fmt.Errorf("%w: render cache TTL is 0", ErrRecacheSkipped)
 	}
 
 	// Select and reserve render service tab
-	reservation, err := rs.selectServiceAndReserveTab(ctx, requestID)
+	reservation, err := rs.selectServiceAndReserveTab(ctx, requestID, renderCtx.Logger)
 	if err != nil || reservation == nil {
-		return fmt.Errorf("no render services available: %w", err)
+		message := "no render service available"
+		if err != nil {
+			message = fmt.Sprintf("%s: %v", message, err)
+		}
+		return retryableFailure(types.ErrorTypeRenderUnavailable, noOriginStatus, message).withCause(err)
 	}
 
 	// Release tab when done
-	defer rs.releaseTabReservation(context.Background(), reservation)
+	defer rs.releaseTabReservation(context.Background(), reservation, renderCtx.Logger)
 
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Dimensions[dimensionName]
@@ -186,23 +218,29 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)
 
 	// Call render service
-	rs.logger.Info("Sending render request to service",
+	renderCtx.Logger.Info("Sending render request to service",
 		zap.String("service_id", reservation.ServiceID),
 		zap.Int("tab_id", reservation.TabID),
 		zap.String("service_url", serviceURL))
 
 	renderResp, err := rs.rsClient.CallRenderService(ctx, serviceURL, renderReq)
 	if err != nil {
-		return fmt.Errorf("render service failed: %w", err)
+		return classifyRenderCallError(err)
 	}
 
-	if renderResp.Metrics.StatusCode != 200 {
-		return fmt.Errorf("page returned non-200 status: %d", renderResp.Metrics.StatusCode)
+	if failure := orchestrator.ValidateRenderResponse(renderResp); failure != nil {
+		return classifyRenderFailure(failure)
 	}
 
-	rs.logger.Info("Render completed successfully",
-		zap.String("url", url),
-		zap.Int("status_code", renderResp.Metrics.StatusCode),
+	// Recache succeeds exactly where the live path caches (render_orchestrator.go: status in
+	// Cache.StatusCodes), so a host configuring status_codes: [200, 404] can refresh its 404s.
+	statusCode := renderResp.Metrics.StatusCode
+	if failure := rs.classifyStatus(statusCode, renderCtx.ResolvedConfig.Cache.StatusCodes); failure != nil {
+		return failure.withRedirect(renderResp.Metrics.FinalURL)
+	}
+
+	renderCtx.Logger.Info("Render completed",
+		zap.Int("status_code", statusCode),
 		zap.Int("html_size", len(renderResp.HTML)))
 
 	// Convert response to RenderServiceResult and save to cache
@@ -218,10 +256,10 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		stripScripts,
 		renderCtx.Host.ID,
 		rs.contentProcessor,
-		rs.logger,
+		renderCtx.Logger,
 	)
 	if processed.Override != nil {
-		return rs.saveOverrideToCache(ctx, renderCtx, processed, url, startTime, overrideParams{
+		return rs.saveOverrideToCache(ctx, renderCtx, processed, attempt.startTime, overrideParams{
 			cacheSource: cache.SourceRender,
 			cacheTTL:    renderCtx.ResolvedConfig.Cache.TTL,
 			expired:     renderCtx.ResolvedConfig.Cache.Expired,
@@ -234,14 +272,12 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 
 	renderResult.HTML = processed.HTML
 
-	totalDuration := time.Since(startTime)
+	totalDuration := time.Since(attempt.startTime)
 	if err := rs.saveToCache(ctx, renderCtx, renderResult, processed.PageSEO, processed.RuleIDs, processed.OriginalPageSEO, processed.Extraction, reservation.ServiceID, totalDuration); err != nil {
-		return fmt.Errorf("failed to save to cache: %w", err)
+		return err
 	}
 
-	rs.logger.Info("Recache completed successfully",
-		zap.String("url", url),
-		zap.Int("host_id", hostID),
+	renderCtx.Logger.Info("Recache completed successfully",
 		zap.Int("dimension_id", dimensionID))
 
 	return nil
@@ -261,12 +297,13 @@ func (rs *RecacheService) saveToCache(
 ) error {
 	// Save to cache using cache coordinator (handles sharding)
 	if err := rs.cacheCoord.SaveRenderCache(renderCtx, renderResult, pageSEO); err != nil {
-		return fmt.Errorf("failed to save cache: %w", err)
+		return retryableFailure(types.ErrorTypeCacheWriteFailed, renderResult.StatusCode,
+			fmt.Sprintf("failed to save cache: %v", err)).withCause(err)
 	}
 
 	// Clear last_bot_hit field (lifecycle completion)
 	if err := rs.metadataStore.ClearLastBotHit(ctx, renderCtx.CacheKey); err != nil {
-		rs.logger.Error("Failed to clear last_bot_hit",
+		renderCtx.Logger.Error("Failed to clear last_bot_hit",
 			zap.String("cache_key", renderCtx.CacheKey.String()),
 			zap.Error(err))
 		// Non-fatal error, continue
@@ -291,8 +328,7 @@ func (rs *RecacheService) saveToCache(
 		rs.eventEmitter.Emit(event)
 	}
 
-	rs.logger.Info("Recache saved to cache successfully",
-		zap.String("url", renderCtx.TargetURL),
+	renderCtx.Logger.Info("Recache saved to cache successfully",
 		zap.String("cache_key", renderCtx.CacheKey.String()),
 		zap.Int("html_size", len(renderResult.HTML)))
 
@@ -313,7 +349,6 @@ func (rs *RecacheService) saveOverrideToCache(
 	ctx context.Context,
 	renderCtx *edgectx.RenderContext,
 	processed *orchestrator.ProcessedContent,
-	url string,
 	startTime time.Time,
 	params overrideParams,
 ) error {
@@ -321,11 +356,12 @@ func (rs *RecacheService) saveOverrideToCache(
 		renderCtx, processed.Override,
 		params.cacheSource, params.cacheTTL, params.expired,
 	); err != nil {
-		return fmt.Errorf("failed to cache override: %w", err)
+		return retryableFailure(types.ErrorTypeCacheWriteFailed, processed.Override.StatusCode,
+			fmt.Sprintf("failed to cache override: %v", err)).withCause(err)
 	}
 
 	if err := rs.metadataStore.ClearLastBotHit(ctx, renderCtx.CacheKey); err != nil {
-		rs.logger.Error("Failed to clear last_bot_hit",
+		renderCtx.Logger.Error("Failed to clear last_bot_hit",
 			zap.String("cache_key", renderCtx.CacheKey.String()),
 			zap.Error(err))
 	}
@@ -350,8 +386,7 @@ func (rs *RecacheService) saveOverrideToCache(
 		rs.eventEmitter.Emit(event)
 	}
 
-	rs.logger.Info("Recache override cached",
-		zap.String("url", url),
+	renderCtx.Logger.Info("Recache override cached",
 		zap.Int("status_code", processed.Override.StatusCode),
 		zap.String("location", processed.Override.Location))
 
@@ -360,8 +395,7 @@ func (rs *RecacheService) saveOverrideToCache(
 
 // processBypassRecache fetches content from origin via bypass and saves to bypass cache
 func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, renderCtx *edgectx.RenderContext, startTime time.Time) error {
-	rs.logger.Info("Processing bypass recache request",
-		zap.String("url", url),
+	renderCtx.Logger.Info("Processing bypass recache request",
 		zap.String("cache_key", renderCtx.CacheKey.String()))
 
 	if !renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
@@ -374,16 +408,29 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 
 	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
-		return fmt.Errorf("bypass fetch failed: %w", err)
+		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
+			fmt.Sprintf("bypass fetch failed: %v", err)).withCause(err)
 	}
 
-	rs.logger.Info("Bypass fetch completed successfully",
-		zap.String("url", url),
+	// An unreachable origin comes back as a synthetic 502, not an error. Report the transport
+	// failure with no status code - the 502 was never sent by the origin.
+	if bypassResp.TransportError != "" {
+		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
+			fmt.Sprintf("origin unreachable: %s", bypassResp.TransportError))
+	}
+
+	renderCtx.Logger.Info("Bypass fetch completed",
 		zap.Int("status_code", bypassResp.StatusCode),
 		zap.Int("response_size", len(bypassResp.Body)))
 
-	if canSave, reason := rs.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); !canSave {
-		return fmt.Errorf("%w: bypass cache save rejected: %s", ErrRecacheSkipped, reason)
+	// Classification replaces CanSaveBypassCache here: its Enabled/TTL checks are already done
+	// above, and folding an uncacheable origin status into a skip is what hid origin outages.
+	if failure := rs.classifyStatus(bypassResp.StatusCode, renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes); failure != nil {
+		return failure.withRedirect(orchestrator.LocationHeaderValue(bypassResp.Headers))
+	}
+
+	if existing, exists := rs.cacheCoord.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {
+		return fmt.Errorf("%w: render cache already exists", ErrRecacheSkipped)
 	}
 
 	// Only HTML responses are content-processed, mirroring the live bypass serve path
@@ -393,12 +440,12 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	if orchestrator.IsHTMLContentTypeValue(bypassResp.ContentType) {
 		processed = orchestrator.ProcessContent(
 			ctx, bypassResp.Body, bypassResp.StatusCode, bypassResp.Headers, url,
-			false, renderCtx.Host.ID, rs.contentProcessor, rs.logger,
+			false, renderCtx.Host.ID, rs.contentProcessor, renderCtx.Logger,
 		)
 	}
 
 	if processed != nil && processed.Override != nil {
-		return rs.saveOverrideToCache(ctx, renderCtx, processed, url, startTime, overrideParams{
+		return rs.saveOverrideToCache(ctx, renderCtx, processed, startTime, overrideParams{
 			cacheSource: cache.SourceBypass,
 			cacheTTL:    renderCtx.ResolvedConfig.Bypass.Cache.TTL,
 			expired:     renderCtx.ResolvedConfig.Bypass.Cache.Expired,
@@ -415,12 +462,13 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	}
 
 	if err := rs.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
-		return fmt.Errorf("failed to save bypass cache: %w", err)
+		return retryableFailure(types.ErrorTypeCacheWriteFailed, bypassResp.StatusCode,
+			fmt.Sprintf("failed to save bypass cache: %v", err)).withCause(err)
 	}
 
 	// Clear last_bot_hit field (lifecycle completion)
 	if err := rs.metadataStore.ClearLastBotHit(ctx, renderCtx.CacheKey); err != nil {
-		rs.logger.Error("Failed to clear last_bot_hit",
+		renderCtx.Logger.Error("Failed to clear last_bot_hit",
 			zap.String("cache_key", renderCtx.CacheKey.String()),
 			zap.Error(err))
 	}
@@ -445,8 +493,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		rs.eventEmitter.Emit(event)
 	}
 
-	rs.logger.Info("Bypass recache completed successfully",
-		zap.String("url", url),
+	renderCtx.Logger.Info("Bypass recache completed successfully",
 		zap.String("cache_key", renderCtx.CacheKey.String()))
 
 	return nil
@@ -491,8 +538,15 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 		Dimension:   dimensionName,
 		CacheKey:    cacheKey,
 		RequestID:   requestID,
-		Logger:      rs.logger,
-		IsPrecache:  true,
+		// Scoped so every downstream line (fetch, content processing, cache write) is
+		// attributable to a precache attempt instead of looking like live traffic.
+		Logger: rs.logger.With(
+			zap.String("request_id", requestID),
+			zap.Int("host_id", host.ID),
+			zap.String("url", url),
+			zap.Bool("precache", true),
+		),
+		IsPrecache: true,
 	}
 
 	// Resolve config for TTL and other cache settings
@@ -512,21 +566,25 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 	return renderCtx, nil
 }
 
-// buildRenderResult converts render response to RenderServiceResult
+// buildRenderResult converts render response to RenderServiceResult.
+// Field-for-field mirror of the live path (render_orchestrator.performActualRenderWithTab) so
+// cached metadata and emitted events carry the same values whichever path produced them.
 func (rs *RecacheService) buildRenderResult(renderResp *types.RenderResponse) *orchestrator.RenderServiceResult {
 	return &orchestrator.RenderServiceResult{
 		HTML:             []byte(renderResp.HTML),
 		StatusCode:       renderResp.Metrics.StatusCode,
-		RedirectLocation: "",
+		RedirectLocation: renderResp.Metrics.FinalURL,
 		RenderTime:       renderResp.RenderTime,
-		ChromeID:         "recache",
+		ChromeID:         renderResp.ChromeID,
 		Metrics:          renderResp.Metrics,
 		Headers:          renderResp.Headers,
+		ErrorType:        renderResp.ErrorType,
+		ErrorMessage:     renderResp.Error,
 	}
 }
 
 // selectServiceAndReserveTab atomically selects a healthy render service and reserves an available tab
-func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, requestID string) (*registry.TabReservation, error) {
+func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, requestID string, logger *zap.Logger) (*registry.TabReservation, error) {
 	redisCtx, cancel := context.WithTimeout(context.Background(), redisTabOperationTimeout)
 	defer cancel()
 
@@ -537,14 +595,14 @@ func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, reques
 	if err != nil {
 		// Saturation and an empty registry are expected states, not faults
 		if errors.Is(err, registry.ErrNoServices) || errors.Is(err, registry.ErrNoCapacity) {
-			rs.logger.Warn("Service selection failed", zap.Error(err))
+			logger.Warn("Service selection failed", zap.Error(err))
 		} else {
-			rs.logger.Error("Service selection failed", zap.Error(err))
+			logger.Error("Service selection failed", zap.Error(err))
 		}
 		return nil, err
 	}
 
-	rs.logger.Debug("Selected service and reserved tab",
+	logger.Debug("Selected service and reserved tab",
 		zap.String("service_id", reservation.ServiceID),
 		zap.Int("tab_id", reservation.TabID),
 		zap.String("address", reservation.Address),
@@ -554,20 +612,20 @@ func (rs *RecacheService) selectServiceAndReserveTab(ctx context.Context, reques
 }
 
 // releaseTabReservation clears the reserved tab in Redis
-func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation *registry.TabReservation) {
+func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation *registry.TabReservation, logger *zap.Logger) {
 	if reservation == nil {
 		return
 	}
 
 	if err := rs.tabSelector.Release(ctx, reservation); err != nil {
-		rs.logger.Error("Failed to release tab reservation",
+		logger.Error("Failed to release tab reservation",
 			zap.String("service_id", reservation.ServiceID),
 			zap.Int("tab_id", reservation.TabID),
 			zap.Error(err))
 		return
 	}
 
-	rs.logger.Debug("Released tab reservation",
+	logger.Debug("Released tab reservation",
 		zap.String("service_id", reservation.ServiceID),
 		zap.Int("tab_id", reservation.TabID))
 }

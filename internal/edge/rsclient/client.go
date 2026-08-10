@@ -15,6 +15,33 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// ServiceError reports a non-200 answer from the render service. The render service encodes its
+// structured error type in the body (pool_unavailable and chrome_crash on 503, hard_timeout on
+// 504), so callers that classify failures must be able to read it instead of parsing the message.
+type ServiceError struct {
+	HTTPStatus int
+	// ErrorType is the render service's types.ErrorType* value, empty when the body carried none.
+	ErrorType string
+	Body      string
+}
+
+func (e *ServiceError) Error() string {
+	return fmt.Sprintf("render service returned status %d: %s", e.HTTPStatus, e.Body)
+}
+
+// newServiceError decodes the structured error type out of a non-200 body, best effort: bodies
+// that are not a render response (proxy errors, empty bodies) simply leave ErrorType empty.
+func newServiceError(httpStatus int, body []byte) *ServiceError {
+	svcErr := &ServiceError{HTTPStatus: httpStatus, Body: string(body)}
+
+	var resp types.RenderResponse
+	if err := json.Unmarshal(body, &resp); err == nil {
+		svcErr.ErrorType = resp.ErrorType
+	}
+
+	return svcErr
+}
+
 // RSClient wraps HTTP client for communicating with render services
 type RSClient struct {
 	httpClient *http.Client
@@ -114,7 +141,7 @@ func (rc *RSClient) CallRenderService(
 			zap.String("request_id", request.RequestID),
 			zap.Int("status_code", httpResp.StatusCode),
 			zap.String("response", string(respBody)))
-		return nil, fmt.Errorf("render service returned status %d: %s", httpResp.StatusCode, string(respBody))
+		return nil, newServiceError(httpResp.StatusCode, respBody)
 	}
 
 	// Check content type to determine response format

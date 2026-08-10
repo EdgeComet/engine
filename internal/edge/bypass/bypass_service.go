@@ -29,6 +29,11 @@ type BypassResponse struct {
 	Body        []byte
 	ContentType string
 	Headers     map[string][]string
+	// TransportError is set only when the origin was never reached and StatusCode/Body are the
+	// synthetic 502 below. Consumers that must not confuse "origin unreachable" with "origin
+	// said 502" (recache classification) check it; the serving path ignores it and keeps
+	// returning the synthetic 502 to bots.
+	TransportError string
 }
 
 // BypassService handles direct HTTP proxying when render services are unavailable
@@ -110,10 +115,11 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 			zap.Error(err))
 
 		return &BypassResponse{
-			StatusCode:  502,
-			Body:        []byte("Bad Gateway: Origin unreachable"),
-			ContentType: "text/plain; charset=utf-8",
-			Headers:     make(map[string][]string),
+			StatusCode:     502,
+			Body:           []byte("Bad Gateway: Origin unreachable"),
+			ContentType:    "text/plain; charset=utf-8",
+			Headers:        make(map[string][]string),
+			TransportError: err.Error(),
 		}, nil
 	}
 

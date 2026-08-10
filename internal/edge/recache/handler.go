@@ -9,6 +9,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/edge/internal_server"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 // RecacheRequest represents a request to recache a URL
@@ -19,19 +20,15 @@ type RecacheRequest struct {
 	Mode        string `json:"mode,omitempty"` // Optional action override: render | bypass (empty = respect config)
 }
 
-// RecacheResponse represents the response from a recache request
-type RecacheResponse struct {
-	Success   bool   `json:"success"`
-	Message   string `json:"message,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-}
-
 // RegisterEndpoints registers the recache handler with the internal server
 func (rs *RecacheService) RegisterEndpoints(server *internal_server.InternalServer) {
 	server.RegisterHandler("POST", internal_server.PathCacheRecache, rs.handleRecache)
 }
 
-// handleRecache processes recache requests from the cache daemon
+// handleRecache processes recache requests from the cache daemon.
+// The response is the daemon's retry instruction: 200 for a terminal-ok outcome (cached, or
+// declined by configuration), 422 for a failure no retry can resolve, 500 for one worth another
+// attempt. data.outcome names the outcome so the daemon never has to parse an error string.
 func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 	var req RecacheRequest
 	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
@@ -49,6 +46,8 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Logged before dispatch so a request rejected before its render context exists (unknown
+	// host, unknown dimension, SSRF, domain mismatch) still leaves a record of the attempt.
 	rs.logger.Info("Processing recache request",
 		zap.String("url", req.URL),
 		zap.Int("host_id", req.HostID),
@@ -61,12 +60,14 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 				zap.Int("host_id", req.HostID),
 				zap.Int("dimension_id", req.DimensionID),
 				zap.Error(err))
-			httputil.JSONSuccess(ctx, err.Error(), fasthttp.StatusOK)
+			httputil.JSONData(ctx, types.RecacheOutcomeData{
+				Outcome: types.RecacheOutcomeSkipped,
+				Reason:  err.Error(),
+			}, fasthttp.StatusOK)
 			return
 		}
 
-		rs.logger.Error("Recache request failed", zap.Error(err))
-		httputil.JSONError(ctx, err.Error(), fasthttp.StatusInternalServerError)
+		rs.respondRecacheFailure(ctx, req, err)
 		return
 	}
 
@@ -75,5 +76,42 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		zap.Int("host_id", req.HostID),
 		zap.Int("dimension_id", req.DimensionID))
 
-	httputil.JSONSuccess(ctx, "", fasthttp.StatusOK)
+	httputil.JSONData(ctx, types.RecacheOutcomeData{Outcome: types.RecacheOutcomeCached}, fasthttp.StatusOK)
+}
+
+// respondRecacheFailure answers a failed recache with its retry instruction and logs it at the
+// level its class earns: origin and capacity failures burst and are not ours to fix, so only
+// edge-gateway-side faults reach error tracking.
+func (rs *RecacheService) respondRecacheFailure(ctx *fasthttp.RequestCtx, req RecacheRequest, err error) {
+	// Non-nil and not a configuration decline - the caller already checked - so a classification
+	// always exists here.
+	failure := classifiedFailure(err)
+
+	fields := []zap.Field{
+		zap.String("url", req.URL),
+		zap.Int("host_id", req.HostID),
+		zap.Int("dimension_id", req.DimensionID),
+		zap.String("error_type", failure.errorType),
+		zap.Int("status_code", failure.statusCode),
+		zap.Bool("permanent", failure.permanent),
+		zap.Error(err),
+	}
+	if failure.logAtError() {
+		rs.logger.Error("Recache request failed", fields...)
+	} else {
+		rs.logger.Warn("Recache request failed", fields...)
+	}
+
+	statusCode := fasthttp.StatusInternalServerError
+	if failure.permanent {
+		statusCode = fasthttp.StatusUnprocessableEntity
+	}
+
+	// JSONData is not usable here: it hardcodes success:true, which would contradict the
+	// failed outcome it carries.
+	httputil.JSONResponse(ctx, false, failure.Error(), types.RecacheOutcomeData{
+		Outcome:   types.RecacheOutcomeFailed,
+		ErrorType: failure.errorType,
+		Permanent: failure.permanent,
+	}, statusCode)
 }

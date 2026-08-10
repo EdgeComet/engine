@@ -27,6 +27,18 @@ const headerSetCookie = "set-cookie"
 
 const headerContentType = "Content-Type"
 
+const headerLocation = "Location"
+
+// LocationHeaderValue returns the Location header value, matched case-insensitively per RFC 7230,
+// or an empty string when the header is absent. Callers gate on the status code themselves: the
+// recache path records the target of an uncacheable redirect, the serving path only 301/302/307/308.
+func LocationHeaderValue(headers map[string][]string) string {
+	if locations, ok := getHeaderCaseInsensitive(headers, headerLocation); ok && len(locations) > 0 {
+		return locations[0]
+	}
+	return ""
+}
+
 // isRedirectStatusCode checks if the status code is a redirect (3xx)
 func isRedirectStatusCode(statusCode int) bool {
 	return statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308

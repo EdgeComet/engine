@@ -74,4 +74,24 @@ func TestFetchContentLargeResponseHeaders(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "rendered body", string(resp.Body))
 	assert.Equal(t, largeCSP, resp.Headers["Content-Security-Policy"][0])
+	assert.Empty(t, resp.TransportError, "a real origin response must not be marked as a transport failure")
+}
+
+// An unreachable origin is answered with a synthetic 502 so bots still get a response. The
+// marker is what lets a caller tell that apart from an origin that genuinely said 502; the
+// served status, body and content type must not change.
+func TestFetchContentMarksTransportFailure(t *testing.T) {
+	svc := NewBypassService(&config.GlobalBypassConfig{
+		UserAgent: "EdgeCometTest/1.0",
+	}, zap.NewNop())
+
+	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
+	// without depending on network reachability.
+	resp, err := svc.FetchContent("http://127.0.0.1:1/page", nil, "", zap.NewNop())
+
+	require.NoError(t, err, "FetchContent reports transport failures through the response, not an error")
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	assert.Equal(t, "Bad Gateway: Origin unreachable", string(resp.Body))
+	assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType)
+	assert.NotEmpty(t, resp.TransportError)
 }

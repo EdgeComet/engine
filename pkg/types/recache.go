@@ -7,6 +7,27 @@ const (
 	RecacheModeBypass = "bypass" // force an origin fetch, store as bypass cache
 )
 
+// Recache outcome values for RecacheOutcomeData.Outcome, the machine-readable result of a
+// single-URL recache on the edge gateway's internal API.
+const (
+	RecacheOutcomeCached  = "cached"  // content was fetched or rendered and written to cache
+	RecacheOutcomeSkipped = "skipped" // the resolved configuration declines to cache this URL
+	RecacheOutcomeFailed  = "failed"  // the attempt failed; ErrorType names the class
+)
+
+// RecacheOutcomeData is the data payload of the edge gateway's single-URL recache response.
+// The HTTP status carries retryability (200 terminal-ok, 422 permanent failure, 5xx worth
+// retrying) and this payload names the outcome, so the cache daemon decides from a field
+// instead of parsing an error string.
+type RecacheOutcomeData struct {
+	Outcome   string `json:"outcome"`
+	Reason    string `json:"reason,omitempty"`     // skipped: which configuration decision declined
+	ErrorType string `json:"error_type,omitempty"` // failed: outcome taxonomy value
+	// Permanent is meaningful only for RecacheOutcomeFailed. It is always serialized: a
+	// retry instruction that can be absent is a retry instruction that gets misread.
+	Permanent bool `json:"permanent"`
+}
+
 // RecacheMember represents a ZSET member for recache queues
 type RecacheMember struct {
 	URL         string `json:"url"`            // Normalized URL

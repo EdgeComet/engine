@@ -132,6 +132,10 @@ const (
 	ErrorTypeChromeCrash         = "chrome_crash"
 	ErrorTypeChromeRestartFailed = "chrome_restart_failed"
 	ErrorTypePoolUnavailable     = "pool_unavailable"
+	// ErrorTypeRenderUnavailable is EG-side: no render service could be reached or reserved.
+	// Distinct from ErrorTypePoolUnavailable, which is the render service's own pool exhaustion.
+	ErrorTypeRenderUnavailable = "render_unavailable"
+	ErrorTypeCacheWriteFailed  = "cache_write_failed"
 )
 
 // Error type constants - Render errors
@@ -142,18 +146,31 @@ const (
 	ErrorTypeHTMLExtractionFailed = "html_extraction_failed"
 	ErrorTypeStatusCaptureFailed  = "status_capture_failed"
 	ErrorTypeInvalidURL           = "invalid_url"
+	ErrorTypeInvalidRequest       = "invalid_request"
 )
 
 // Error type constants - Origin errors
 const (
 	ErrorTypeOrigin4xx = "origin_4xx"
 	ErrorTypeOrigin5xx = "origin_5xx"
+	// ErrorTypeOriginRedirect and ErrorTypeOriginUncacheable cover origin statuses the
+	// resolved cache config rejects but that are neither 4xx nor 5xx.
+	ErrorTypeOriginRedirect    = "origin_redirect"
+	ErrorTypeOriginUncacheable = "origin_uncacheable"
 )
 
 // Error type constants - Content errors
 const (
 	ErrorTypeEmptyResponse    = "empty_response"
 	ErrorTypeResponseTooLarge = "response_too_large"
+)
+
+// Error type constants - Fallback
+const (
+	// ErrorTypeUnknown labels a failure whose reporter supplied no error type. An empty
+	// error_type means success on emitted events, so a failure must never carry one, and it
+	// must not borrow a specific diagnosis nobody made.
+	ErrorTypeUnknown = "unknown"
 )
 
 // RenderResponse represents a render result (unified for RS→EG and Chrome→RS)

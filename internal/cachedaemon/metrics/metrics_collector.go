@@ -19,12 +19,13 @@ func NewMetricsCollector(namespace string, logger *zap.Logger) *MetricsCollector
 	}
 }
 
-func (mc *MetricsCollector) RecordRecacheRequest(status, queueType string) {
-	mc.prometheus.RecordRecacheRequest(status, queueType)
+func (mc *MetricsCollector) RecordRecacheRequest(status, queueType string, hostID int) {
+	mc.prometheus.RecordRecacheRequest(status, queueType, hostID)
 
 	mc.logger.Debug("Recorded recache request metric",
 		zap.String("status", status),
-		zap.String("queue_type", queueType))
+		zap.String("queue_type", queueType),
+		zap.Int("host_id", hostID))
 }
 
 func (mc *MetricsCollector) SetQueueDepth(queueType string, depth int) {
