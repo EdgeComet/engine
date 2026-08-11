@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Inner Scroller Lazy Content</title>
+    <style>
+        html, body { margin: 0; font-family: sans-serif; }
+        /* The document overflows the viewport slightly, so priority-ordered detection would
+           pick the document and scroll nothing useful. The real content is in the panel. */
+        .page-tail { height: 1200px; }
+        #panel { height: 600px; overflow-y: auto; border: 1px solid #ccc; }
+        .panel-spacer { height: 4000px; background: #f0f0f0; }
+        .sentinel { height: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Inner Scroller</h1>
+    <p id="above-fold">ABOVE_FOLD_CONTENT</p>
+
+    <div id="panel">
+        <div class="panel-spacer">Filler inside the panel</div>
+        <div class="sentinel" id="sentinel"></div>
+        <div id="lazy-target"></div>
+    </div>
+
+    <div class="page-tail">Document tail, taller than the viewport but far shorter than the panel</div>
+
+    <script>
+        var mounted = false;
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting || mounted) {
+                    return;
+                }
+                mounted = true;
+                observer.disconnect();
+
+                fetch('/api/mock-data?delay=300')
+                    .then(function (response) { return response.json(); })
+                    .then(function () {
+                        var section = document.createElement('div');
+                        section.id = 'lazy-section';
+                        section.textContent = 'LAZY_SECTION_LOADED';
+                        document.getElementById('lazy-target').appendChild(section);
+                    });
+            });
+        });
+
+        observer.observe(document.getElementById('sentinel'));
+    </script>
+</body>
+</html>

@@ -42,6 +42,8 @@ chrome:
   render:
     max_timeout: 50s                  # Hard limit that cancels stuck renders
                                       # Server timeout = max_timeout + 10s
+                                      # Must exceed host render.timeout + 12s for
+                                      # hosts with render.scroll.enabled
 
 # Logging
 log:

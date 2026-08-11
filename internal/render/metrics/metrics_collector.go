@@ -59,6 +59,16 @@ func (mc *MetricsCollector) RecordRenderDuration(seconds float64) {
 	mc.prometheus.RecordRenderDuration(seconds)
 }
 
+// RecordScrollDuration records the duration of a scroll pass in seconds
+func (mc *MetricsCollector) RecordScrollDuration(seconds float64) {
+	mc.prometheus.RecordScrollDuration(seconds)
+}
+
+// RecordScrollNoScroller records a render where scroll was requested but nothing was scrollable
+func (mc *MetricsCollector) RecordScrollNoScroller() {
+	mc.prometheus.RecordScrollNoScroller()
+}
+
 // UpdateQueueDepth updates the current queue depth
 func (mc *MetricsCollector) UpdateQueueDepth(depth int) {
 	mc.prometheus.UpdateQueueDepth(float64(depth))

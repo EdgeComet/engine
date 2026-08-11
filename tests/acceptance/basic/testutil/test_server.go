@@ -25,6 +25,16 @@ const (
 	DatesTestTitle             = "Date Capture Test Page"
 )
 
+// Scroll fixtures. The same files answer on every prefix; only the host URL rules differ, so a
+// spec can compare one page captured with the pass off, with it on, and with caching enabled.
+const (
+	ScrollPathPrefix        = "/scroll/"
+	ScrollEnabledPathPrefix = "/scroll-on/"
+	ScrollCachedPathPrefix  = "/scroll-cache/"
+
+	scrollFixtureDir = "scroll"
+)
+
 // Body-text fingerprint fixtures. Exported names are the URL segments the specs request.
 const (
 	ContentChangeRenderPath = "/content-change/render/"
@@ -1144,6 +1154,14 @@ startxref
 		// Try to serve from file system
 		fileHandler.ServeHTTP(w, r)
 	}))
+
+	// The scroll fixtures are reachable under further prefixes that the host config maps to a
+	// scroll-enabled URL rule, so the identical page can be captured with the pass on and off,
+	// and once more through a rule that caches the result.
+	for _, prefix := range []string{ScrollEnabledPathPrefix, ScrollCachedPathPrefix} {
+		mux.Handle(prefix,
+			http.StripPrefix(prefix, http.FileServer(http.Dir(filepath.Join(fixturesDir, scrollFixtureDir)))))
+	}
 
 	registerRenderKeyRoutes(mux, ts.thirdPartyBaseURL)
 

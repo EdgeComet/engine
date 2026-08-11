@@ -162,6 +162,8 @@ func HandleRender(ctx *fasthttp.RequestCtx, pool *chrome.ChromePool, tabManager 
 		req.Timeout = time.Duration(renderConfig.MaxTimeout)
 	}
 
+	warnOnScrollBudgetShortfall(&req, time.Duration(renderConfig.MaxTimeout), logger)
+
 	// Validate tab reservation and extend TTL
 	if req.TabID < 0 || req.TabID >= tabManager.GetPoolSize() {
 		errorMsg := fmt.Sprintf("Invalid tab_id: %d (pool size: %d)", req.TabID, tabManager.GetPoolSize())
@@ -253,6 +255,17 @@ func HandleRender(ctx *fasthttp.RequestCtx, pool *chrome.ChromePool, tabManager 
 			zap.String("url", req.URL),
 			zap.Error(renderErr))
 		return
+	}
+
+	if renderResp.Metrics.ScrollEnabled {
+		if renderResp.Metrics.ScrollPerformed {
+			metricsCollector.RecordScrollDuration(renderResp.Metrics.ScrollDuration)
+		}
+		// Only detection reporting nothing scrollable counts here. A failed step or a pass that
+		// never started must not read as the heuristic breaking on a new site.
+		if renderResp.Metrics.ScrollNoTarget {
+			metricsCollector.RecordScrollNoScroller()
+		}
 	}
 
 	// Success (may have timed out but still returned HTML)

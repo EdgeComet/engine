@@ -1384,6 +1384,16 @@ func (ro *RenderOrchestrator) serveStaleBypassCache(
 	return nil, fmt.Errorf("stale bypass cache unavailable: %w", err)
 }
 
+// resolveRenderConfig resolves render configuration for a URL the same way the live render path
+// does, so HAR debug and preview honour URL-rule-level overrides instead of host defaults only.
+func (ro *RenderOrchestrator) resolveRenderConfig(targetURL string, host *types.Host) *config.ResolvedRenderConfig {
+	globalConfig := ro.configManager.GetConfig()
+	resolver := config.NewConfigResolver(&globalConfig.Render, &globalConfig.Bypass, globalConfig.TrackingParams,
+		globalConfig.CacheSharding, globalConfig.BothitRecache, globalConfig.Headers, globalConfig.Storage.Compression, host)
+
+	return resolver.ResolveRenderForURL(targetURL)
+}
+
 // RenderWithHAR performs a render request with HAR capture enabled
 // This is used by the debug HAR render endpoint
 func (ro *RenderOrchestrator) RenderWithHAR(ctx context.Context, req *types.RenderRequest, host *types.Host, dimensionConfig *types.Dimension) (*types.RenderResponse, error) {
@@ -1405,12 +1415,14 @@ func (ro *RenderOrchestrator) RenderWithHAR(ctx context.Context, req *types.Rend
 	// Build complete render request
 	req.TabID = reservation.TabID
 	req.IncludeHAR = true
-	req.WaitFor = host.Render.Events.WaitFor
-	if host.Render.Events.AdditionalWait != nil {
-		req.ExtraWait = time.Duration(*host.Render.Events.AdditionalWait)
+
+	// The caller owns the timeout: both callers size their own context around the value they
+	// passed, so a resolved timeout that is larger would simply be cut off by that deadline.
+	callerTimeout := req.Timeout
+	applyRenderConfig(req, ro.resolveRenderConfig(req.URL, host))
+	if callerTimeout > 0 {
+		req.Timeout = callerTimeout
 	}
-	req.BlockedPatterns = host.Render.BlockedPatterns
-	req.BlockedResourceTypes = host.Render.BlockedResourceTypes
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)

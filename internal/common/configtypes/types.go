@@ -90,6 +90,7 @@ type GlobalRenderConfig struct {
 	BlockedResourceTypes []string                `yaml:"blocked_resource_types,omitempty"`
 	BlockedPatterns      []string                `yaml:"blocked_patterns,omitempty"`
 	StripScripts         *bool                   `yaml:"strip_scripts,omitempty"`
+	Scroll               *types.RenderScroll     `yaml:"scroll,omitempty"`
 }
 
 type GlobalBypassConfig struct {

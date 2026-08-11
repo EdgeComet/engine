@@ -170,6 +170,21 @@ render:
     - "*.hotjar.com/*"
     - "~.*\\.(png|jpg|jpeg|gif|webp|svg|ico)$"
 
+  # -------------------------------------------------------------------------
+  # SCROLL
+  # -------------------------------------------------------------------------
+  # Scroll the page to the bottom before capturing HTML, so sections a site
+  # loads on scroll (IntersectionObserver, scroll listeners) end up in the cache.
+  # Waiting longer does not help there: that content is gated on a scroll event,
+  # not on elapsed time.
+  # Default: false
+  # Enable it per host, and only for hosts that need it: the pass costs seconds
+  # of render time on every render, even on a page with nothing to lazy-load.
+  # Keep render.timeout plus 12s below the render service's chrome.render.max_timeout,
+  # since the scroll spends that wall clock inside the same hard timeout.
+  scroll:
+    enabled: false
+
 # =============================================================================
 # GLOBAL BYPASS CONFIGURATION
 # =============================================================================

@@ -22,6 +22,11 @@ import (
 const (
 	tabPollingInterval = 500 * time.Millisecond
 	tabMaxWaitTime     = 10 * time.Second
+
+	// harRenderGrace covers the work the render service does after the lifecycle wait expires -
+	// the configured extra wait and HTML capture - so this client-side deadline does not cut a
+	// render short and turn a slow page into a 502.
+	harRenderGrace = 5 * time.Second
 )
 
 // HARRenderOrchestrator defines the interface for render orchestration
@@ -127,8 +132,10 @@ func (h *HARRenderHandler) handleHARRender(ctx *fasthttp.RequestCtx) {
 		zap.Int("viewport_height", req.ViewportHeight),
 		zap.Duration("timeout", req.Timeout))
 
-	// Create timeout context for render operation
-	renderCtx, cancel := context.WithTimeout(context.Background(), timeout+5*time.Second)
+	// The scroll budget is added unconditionally: whether the URL resolves to a scroll-enabled
+	// rule is decided by the orchestrator, and waiting longer only matters on a render that is
+	// already running long.
+	renderCtx, cancel := context.WithTimeout(context.Background(), timeout+harRenderGrace+types.ScrollMaxDuration)
 	defer cancel()
 
 	// Call render service through orchestrator

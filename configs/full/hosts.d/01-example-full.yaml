@@ -67,6 +67,12 @@ hosts:
         - "*.google-analytics.com/*"
         - "*.googletagmanager.com/*"
 
+      # Scroll to the bottom before capturing HTML (default: false)
+      # Enable only when the site loads content on scroll; the pass costs seconds
+      # of render time on every render.
+      scroll:
+        enabled: false
+
     # -------------------------------------------------------------------------
     # DIMENSIONS (REPLACES global dimensions entirely)
     # -------------------------------------------------------------------------

@@ -200,6 +200,12 @@ render:
   # Default: true
   strip_scripts: true
 
+  # Scroll to the bottom before capturing HTML, for sites that load content on scroll
+  # Costs seconds of render time per render - enable per host, not globally
+  # Default: false
+  scroll:
+    enabled: false
+
 # Behavior for unmatched User-Agent
 # Options: "bypass", "block", or dimension name
 # Default: "bypass"
@@ -528,6 +534,10 @@ hosts:
 
       # Override script stripping
       strip_scripts: true
+
+      # Override scroll-before-capture
+      scroll:
+        enabled: true
 
     bypass:
       timeout: 15s

@@ -226,6 +226,7 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 	resp.Metrics.Timeout = req.Timeout.Seconds()
 	resp.Metrics.ViewportWidth = req.ViewportWidth
 	resp.Metrics.ViewportHeight = req.ViewportHeight
+	resp.Metrics.ScrollEnabled = req.Scroll
 
 	return resp, nil
 }
@@ -564,6 +565,11 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 
 		chromedp.WaitReady("body", chromedp.ByQuery),
 		chromedp.WaitVisible("body", chromedp.ByQuery),
+
+		// Runs regardless of a soft timeout, unlike the extra wait in navigateAndWait: the hosts
+		// that need scrolling are the ones whose lifecycle event never fires, so gating this on
+		// TimedOut would skip it exactly where it is required.
+		ci.scrollIfRequested(req, &resp.Metrics),
 
 		ci.extractHTML(&resp.HTML),
 

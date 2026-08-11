@@ -23,7 +23,20 @@ type RenderConfig struct {
 	BlockedResourceTypes []string           `yaml:"blocked_resource_types,omitempty" json:"blocked_resource_types,omitempty"` // Resource types to block during rendering
 	BlockedPatterns      []string           `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // URL patterns to block (domains/paths)
 	StripScripts         *bool              `yaml:"strip_scripts,omitempty" json:"strip_scripts,omitempty"`
+	Scroll               *RenderScroll      `yaml:"scroll,omitempty" json:"scroll,omitempty"`
 }
+
+// RenderScroll controls whether the renderer scrolls the page to the bottom before capturing
+// HTML, so content gated on scroll events is present in the capture.
+type RenderScroll struct {
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// ScrollMaxDuration is the wall clock a scroll pass may add to a render on top of the request
+// timeout. It lives with the wire types because it is part of the contract of the scroll field:
+// the render service enforces it, and any caller sizing a deadline around a scroll-enabled
+// render request has to budget for it.
+const ScrollMaxDuration = 12 * time.Second
 
 // Dimension defines viewport configuration
 type Dimension struct {
@@ -114,6 +127,9 @@ type RenderRequest struct {
 	// Request blocking configuration
 	BlockedPatterns      []string `json:"blocked_patterns,omitempty"`       // URL patterns to block (domains/paths)
 	BlockedResourceTypes []string `json:"blocked_resource_types,omitempty"` // Resource types to block (Image, Media, Font, etc.)
+
+	// Scroll requests a scroll pass to the bottom of the page before HTML capture
+	Scroll bool `json:"scroll,omitempty"`
 
 	// HAR generation
 	IncludeHAR bool `json:"include_har,omitempty"` // Generate HAR data for debugging
@@ -253,6 +269,15 @@ type PageMetrics struct {
 	Timeout        float64 `json:"timeout,omitempty"`         // configured timeout (seconds)
 	ViewportWidth  int     `json:"viewport_width,omitempty"`  // viewport width
 	ViewportHeight int     `json:"viewport_height,omitempty"` // viewport height
+	ScrollEnabled  bool    `json:"scroll_enabled,omitempty"`  // scroll pass requested for this render
+
+	// Scroll pass outcome
+	ScrollPerformed   bool    `json:"scroll_performed,omitempty"`    // at least one scroll step ran
+	ScrollNoTarget    bool    `json:"scroll_no_target,omitempty"`    // detection found no scrollable element, as opposed to the pass failing or being cut short
+	ScrollTarget      string  `json:"scroll_target,omitempty"`       // element the scroll drove (scrollingElement, body, TAG.class)
+	ScrollSteps       int     `json:"scroll_steps,omitempty"`        // steps executed before settling or hitting a bound
+	ScrollDuration    float64 `json:"scroll_duration,omitempty"`     // wall time spent scrolling (seconds)
+	ScrollFinalHeight int     `json:"scroll_final_height,omitempty"` // scrollHeight of the target at the last step
 }
 
 // DomainStats contains per-domain network statistics.

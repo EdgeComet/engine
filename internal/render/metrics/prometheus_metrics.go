@@ -18,6 +18,10 @@ type PrometheusMetrics struct {
 	rendersTotal   *prometheus.CounterVec
 	renderDuration prometheus.Histogram
 
+	// Scroll metrics
+	scrollDuration   prometheus.Histogram
+	scrollNoScroller prometheus.Counter
+
 	// Queue metrics
 	queueDepth      prometheus.Gauge
 	queueRejections prometheus.Counter
@@ -74,6 +78,22 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 		Buckets:   prometheus.ExponentialBuckets(0.1, 2, 10), // 0.1s to ~100s
 	})
 
+	// Scroll metrics
+	pm.scrollDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Subsystem: "rs",
+		Name:      "scroll_duration_seconds",
+		Help:      "Time spent scrolling pages before HTML capture",
+		Buckets:   prometheus.ExponentialBuckets(0.25, 2, 7), // 0.25s to 16s
+	})
+
+	pm.scrollNoScroller = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "rs",
+		Name:      "scroll_no_scroller_total",
+		Help:      "Total renders where scroll was requested but no scrollable element was found",
+	})
+
 	// Queue metrics
 	pm.queueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -111,6 +131,8 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 		pm.chromeAvailable,
 		pm.rendersTotal,
 		pm.renderDuration,
+		pm.scrollDuration,
+		pm.scrollNoScroller,
 		pm.queueDepth,
 		pm.queueRejections,
 		pm.httpRequests,
@@ -146,6 +168,16 @@ func (pm *PrometheusMetrics) RecordRender(status string) {
 // RecordRenderDuration records render duration
 func (pm *PrometheusMetrics) RecordRenderDuration(seconds float64) {
 	pm.renderDuration.Observe(seconds)
+}
+
+// RecordScrollDuration records the duration of a scroll pass
+func (pm *PrometheusMetrics) RecordScrollDuration(seconds float64) {
+	pm.scrollDuration.Observe(seconds)
+}
+
+// RecordScrollNoScroller records a render where no scrollable element was found
+func (pm *PrometheusMetrics) RecordScrollNoScroller() {
+	pm.scrollNoScroller.Inc()
 }
 
 // UpdateQueueDepth updates the current queue depth

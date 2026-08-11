@@ -93,6 +93,8 @@ url_rules:
 ```
 :::
 
+**A URL pattern timeout does not apply to debug or preview renders.** The HAR debug endpoint renders with the host timeout, or with the explicit `timeout` parameter when one is given, and Edge SEO preview renders with the host timeout. Every other render setting a pattern carries - `wait_for`, `additional_wait`, blocked patterns, blocked resource types, `scroll.enabled` - is resolved for the URL exactly as a production render resolves it. So a pattern that raises the timeout for a slow section keeps rendering that section longer in production than a preview does, and the preview can capture an earlier stage of the page. Pass `timeout` explicitly on the debug endpoint to reproduce the pattern value.
+
 ## Hard timeout
 
 The hard timeout is a safety mechanism configured on the Render Service that forcefully cancels renders that exceed the maximum allowed time. Unlike the soft timeout (which captures partial content), the hard timeout completely aborts the render and returns a 504 Gateway Timeout error.
@@ -300,3 +302,65 @@ url_rules:
       strip_scripts: false  # Keep scripts for this path
 ```
 :::
+
+## Scroll to load lazy content
+
+Many sites mount sections only after the visitor scrolls, using an IntersectionObserver or a scroll listener. A renderer that never scrolls captures the page without those sections, and no amount of extra waiting recovers them: the content is gated on a scroll event, not on elapsed time. The symptom is a cached page that is missing a footer, a table, or a large part of the internal link graph, while the same page looks complete in a browser.
+
+### scroll.enabled
+
+Scrolls the page to the bottom before HTML capture, pausing between steps so lazily mounted sections have time to load, and returns to the top before capturing.
+
+- **Type**: boolean
+- **Default**: `false`
+- **Levels**: Global, Host, URL Pattern
+
+The renderer detects the real scroll container rather than assuming the document scrolls. Sites that set `html { overflow: hidden }` and scroll `body` or an inner element are common, and on those `window.scrollTo` does nothing at all.
+
+### Cost
+
+Scrolling adds seconds to every render of a matching URL:
+
+- roughly 1.6s on a page with nothing to load, since the pass confirms a stable page height before it stops
+- up to 12s on a page that keeps producing content, which is the point at which the pass gives up and captures what it has
+
+That is why it is off by default and why it belongs on the hosts that need it rather than globally. Two further consequences to expect on a scroll-enabled host:
+
+- cached HTML and cache files grow, sometimes substantially on feed-like pages
+- request counts, transferred bytes, and per-domain statistics rise, because scrolling triggers the requests the lazy sections make. Those numbers stop being comparable with hosts that do not scroll.
+
+### Timeout budget
+
+The scroll spends wall clock inside the Render Service hard timeout. Keep `chrome.render.max_timeout` above the host `render.timeout` plus 12s, otherwise a scrolling render can be cancelled outright and return 504 with no HTML. The Render Service logs a warning when it receives a request whose scroll budget does not fit.
+
+### Configuration example
+
+::: code-group
+```yaml [Global - edge-gateway.yaml]
+render:
+  scroll:
+    enabled: false  # Default
+```
+```yaml [Host - example.com.yaml]
+hosts:
+  - id: 1
+    render:
+      # Raise the render timeout together with the flag: the scroll runs after the
+      # lifecycle wait, and max_timeout has to cover both.
+      timeout: 25s
+      scroll:
+        enabled: true
+```
+```yaml [URL pattern]
+url_rules:
+  - match: "/catalog/*"
+    action: "render"
+    render:
+      scroll:
+        enabled: true  # Only the pages that lazy-load pay the cost
+```
+:::
+
+### When it does not help
+
+The pass reports that it found nothing to scroll, and the Render Service logs a warning naming the URL. That means either the page genuinely fits in the viewport, or the detection picked nothing on a layout it does not recognise. There is no automatic fallback; the warning is the signal to look at the page.

@@ -13,6 +13,8 @@ import (
 const (
 	defaultBypassTimeout = 30 * time.Second
 	defaultCacheTTL      = 1 * time.Hour
+	defaultStripScripts  = true
+	defaultScroll        = false
 )
 
 // ResolvedConfig contains fully resolved configuration for a specific URL
@@ -48,6 +50,7 @@ type ResolvedRenderConfig struct {
 	BlockedPatterns      []string // Merged global → host → pattern
 	BlockedResourceTypes []string // Merged global → host → pattern
 	StripScripts         bool     // Whether to strip executable scripts from rendered HTML
+	Scroll               bool     // Whether to scroll the page to the bottom before capturing HTML
 }
 
 // ResolvedBypassConfig contains resolved bypass configuration
@@ -189,6 +192,19 @@ func (r *ConfigResolver) ResolveForURL(targetURL string) *ResolvedConfig {
 	return resolved
 }
 
+// ResolveRenderForURL resolves only the render section for a URL, ignoring the matched rule's
+// action. Paths that render unconditionally - HAR debug and Edge SEO preview - still need render
+// configuration for a URL that a rule marks bypass or status, where ResolveForURL leaves the
+// render section empty because nothing would render it.
+func (r *ConfigResolver) ResolveRenderForURL(targetURL string) *ResolvedRenderConfig {
+	matchedRule, _ := r.matcher.FindMatchingRule(targetURL)
+
+	resolved := &ResolvedConfig{}
+	r.resolveRenderConfig(resolved, matchedRule)
+
+	return &resolved.Render
+}
+
 // formatRuleID generates a human-readable rule identifier
 func formatRuleID(index int, pattern string, rule *types.URLRule) string {
 	// Format: rule_<index>:<pattern>[?<query_condition>]
@@ -303,18 +319,45 @@ func (r *ConfigResolver) resolveRenderConfig(resolved *ResolvedConfig, matchedRu
 		}
 	}
 
-	// Resolve StripScripts (default: true - scripts stripped by default)
-	stripScripts := true
-	if r.globalRender != nil && r.globalRender.StripScripts != nil {
-		stripScripts = *r.globalRender.StripScripts
+	var globalStripScripts, globalScroll *bool
+	if r.globalRender != nil {
+		globalStripScripts = r.globalRender.StripScripts
+		globalScroll = scrollEnabled(r.globalRender.Scroll)
 	}
-	if r.host.Render.StripScripts != nil {
-		stripScripts = *r.host.Render.StripScripts
+
+	var ruleStripScripts, ruleScroll *bool
+	if matchedRule != nil && matchedRule.Render != nil {
+		ruleStripScripts = matchedRule.Render.StripScripts
+		ruleScroll = scrollEnabled(matchedRule.Render.Scroll)
 	}
-	if matchedRule != nil && matchedRule.Render != nil && matchedRule.Render.StripScripts != nil {
-		stripScripts = *matchedRule.Render.StripScripts
+
+	resolved.Render.StripScripts = resolveThreeLevelBool(globalStripScripts, r.host.Render.StripScripts, ruleStripScripts, defaultStripScripts)
+	resolved.Render.Scroll = resolveThreeLevelBool(globalScroll, scrollEnabled(r.host.Render.Scroll), ruleScroll, defaultScroll)
+}
+
+// resolveThreeLevelBool applies Global → Host → URL rule precedence to an optional boolean:
+// the most specific level that is set wins, def applies when none is.
+func resolveThreeLevelBool(global, host, rule *bool, def bool) bool {
+	value := def
+	if global != nil {
+		value = *global
 	}
-	resolved.Render.StripScripts = stripScripts
+	if host != nil {
+		value = *host
+	}
+	if rule != nil {
+		value = *rule
+	}
+	return value
+}
+
+// scrollEnabled unwraps an optional scroll section into its optional enabled flag,
+// so an absent section resolves exactly like an absent flag.
+func scrollEnabled(scroll *types.RenderScroll) *bool {
+	if scroll == nil {
+		return nil
+	}
+	return scroll.Enabled
 }
 
 // mergeRenderEvents performs deep merge of render events configuration

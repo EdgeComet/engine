@@ -760,3 +760,43 @@ hosts:
             wait_for: "networkIdle"
           cache:
             ttl: 0s
+
+      # --- SCROLL TESTS (for scroll_test.go) ---
+      # The scroll fixtures answer on both prefixes. /scroll/ renders with the default
+      # (no scroll) and /scroll-on/ renders the same file with the pass enabled, so a spec
+      # can compare the two captures. Caching is off so every spec renders.
+      - match: "/scroll-on/polling*"
+        action: "render"
+        render:
+          scroll:
+            enabled: true
+          # The fixture polls forever, so networkIdle never fires and the render always
+          # reaches its soft timeout. A short timeout keeps the spec quick and puts it on
+          # exactly the path where a scroll gated behind the timeout flag would be skipped.
+          timeout: 3s
+          cache:
+            ttl: 0s
+
+      - match: "/scroll-on/*"
+        action: "render"
+        render:
+          scroll:
+            enabled: true
+          cache:
+            ttl: 0s
+
+      - match: "/scroll/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 0s
+
+      # The one scroll rule that caches, so a spec can prove the entry written to the
+      # cache is the post-scroll HTML and that the next request serves it.
+      - match: "/scroll-cache/*"
+        action: "render"
+        render:
+          scroll:
+            enabled: true
+          cache:
+            ttl: 5m

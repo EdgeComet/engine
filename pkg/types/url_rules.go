@@ -88,6 +88,7 @@ type RenderRuleConfig struct {
 	BlockedPatterns      []string             `yaml:"blocked_patterns,omitempty" json:"blocked_patterns,omitempty"`             // Override blocked URL patterns
 	BlockedResourceTypes []string             `yaml:"blocked_resource_types,omitempty" json:"blocked_resource_types,omitempty"` // Override blocked resource types
 	StripScripts         *bool                `yaml:"strip_scripts,omitempty" json:"strip_scripts,omitempty"`
+	Scroll               *RenderScroll        `yaml:"scroll,omitempty" json:"scroll,omitempty"`
 }
 
 // BypassRuleConfig defines bypass overrides for URL patterns

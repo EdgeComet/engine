@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Nothing To Scroll</title>
+    <style>
+        html, body { margin: 0; font-family: sans-serif; }
+        .card { height: 120px; }
+    </style>
+</head>
+<body>
+    <h1>Nothing To Scroll</h1>
+    <!-- Well inside a 1080px viewport, and no element declares overflow-y auto or scroll,
+         so scroller detection has nothing to pick. -->
+    <div class="card">
+        <p id="page-body">SHORT_PAGE_CONTENT</p>
+    </div>
+
+    <script>
+        // Keeps the network busy briefly so networkIdle fires after the DOM edit, matching
+        // how every other fixture here reaches a settled page.
+        fetch('/api/mock-data?delay=200')
+            .then(function (response) { return response.json(); })
+            .then(function () {
+                var marker = document.createElement('div');
+                marker.id = 'ajax-marker';
+                marker.textContent = 'AJAX_CONTENT_LOADED';
+                document.body.appendChild(marker);
+            });
+    </script>
+</body>
+</html>
