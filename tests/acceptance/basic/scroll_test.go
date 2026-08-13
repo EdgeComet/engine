@@ -121,12 +121,36 @@ var _ = Describe("Scroll Before Capture", Serial, func() {
 		})
 	})
 
+	Context("when the page grows after the pass has started", func() {
+
+		// The production failure this loop was rewritten for. A navigation panel is fully
+		// populated at first paint while the main column is still empty, so at the moment the
+		// pass starts the panel is the tallest scrollable thing on the page. Choosing a target by
+		// size, once, hands the whole pass to that panel: the page itself never moves, and the
+		// section anchored to its bottom never mounts.
+		It("should follow the page rather than the element that was tallest at the start", func() {
+			By("Rendering a page whose main column arrives in bursts after the first scroll steps")
+			resp := testEnv.RequestRender(testutil.ScrollEnabledPathPrefix + "late-page-growth.html")
+
+			By("Verifying the render succeeded")
+			expectRendered(resp)
+			Expect(resp.Body).To(ContainSubstring(scrollAboveFoldMarker))
+
+			By("Verifying the late content reached the capture")
+			Expect(resp.Body).To(ContainSubstring("Late content link"))
+
+			By("Verifying the section below all of that growth reached the capture")
+			Expect(resp.Body).To(ContainSubstring(scrollLazyMarker))
+		})
+	})
+
 	Context("when the scrollable element is an inner container", func() {
 
-		// The document overflows the viewport a little while the panel overflows it hugely.
-		// Detection ranks by scrollable delta, so it picks the panel; priority ordering would
-		// pick the document and scroll nothing that matters.
-		It("should scroll the tallest scrollable element rather than the document", func() {
+		// The document overflows the viewport a little while the panel overflows it hugely. The
+		// page is walked first, and only once it has settled does the panel get the rest of the
+		// budget - after being scrolled back into view, since walking the page to its bottom
+		// pushes the panel off screen and a container scrolled off screen intersects nothing.
+		It("should scroll the inner container once the page itself is done", func() {
 			By("Rendering a page whose content lives in an inner scroller")
 			resp := testEnv.RequestRender(testutil.ScrollEnabledPathPrefix + "inner-scroller.html")
 
@@ -152,8 +176,8 @@ var _ = Describe("Scroll Before Capture", Serial, func() {
 			Expect(resp.Body).To(ContainSubstring(scrollAjaxMarker))
 
 			By("Verifying the pass gave up instead of looping to its budget")
-			// Detection reports that it found nothing on the first step and the loop stops
-			// there, so the render cannot have absorbed the whole scroll budget.
+			// Nothing is scrollable, so the loop retries a few times in case the page has simply
+			// not laid out yet and then stops well short of the whole scroll budget.
 			Expect(resp.Duration).To(BeNumerically("<", types.ScrollMaxDuration))
 		})
 	})

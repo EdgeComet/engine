@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Late Page Growth</title>
+    <style>
+        /* The shape that broke in production: the document does not scroll, body is the page
+           scroll container, and a navigation panel beside the main column is fully populated
+           from the first paint. */
+        html { overflow: hidden; height: 100%; margin: 0; }
+        body { overflow-y: auto; height: 100%; margin: 0; font-family: sans-serif; }
+        #shell { display: flex; align-items: flex-start; }
+        /* Taller than the page itself until the main column arrives, so any rule that picks the
+           element with the largest scrollable delta picks this one and then scrolls a sidebar
+           for the rest of the pass. */
+        #nav { width: 240px; height: 900px; overflow-y: auto; background: #eef; }
+        #nav .row { height: 30px; }
+        #main { flex: 1; }
+        .initial { height: 1400px; background: #fafafa; }
+        .block { height: 700px; background: #f6f6f6; border-bottom: 1px solid #ccc; }
+        .sentinel { height: 8px; }
+    </style>
+</head>
+<body>
+    <div id="shell">
+        <div id="nav"></div>
+        <div id="main">
+            <p id="above-fold">ABOVE_FOLD_CONTENT</p>
+            <div class="initial">Initial content: the page scrolls a little, the panel scrolls a lot</div>
+        </div>
+    </div>
+
+    <div class="sentinel" id="sentinel"></div>
+    <div id="lazy-target"></div>
+
+    <script>
+        // 100 rows: the panel is 3000px of content in a 900px box from the first paint.
+        var nav = document.getElementById('nav');
+        for (var i = 0; i < 100; i++) {
+            var row = document.createElement('div');
+            row.className = 'row';
+            row.textContent = 'nav ' + i;
+            nav.appendChild(row);
+        }
+
+        function addBlocks(count) {
+            var main = document.getElementById('main');
+            for (var i = 0; i < count; i++) {
+                var block = document.createElement('div');
+                block.className = 'block';
+                block.innerHTML = '<a href="/scroll/lazy-destination.html">Late content link</a>';
+                main.appendChild(block);
+            }
+        }
+
+        // A feed that never stops, so networkIdle never fires and the render always ends on its
+        // soft timeout - which is what puts the scroll pass on the page while it is still filling.
+        (function poll() {
+            fetch('/api/mock-data?delay=400')
+                .then(function (response) { return response.json(); })
+                .then(poll)
+                .catch(function () {});
+        })();
+
+        // The main column arrives in two bursts, both after the soft timeout has already handed
+        // over to the scroll pass, and spaced wider apart than the settle window. AJAX rather than
+        // setTimeout, so the network stays busy and the capture cannot beat the JavaScript.
+        fetch('/api/mock-data?delay=2500')
+            .then(function (response) { return response.json(); })
+            .then(function () {
+                addBlocks(4);
+                return fetch('/api/mock-data?delay=2000');
+            })
+            .then(function (response) { return response.json(); })
+            .then(function () {
+                addBlocks(4);
+            });
+
+        // Anchored below everything else, so it mounts only if the page itself was walked all the
+        // way to its bottom, after all of the growth above.
+        var mounted = false;
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting || mounted) {
+                    return;
+                }
+                mounted = true;
+                observer.disconnect();
+
+                fetch('/api/mock-data?delay=300')
+                    .then(function (response) { return response.json(); })
+                    .then(function () {
+                        var section = document.createElement('div');
+                        section.id = 'lazy-section';
+                        section.textContent = 'LAZY_SECTION_LOADED';
+                        document.getElementById('lazy-target').appendChild(section);
+                    });
+            });
+        });
+
+        observer.observe(document.getElementById('sentinel'));
+    </script>
+</body>
+</html>

@@ -69,6 +69,13 @@ func (mc *MetricsCollector) RecordScrollNoScroller() {
 	mc.prometheus.RecordScrollNoScroller()
 }
 
+// RecordScrollOutcome records how a scroll pass ended and whether it reached the bottom of the
+// page. Without the bottom signal a pass that ran out of budget halfway down is indistinguishable
+// from one that finished, since both report a duration and a target.
+func (mc *MetricsCollector) RecordScrollOutcome(stopReason string, reachedBottom bool) {
+	mc.prometheus.RecordScrollOutcome(stopReason, reachedBottom)
+}
+
 // UpdateQueueDepth updates the current queue depth
 func (mc *MetricsCollector) UpdateQueueDepth(depth int) {
 	mc.prometheus.UpdateQueueDepth(float64(depth))

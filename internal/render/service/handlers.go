@@ -260,6 +260,7 @@ func HandleRender(ctx *fasthttp.RequestCtx, pool *chrome.ChromePool, tabManager 
 	if renderResp.Metrics.ScrollEnabled {
 		if renderResp.Metrics.ScrollPerformed {
 			metricsCollector.RecordScrollDuration(renderResp.Metrics.ScrollDuration)
+			metricsCollector.RecordScrollOutcome(renderResp.Metrics.ScrollStopReason, renderResp.Metrics.ScrollReachedBottom)
 		}
 		// Only detection reporting nothing scrollable counts here. A failed step or a pass that
 		// never started must not read as the heuristic breaking on a new site.

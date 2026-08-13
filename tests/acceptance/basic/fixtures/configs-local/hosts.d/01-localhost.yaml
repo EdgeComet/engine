@@ -777,6 +777,18 @@ hosts:
           cache:
             ttl: 0s
 
+      - match: "/scroll-on/late-page-growth*"
+        action: "render"
+        render:
+          scroll:
+            enabled: true
+          # The fixture polls forever, so the render ends on its soft timeout. A short one starts
+          # the scroll pass while the page is still short and its navigation panel is still the
+          # tallest scrollable thing on it, which is the state the pass has to survive.
+          timeout: 2s
+          cache:
+            ttl: 0s
+
       - match: "/scroll-on/*"
         action: "render"
         render:

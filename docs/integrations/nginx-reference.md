@@ -193,6 +193,97 @@ proxy_send_timeout 10s;
 
 Set `proxy_read_timeout` higher than your EG `render.timeout` configuration.
 
+### Connection reuse
+
+Pooled connections to Edge Gateway need three things, and missing any one of them makes the change a silent no-op:
+
+```nginx
+upstream rendergw {
+    server 127.0.0.1:10070;
+
+    keepalive 8;
+}
+
+location @edge_render {
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    ...
+}
+```
+
+`keepalive` only works inside an `upstream` block. A bare `proxy_pass http://127.0.0.1:10070` cannot pool connections.
+
+Directive versions and defaults:
+
+| Directive | Context | Default | Available since |
+|-----------|---------|---------|-----------------|
+| `keepalive` | `upstream` | Enabled at 32 per worker since nginx 1.29.7, otherwise off | 1.1.4 |
+| `keepalive_timeout` | `upstream` | 60s | 1.15.3 |
+| `keepalive_requests` | `upstream` | 1000 (100 before 1.19.10) | 1.15.3 |
+| `keepalive_time` | `upstream` | 1h | 1.19.10 |
+| `proxy_http_version` | `location` | 1.1 since nginx 1.29.7, 1.0 before | 1.1.4 |
+
+On nginx 1.29.7 and later, HTTP/1.1 is the default, the `Connection` header is cleared automatically, and upstream keepalive is on by default. Setting all three explicitly stays correct on those versions and is required on older ones.
+
+`keepalive` counts idle connections cached per worker process, not concurrent requests. Crawler traffic is low-concurrency, so a small number covers bursts.
+
+Leave `keepalive_requests` at its default. Recycling a connection after 1000 requests is reasonable hygiene.
+
+#### Choosing keepalive_timeout
+
+nginx should always be the side that closes an idle connection. If the other end closes first, nginx can put a request onto a connection that is already being torn down; it retries idempotent requests, but the error and retry are avoidable.
+
+| Upstream | Value | Reason |
+|----------|-------|--------|
+| Edge Gateway directly | 60s default | EG sets its idle timeout from `server.timeout`, which is 120s in the sample config. |
+| HTTPS endpoint behind Cloudflare | `keepalive_timeout 300s;` | Cloudflare closes idle client connections at 400s and the limit is not configurable. |
+
+For HTTPS upstreams, add `proxy_ssl_server_name on;` (nginx 1.7.0+) so SNI is sent.
+
+### Origin failover
+
+`proxy_intercept_errors` combined with `error_page` sends crawlers to your origin when Edge Gateway fails:
+
+```nginx
+location / {
+    recursive_error_pages on;
+
+    error_page 418 = @edge_render;
+    if ($ec_should_render = 1) {
+        return 418;
+    }
+    ...
+}
+
+location @edge_render {
+    internal;
+    ...
+    proxy_intercept_errors on;
+    error_page 500 502 503 504 = @origin_fallback;
+    proxy_connect_timeout 3s;
+}
+
+location @origin_fallback {
+    internal;
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+}
+```
+
+`recursive_error_pages` is off by default and limits the configuration to a single `error_page` redirect per request. Routing crawlers to `@edge_render` already spends that one redirect, so without enabling it the failover redirect never fires and the crawler receives the gateway error. It has to be enabled in the location that issues the first redirect, `location /`, or inherited from the enclosing `server` block. Setting it inside `@edge_render` has no effect.
+
+Behavior by failure mode:
+
+| Situation | Result |
+|-----------|--------|
+| Edge Gateway unreachable | nginx generates 502 or 504, `error_page` fires, origin serves the page. |
+| Edge Gateway returns 5xx | `proxy_intercept_errors` captures the response and re-routes it to the origin. |
+| Edge Gateway returns 403, 404, 410, or a redirect | Passed to the crawler unchanged. Only listed codes are intercepted. |
+| Edge Gateway accepts but never responds | Fails over after `proxy_read_timeout`, since a shorter value would cut off legitimate long renders. |
+| Origin returns 5xx through bypass mode | Intercepted and refetched from the origin once, so the failing page costs one extra request. |
+
+Stock nginx cannot inspect a successful response and re-route based on missing `EC-*` headers, which would need njs or Lua. Status and timeout interception covers the outage modes that occur in practice.
+
 ### Logging Edge Gateway responses
 
 Add a custom log format to track rendering:
@@ -200,12 +291,15 @@ Add a custom log format to track rendering:
 ```nginx
 log_format rendering '$remote_addr [$time_local] "$request" $status '
                      'ua="$http_user_agent" '
+                     'connect=$upstream_connect_time '
                      'render_src=$upstream_http_ec_source '
                      'age=$upstream_http_ec_cache_age '
                      'req_id=$upstream_http_ec_request_id';
 
 access_log /var/log/nginx/rendering.log rendering;
 ```
+
+`$upstream_connect_time` reads `0.000` on a reused connection and shows the handshake cost otherwise, which makes it the direct check on whether connection reuse is working.
 
 ## Related documentation
 

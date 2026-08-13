@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"strconv"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp"
@@ -21,6 +23,7 @@ type PrometheusMetrics struct {
 	// Scroll metrics
 	scrollDuration   prometheus.Histogram
 	scrollNoScroller prometheus.Counter
+	scrollOutcomes   *prometheus.CounterVec
 
 	// Queue metrics
 	queueDepth      prometheus.Gauge
@@ -94,6 +97,13 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 		Help:      "Total renders where scroll was requested but no scrollable element was found",
 	})
 
+	pm.scrollOutcomes = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: "rs",
+		Name:      "scroll_outcomes_total",
+		Help:      "Total scroll passes by how they ended and whether the page bottom was reached",
+	}, []string{"stop_reason", "reached_bottom"}) // stop_reason: settled, duration, max_steps, no_target, cancelled, error
+
 	// Queue metrics
 	pm.queueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: namespace,
@@ -133,6 +143,7 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 		pm.renderDuration,
 		pm.scrollDuration,
 		pm.scrollNoScroller,
+		pm.scrollOutcomes,
 		pm.queueDepth,
 		pm.queueRejections,
 		pm.httpRequests,
@@ -173,6 +184,11 @@ func (pm *PrometheusMetrics) RecordRenderDuration(seconds float64) {
 // RecordScrollDuration records the duration of a scroll pass
 func (pm *PrometheusMetrics) RecordScrollDuration(seconds float64) {
 	pm.scrollDuration.Observe(seconds)
+}
+
+// RecordScrollOutcome records how a scroll pass ended and whether it reached the page bottom
+func (pm *PrometheusMetrics) RecordScrollOutcome(stopReason string, reachedBottom bool) {
+	pm.scrollOutcomes.WithLabelValues(stopReason, strconv.FormatBool(reachedBottom)).Inc()
 }
 
 // RecordScrollNoScroller records a render where no scrollable element was found

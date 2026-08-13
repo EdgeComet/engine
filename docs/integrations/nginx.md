@@ -98,6 +98,9 @@ Use the `$ec_should_render` variable from the map configuration to route crawler
 ```nginx [nginx/sites-enabled/example.com.conf]
 upstream rendergw {
     server 127.0.0.1:10070;
+
+    # Reuse connections instead of handshaking on every crawler request
+    keepalive 8;
 }
 
 # Map directives require http context (outside server block)
@@ -122,6 +125,11 @@ server {
 
         proxy_pass http://rendergw/render?url=$scheme://$host$request_uri;
 
+        # Connection reuse requires HTTP/1.1 and an empty Connection header.
+        # Both are defaults since nginx 1.29.7 and required before it.
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
         proxy_set_header X-Render-Key "your_render_key_here";
         proxy_set_header User-Agent $http_user_agent;
 
@@ -144,6 +152,74 @@ Replace:
 - `127.0.0.1:10070` with your Edge Gateway address.
 - `your_render_key_here` with your host's `render_key`.
 - `example.com` with your domain.
+
+## Connection reuse
+
+nginx pools connections to Edge Gateway only when the `upstream` block enables keepalive and the proxy speaks HTTP/1.1 with an empty `Connection` header. None of that is the default before nginx 1.29.7, so on those versions every crawler request opens a new connection.
+
+Crawlers fetch in bursts, so the pool stays warm exactly when it matters: the first request of a burst still handshakes, the rest reuse the connection.
+
+The saving is one TCP round trip for a local Edge Gateway, and a TCP plus TLS handshake for a remote one. It shows up on cache hits, where the handshake is a large share of total response time, and disappears into the noise on fresh renders that take seconds.
+
+Idle connections must be closed by nginx rather than by the other end, otherwise nginx can send a request onto a connection that is already being torn down. Keep `keepalive_timeout` in the `upstream` block below the idle timeout of whatever nginx connects to:
+
+| Upstream | nginx `keepalive_timeout` | Why |
+|----------|---------------------------|-----|
+| Edge Gateway directly | leave the 60s default | EG idle timeout equals `server.timeout` (120s in the sample config). |
+| An HTTPS endpoint behind a CDN | below the CDN idle limit | Cloudflare closes idle client connections at 400s, so 300s is safe. |
+
+For an HTTPS upstream, also set `proxy_ssl_server_name on;` so SNI is sent.
+
+See the [nginx reference](./nginx-reference) for version requirements and verification.
+
+## Origin failover
+
+Serve the page from your origin when Edge Gateway is unreachable or returns a server error, so a rendering outage does not turn into an outage for crawlers.
+
+```nginx [nginx/sites-enabled/example.com.conf]
+server {
+    location / {
+        # Required: routing to @edge_render already spends one error_page
+        # redirect, and the failover below needs a second one
+        recursive_error_pages on;
+
+        error_page 418 = @edge_render;
+        if ($ec_should_render = 1) {
+            return 418;
+        }
+
+        # ... your existing proxy configuration ...
+    }
+
+    location @edge_render {
+        internal;
+
+        # ... proxy_pass and headers as above ...
+
+        proxy_intercept_errors on;
+        error_page 500 502 503 504 = @origin_fallback;
+
+        proxy_connect_timeout 3s;
+    }
+
+    location @origin_fallback {
+        internal;
+
+        # Mirror the origin configuration from "location /"
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+This covers both outage modes. An unreachable Edge Gateway makes nginx generate its own 502 or 504, and `proxy_connect_timeout 3s` keeps that detection fast. An Edge Gateway that responds with 5xx is intercepted by `proxy_intercept_errors` and re-routed the same way.
+
+Only the codes listed in `error_page` are intercepted, so status actions (403, 404, 410), redirects, and origin 404s relayed through bypass still reach the crawler unchanged.
+
+Two limits are worth knowing. An Edge Gateway that accepts the connection but never responds fails over only after `proxy_read_timeout`, which cannot be shortened without cutting off legitimate long renders. And if your origin itself returns a 5xx through bypass mode, nginx intercepts it and fetches the origin a second time, which costs one extra request on an already failing page.
 
 ## Verifying the setup
 
@@ -180,6 +256,14 @@ Add a temporary header to see the final rendering decision:
 add_header X-EC-Should-Render $ec_should_render;
 ```
 
+### Test connection reuse
+
+Add `$upstream_connect_time` to your log format (see the [nginx reference](./nginx-reference)) and watch crawler requests. Reused connections log `connect=0.000`, while the first request after an idle gap still shows the handshake cost.
+
+### Test origin failover
+
+Stop Edge Gateway and send a crawler request. You should get your origin page with a 200 status and no `EC-*` headers, not a 502.
+
 ## Troubleshooting
 
 ### 403 Forbidden from Edge Gateway
@@ -204,6 +288,18 @@ add_header X-EC-Should-Render $ec_should_render;
 
 - Ensure `proxy_pass` in the `@edge_render` block uses variables like `$scheme` and `$host` correctly.
 - Verify that `X-Edge-Render` header is not being stripped by any other proxy in the chain.
+
+### Connections not being reused
+
+- Confirm `proxy_set_header Connection "";` is present. Without it nginx sends `Connection: close` on nginx before 1.29.7 and the pool never forms, with no error to show for it.
+- Confirm `proxy_http_version 1.1;` is present on nginx before 1.29.7, where the default is HTTP/1.0.
+- Check that `keepalive` sits inside the `upstream` block. It has no effect next to `proxy_pass`, and a bare `proxy_pass http://host` without an `upstream` block cannot pool at all.
+- `keepalive_timeout` inside `upstream` requires nginx 1.15.3+. Older builds reject it at config test.
+
+### Failover not reaching the origin
+
+- Confirm `recursive_error_pages on;` is set in `location /` or the enclosing `server` block. Routing to `@edge_render` already uses one `error_page` redirect, so without it the failover redirect is silently ignored and the crawler receives the 502.
+- Confirm `proxy_intercept_errors on;` is set, otherwise upstream 5xx responses pass straight through to the client.
 
 ### Cache not working
 

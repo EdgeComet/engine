@@ -272,12 +272,16 @@ type PageMetrics struct {
 	ScrollEnabled  bool    `json:"scroll_enabled,omitempty"`  // scroll pass requested for this render
 
 	// Scroll pass outcome
-	ScrollPerformed   bool    `json:"scroll_performed,omitempty"`    // at least one scroll step ran
-	ScrollNoTarget    bool    `json:"scroll_no_target,omitempty"`    // detection found no scrollable element, as opposed to the pass failing or being cut short
-	ScrollTarget      string  `json:"scroll_target,omitempty"`       // element the scroll drove (scrollingElement, body, TAG.class)
-	ScrollSteps       int     `json:"scroll_steps,omitempty"`        // steps executed before settling or hitting a bound
-	ScrollDuration    float64 `json:"scroll_duration,omitempty"`     // wall time spent scrolling (seconds)
-	ScrollFinalHeight int     `json:"scroll_final_height,omitempty"` // scrollHeight of the target at the last step
+	ScrollPerformed     bool    `json:"scroll_performed,omitempty"`      // at least one scroll step ran
+	ScrollNoTarget      bool    `json:"scroll_no_target,omitempty"`      // nothing on the page was scrollable, as opposed to the pass failing or being cut short
+	ScrollReachedBottom bool    `json:"scroll_reached_bottom,omitempty"` // the page scroller ended at its bottom; false means the budget ran out partway down
+	ScrollTarget        string  `json:"scroll_target,omitempty"`         // page scroller driven (scrollingElement or body); empty when the document does not scroll
+	ScrollInnerTarget   string  `json:"scroll_inner_target,omitempty"`   // inner container driven after the page settled (TAG.class); empty when none was needed
+	ScrollSteps         int     `json:"scroll_steps,omitempty"`          // steps executed before settling or hitting a bound
+	ScrollInnerSteps    int     `json:"scroll_inner_steps,omitempty"`    // of those, steps spent on an inner container
+	ScrollStopReason    string  `json:"scroll_stop_reason,omitempty"`    // settled, duration, max_steps, no_target, cancelled or error
+	ScrollDuration      float64 `json:"scroll_duration,omitempty"`       // wall time spent scrolling (seconds)
+	ScrollFinalHeight   int     `json:"scroll_final_height,omitempty"`   // scrollHeight of the page scroller at the last step
 }
 
 // DomainStats contains per-domain network statistics.

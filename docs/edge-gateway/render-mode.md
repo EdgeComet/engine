@@ -315,13 +315,23 @@ Scrolls the page to the bottom before HTML capture, pausing between steps so laz
 - **Default**: `false`
 - **Levels**: Global, Host, URL Pattern
 
-The renderer detects the real scroll container rather than assuming the document scrolls. Sites that set `html { overflow: hidden }` and scroll `body` or an inner element are common, and on those `window.scrollTo` does nothing at all.
+The pass walks the page itself first, following it as it grows, and only turns to an inner container once the page has nothing left to give.
+
+It never guesses which element is the page scroller. Both `document.scrollingElement` and `body` are scrolled on every step: on any given layout exactly one of them is the real scroll container, and scrolling the other is a no-op. This matters because sites that set `html { overflow: hidden }` and scroll `body` are common, and on those `window.scrollTo` does nothing at all - while on an ordinary page writing to `body.scrollTop` does nothing either.
+
+Two behaviours follow from the page growing while the pass runs:
+
+- the pass does not stop the first time it reaches the bottom. It stops after the page has stayed at its bottom with no new height and no new links for several steps, so a section that arrives a beat late is still captured
+- steps travel one viewport by default, and grow larger when the document is getting taller faster than the remaining budget can walk. Without that, a page that keeps expanding is never walked to its end and anything anchored to its bottom - typically the SEO footer - never mounts
+
+An inner container gets whatever budget is left after the page settles, scrolled back into view first, and bounded so that a virtualised list cannot consume the whole pass. Pages whose document does not scroll at all go straight to that container.
 
 ### Cost
 
 Scrolling adds seconds to every render of a matching URL:
 
-- roughly 1.6s on a page with nothing to load, since the pass confirms a stable page height before it stops
+- roughly 2.4s on a page with nothing to load, since the pass confirms the page is at its bottom and stable before it stops
+- a few seconds more on a page that also has an inner container worth scrolling
 - up to 12s on a page that keeps producing content, which is the point at which the pass gives up and captures what it has
 
 That is why it is off by default and why it belongs on the hosts that need it rather than globally. Two further consequences to expect on a scroll-enabled host:
@@ -363,4 +373,10 @@ url_rules:
 
 ### When it does not help
 
-The pass reports that it found nothing to scroll, and the Render Service logs a warning naming the URL. That means either the page genuinely fits in the viewport, or the detection picked nothing on a layout it does not recognise. There is no automatic fallback; the warning is the signal to look at the page.
+Two outcomes are worth watching for, both logged by the Render Service as warnings naming the URL.
+
+**Nothing was scrollable.** The pass re-checks for a couple of seconds before concluding this, since an early start only means the page has not laid out yet. A warning means the page genuinely fits in the viewport, or its layout is one the pass does not recognise. There is no automatic fallback.
+
+**The bottom was never reached.** The pass ran out of budget partway down. The capture is usable but anything anchored to the bottom of the page is missing from it, which is exactly the symptom this feature exists to fix. Raise the host `render.timeout` if the page is merely slow; a page that grows without end will always end this way.
+
+Both are counted in the Render Service metrics: `edgecomet_rs_scroll_outcomes_total` carries the stop reason and whether the bottom was reached, and `edgecomet_rs_scroll_no_scroller_total` counts the first case.
