@@ -540,6 +540,50 @@ func TestExtractHeadings(t *testing.T) {
 			maxCount: 5,
 			expected: []string{"Uppercase Tag"},
 		},
+		{
+			name: "br separates words instead of fusing them",
+			html: `<html><body><h1 class="text-lg-center">
+					SEO log file analyzer<br>for crawl and indexing analysis
+				</h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"SEO log file analyzer for crawl and indexing analysis"},
+		},
+		{
+			name:     "self closing br separates words",
+			html:     `<html><body><h1>First line<br/>second line</h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"First line second line"},
+		},
+		{
+			name:     "block child separates words",
+			html:     `<html><body><h1>Div<div>case</div></h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"Div case"},
+		},
+		{
+			name:     "table cells separate words",
+			html:     `<html><body><h1>Cell<table><tr><td>a</td><td>b</td></tr></table></h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"Cell a b"},
+		},
+		{
+			name:     "inline children keep fusing like a browser renders them",
+			html:     `<html><body><h1>Inline <span>span</span>case</h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"Inline spancase"},
+		},
+		{
+			name:     "br only heading returns nil",
+			html:     `<html><body><h1><br></h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: nil,
+		},
 	}
 
 	for _, tt := range tests {

@@ -265,6 +265,22 @@ func TestCaptureLinks_AnchorTrimAndCap(t *testing.T) {
 	assert.Equal(t, types.MaxAnchorLength, len([]rune(capped)), "anchor capped at MaxAnchorLength runes")
 }
 
+func TestCaptureLinks_AnchorLineBreaksSeparateWords(t *testing.T) {
+	html := `<html><body>
+		<a href="https://example.com/br">Anchor one<br>anchor two</a>
+		<a href="https://example.com/block"><div>Block one</div><div>block two</div></a>
+		<a href="https://example.com/inline">Inline <span>span</span>case</a>
+	</body></html>`
+	doc := parseGoQueryDoc(t, html)
+	seo := &types.PageSEO{}
+	extractLinkMetrics(doc, "https://example.com/", "https://example.com/", seo)
+
+	byTgt := capturedByTarget(seo.PageLinks)
+	assert.Equal(t, "Anchor one anchor two", byTgt["https://example.com/br"].Anchor)
+	assert.Equal(t, "Block one block two", byTgt["https://example.com/block"].Anchor)
+	assert.Equal(t, "Inline spancase", byTgt["https://example.com/inline"].Anchor, "inline children fuse as a browser renders them")
+}
+
 func TestCaptureLinks_WhitespaceHrefJoinsRealTarget(t *testing.T) {
 	// A wrapped/padded href must produce the same target as its clean form: same
 	// placement plus same target means the two anchors merge into one PageLink.

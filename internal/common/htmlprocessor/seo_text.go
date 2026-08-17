@@ -27,6 +27,61 @@ func collapseWhitespace(s string) string {
 	return strings.Join(fields, " ")
 }
 
+// lineBreakingTags are the elements a browser lays out on a line of their own, so the text
+// on either side of one reads as separate words. Membership is the CSS default block /
+// table / list-item set plus the two void breakers; inline elements are deliberately absent,
+// because a browser does not separate their text either.
+var lineBreakingTags = map[string]struct{}{
+	"address": {}, "article": {}, "aside": {}, "blockquote": {}, "br": {},
+	"caption": {}, "center": {}, "dd": {}, "details": {}, "dialog": {}, "dir": {},
+	"div": {}, "dl": {}, "dt": {}, "fieldset": {}, "figcaption": {}, "figure": {},
+	"footer": {}, "form": {}, "h1": {}, "h2": {}, "h3": {}, "h4": {}, "h5": {},
+	"h6": {}, "header": {}, "hgroup": {}, "hr": {}, "legend": {}, "li": {},
+	"main": {}, "menu": {}, "nav": {}, "ol": {}, "optgroup": {}, "option": {},
+	"p": {}, "pre": {}, "section": {}, "summary": {}, "table": {}, "tbody": {},
+	"td": {}, "tfoot": {}, "th": {}, "thead": {}, "tr": {}, "ul": {},
+}
+
+// BreakAwareText returns a selection's text with every line-breaking element boundary turned
+// into an ASCII space. goquery's Text() concatenates descendant text nodes with nothing between
+// them, which fuses words across a break that a reader plainly sees: "analyzer<br>for crawl"
+// comes back as "analyzerfor crawl", and a two-cell row as "ab". Inline elements still fuse,
+// which is what a browser shows too - "Inline <span>span</span>case" stays "Inline spancase".
+//
+// Whitespace is deliberately NOT collapsed here: the caller owns that policy. The enterprise
+// extraction engine collapses ASCII whitespace only, because NBSP and its narrow/thin siblings
+// are thousands groupers in fr/ru/pl prices and must reach its number parser intact - passing
+// them through this package's collapseWhitespace, which splits on unicode.IsSpace, would
+// silently rewrite those prices.
+func BreakAwareText(s *goquery.Selection) string {
+	var text strings.Builder
+	for _, node := range s.Nodes {
+		appendTextWithBreaks(&text, node)
+	}
+	return text.String()
+}
+
+func appendTextWithBreaks(text *strings.Builder, n *html.Node) {
+	if n.Type == html.TextNode {
+		text.WriteString(n.Data)
+		return
+	}
+
+	breaks := false
+	if n.Type == html.ElementNode {
+		_, breaks = lineBreakingTags[n.Data]
+	}
+	if breaks {
+		text.WriteByte(' ')
+	}
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		appendTextWithBreaks(text, child)
+	}
+	if breaks {
+		text.WriteByte(' ')
+	}
+}
+
 func extractSEOTitle(doc *goquery.Document) string {
 	text := strings.TrimSpace(doc.Find("head title").First().Text())
 	return truncateRunes(text, types.MaxSEOTitleLength)
@@ -106,7 +161,7 @@ func extractHeadings(doc *goquery.Document, tag string, maxCount int) []string {
 		if len(results) >= maxCount {
 			return false
 		}
-		text := collapseWhitespace(s.Text())
+		text := collapseWhitespace(BreakAwareText(s))
 		if text != "" {
 			results = append(results, truncateRunes(text, types.MaxHeadingLength))
 		}

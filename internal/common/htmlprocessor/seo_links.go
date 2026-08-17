@@ -212,7 +212,7 @@ func extractLinkMetrics(doc *goquery.Document, base, pageURL string, seo *types.
 		}
 		links.add(types.PageLink{
 			Target:     target,
-			Anchor:     truncateRunes(collapseWhitespace(s.Text()), types.MaxAnchorLength),
+			Anchor:     truncateRunes(collapseWhitespace(BreakAwareText(s)), types.MaxAnchorLength),
 			IsInternal: isInternal,
 			Nofollow:   isNofollow,
 			Sponsored:  strings.Contains(rel, "sponsored"),
