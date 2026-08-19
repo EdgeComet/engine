@@ -281,7 +281,7 @@ func TestScheduler_AtMostOnePriorityPerHostPerIter(t *testing.T) {
 	// without ProcessInternalQueue's dispatch resetting iq.
 	ctx := context.Background()
 	nowUnix := time.Now().UTC().Unix()
-	n, prio := env.daemon.pullForHost(ctx, hostID, 200, nowUnix)
+	n, prio := env.daemon.pullForHost(ctx, hostID, 200, nowUnix, nil)
 	assert.Equal(t, 2, n, "iter 1 should pull the 2 high entries")
 	assert.Equal(t, redis.PriorityHigh, prio)
 	assert.Equal(t, int64(100), env.zcard(t, hostID, redis.PriorityNormal), "normal must remain untouched")
@@ -290,7 +290,7 @@ func TestScheduler_AtMostOnePriorityPerHostPerIter(t *testing.T) {
 	// Drain iq so the next pull can take fresh concurrency.
 	env.daemon.internalQueue.Dequeue(2)
 
-	n, prio = env.daemon.pullForHost(ctx, hostID, 200, nowUnix)
+	n, prio = env.daemon.pullForHost(ctx, hostID, 200, nowUnix, nil)
 	assert.Equal(t, 5, n, "iter 2 should pull normal up to max_concurrent")
 	assert.Equal(t, redis.PriorityNormal, prio)
 }
@@ -416,7 +416,7 @@ func TestScheduler_DurabilityPreCheck(t *testing.T) {
 	}
 
 	nowUnix := time.Now().UTC().Unix()
-	n, prio := env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix)
+	n, prio := env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, nil)
 	assert.Equal(t, 0, n, "no slot free → 0 pulled (entries stay durable in Redis)")
 	assert.Equal(t, "", prio)
 	assert.Equal(t, int64(100), env.zcard(t, hostID, redis.PriorityHigh), "ZSET unchanged")
@@ -426,7 +426,7 @@ func TestScheduler_DurabilityPreCheck(t *testing.T) {
 	for _, s := range heldSlots {
 		env.daemon.concurrencyLimiter.Release(s)
 	}
-	n, prio = env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix)
+	n, prio = env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, nil)
 	assert.Equal(t, maxC, n, "after release, next iter pulls one batch")
 	assert.Equal(t, redis.PriorityHigh, prio)
 }

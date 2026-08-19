@@ -45,6 +45,11 @@ type QueueListResponse struct {
 type QueueSummaryResponse struct {
 	Pending    int `json:"pending"`
 	Processing int `json:"processing"`
+	// Paused and PausedUntil describe an operator pause on the host: pending work is
+	// not being pulled until PausedUntil (unix seconds). Filled in by the API layer,
+	// which owns the pause store; the reader itself only counts queues.
+	Paused      bool  `json:"paused"`
+	PausedUntil int64 `json:"paused_until,omitempty"`
 }
 
 type QueueListParams struct {

@@ -121,6 +121,19 @@ func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
 	hosts := d.GetConfiguredHosts()
 	n := len(hosts)
 	nowUnix := time.Now().UTC().Unix()
+
+	// Read the operator pause set once per tick, alongside nowUnix, and pass it into
+	// the pull. Fail open on a read error: the ZPopMin below needs the same Redis, so a
+	// full outage stops the drain anyway, and briefly ignoring a pause during a partial
+	// outage beats stalling every host's recache.
+	pausedHosts, err := d.PausedHosts(ctx, nowUnix)
+	if err != nil {
+		d.logger.Error("Failed to read recache pause state, draining every host this tick",
+			zap.Error(err))
+		pausedHosts = nil
+	}
+	d.publishPauseMetrics(hosts, pausedHosts)
+
 	var pulledHigh, pulledNormal, pulledAuto int
 	iters := 0
 
@@ -157,7 +170,7 @@ func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
 				if skipForRest[h] {
 					continue
 				}
-				p, prio := d.pullForHost(ctx, h, spaceRemaining, nowUnix)
+				p, prio := d.pullForHost(ctx, h, spaceRemaining, nowUnix, pausedHosts)
 				if p > 0 {
 					pulledThisIter[h] = p
 				}
@@ -609,9 +622,18 @@ func (d *CacheDaemon) zpopAndEnqueue(ctx context.Context, hostID int, priority s
 // fewer than the cap, so iq never holds an iter-N normal entry ahead of an
 // iter-N+1 high entry (would invert priority on dispatch).
 //
-// nowUnix is the shared "now" for autorecache due-time filtering, captured
-// once per tick by runOneTick.
-func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemaining int, nowUnix int64) (int, string) {
+// nowUnix is the shared "now" for autorecache due-time filtering, and
+// pausedHosts the operator pause set, both captured once per tick by
+// runOneTick.
+func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemaining int, nowUnix int64, pausedHosts map[int]int64) (int, string) {
+	// The single enforcement point for an operator pause. This is the only path from
+	// the durable Redis queues into the internal queue, so refusing to pull here stops
+	// all new work for the host; whatever is already in the internal queue is left to
+	// dispatch and drain rather than being evicted.
+	if _, paused := pausedHosts[hostID]; paused {
+		return 0, ""
+	}
+
 	if spaceRemaining <= 0 {
 		return 0, ""
 	}

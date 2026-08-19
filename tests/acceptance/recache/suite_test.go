@@ -1048,6 +1048,77 @@ func (env *RecacheTestEnvironment) SendInvalidateAllRequestWithAuth(req types.In
 	return &data, statusCode, nil
 }
 
+// sendDaemonJSONPost posts req to a daemon endpoint and decodes the unified API
+// response's data payload into out. The queue-control helpers below share it instead of
+// each repeating the fasthttp plumbing. out is filled even when the daemon answered with
+// an error, so callers assert on the returned status code.
+func (env *RecacheTestEnvironment) sendDaemonJSONPost(path string, req interface{}, out interface{}) (int, error) {
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq := fasthttp.AcquireRequest()
+	defer fasthttp.ReleaseRequest(httpReq)
+
+	httpResp := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseResponse(httpResp)
+
+	httpReq.SetRequestURI(fmt.Sprintf("http://127.0.0.1:%d%s", env.DaemonPort, path))
+	httpReq.Header.SetMethod("POST")
+	httpReq.Header.SetContentType("application/json")
+	httpReq.Header.Set("X-Internal-Auth", env.InternalAuthKey)
+	httpReq.SetBody(reqBody)
+
+	client := &fasthttp.Client{
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+	}
+
+	if err := client.Do(httpReq, httpResp); err != nil {
+		return 0, fmt.Errorf("failed to send request: %w", err)
+	}
+
+	statusCode := httpResp.StatusCode()
+
+	var apiResp httputil.APIResponse
+	if err := json.Unmarshal(httpResp.Body(), &apiResp); err != nil {
+		return statusCode, fmt.Errorf("failed to parse response: %w (body: %s)", err, string(httpResp.Body()))
+	}
+
+	if apiResp.Data != nil && out != nil {
+		dataBytes, _ := json.Marshal(apiResp.Data)
+		if err := json.Unmarshal(dataBytes, out); err != nil {
+			return statusCode, fmt.Errorf("failed to parse response data: %w", err)
+		}
+	}
+
+	return statusCode, nil
+}
+
+// SendQueuePurgeRequest sends HTTP POST request to daemon /internal/cache/queue/purge endpoint
+func (env *RecacheTestEnvironment) SendQueuePurgeRequest(req types.QueuePurgeAPIRequest) (*types.QueuePurgeAPIData, int, error) {
+	var data types.QueuePurgeAPIData
+	statusCode, err := env.sendDaemonJSONPost("/internal/cache/queue/purge", req, &data)
+	return &data, statusCode, err
+}
+
+// SendRecachePauseRequest sends HTTP POST request to daemon /internal/cache/recache/pause endpoint
+func (env *RecacheTestEnvironment) SendRecachePauseRequest(hostID int) (*types.RecachePauseAPIData, int, error) {
+	var data types.RecachePauseAPIData
+	statusCode, err := env.sendDaemonJSONPost("/internal/cache/recache/pause",
+		types.RecachePauseAPIRequest{HostID: hostID}, &data)
+	return &data, statusCode, err
+}
+
+// SendRecacheResumeRequest sends HTTP POST request to daemon /internal/cache/recache/resume endpoint
+func (env *RecacheTestEnvironment) SendRecacheResumeRequest(hostID int) (*types.RecachePauseAPIData, int, error) {
+	var data types.RecachePauseAPIData
+	statusCode, err := env.sendDaemonJSONPost("/internal/cache/recache/resume",
+		types.RecachePauseAPIRequest{HostID: hostID}, &data)
+	return &data, statusCode, err
+}
+
 // SendStatusRequest sends HTTP GET request to daemon /status endpoint
 func (env *RecacheTestEnvironment) SendStatusRequest() ([]byte, int, error) {
 	return env.SendStatusRequestWithAuth(env.InternalAuthKey)

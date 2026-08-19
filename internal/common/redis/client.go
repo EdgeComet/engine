@@ -198,6 +198,33 @@ func (c *Client) HDelIfKeyAbsent(ctx context.Context, hashKey, field, guardKey s
 	return deleted > 0, nil
 }
 
+// hdelIfValueScript removes a hash field only while it still holds the value the
+// caller observed, so a rewrite that lands in between is never clobbered
+const hdelIfValueScript = `
+if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then
+    return redis.call('HDEL', KEYS[1], ARGV[1])
+end
+return 0
+`
+
+// HDelIfValue atomically removes field from hashKey, but only if it still holds
+// expectedValue. Lazy expiry sweeps are written this way: a separate HGETALL-then-HDEL
+// would delete a field that was rewritten with a fresh expiry between the two calls,
+// silently cancelling it. Returns true if the field was removed.
+func (c *Client) HDelIfValue(ctx context.Context, hashKey, field, expectedValue string) (bool, error) {
+	result, err := c.rdb.Eval(ctx, hdelIfValueScript, []string{hashKey}, field, expectedValue).Result()
+	if err != nil {
+		c.logger.Error("Redis value-guarded HDEL failed",
+			zap.String("hash_key", hashKey),
+			zap.String("field", field),
+			zap.Error(err))
+		return false, fmt.Errorf("redis value-guarded hdel failed: %w", err)
+	}
+
+	deleted, _ := result.(int64)
+	return deleted > 0, nil
+}
+
 func (c *Client) Exists(ctx context.Context, key string) (bool, error) {
 	result, err := c.rdb.Exists(ctx, key).Result()
 	if err != nil {

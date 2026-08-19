@@ -92,6 +92,12 @@ func (d *CacheDaemon) ServeHTTP(ctx *fasthttp.RequestCtx) {
 		d.handleInvalidateAPI(ctx)
 	case method == "POST" && path == "/internal/cache/invalidate-all":
 		d.handleInvalidateAllAPI(ctx)
+	case method == "POST" && path == "/internal/cache/queue/purge":
+		d.handleQueuePurgeAPI(ctx)
+	case method == "POST" && path == "/internal/cache/recache/pause":
+		d.handleRecachePauseAPI(ctx)
+	case method == "POST" && path == "/internal/cache/recache/resume":
+		d.handleRecacheResumeAPI(ctx)
 	case method == "GET" && path == "/status":
 		d.handleStatusAPI(ctx)
 	case method == "POST" && path == "/internal/scheduler/pause":
@@ -234,12 +240,18 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 	}
 
 	// Return response
+	// Enqueueing is allowed while the host is paused - the operator wanted the origin
+	// left alone, not the work list discarded - so the response says the work is queued
+	// but not draining.
+	paused := d.pauseExpiryForResponse(reqCtx, req.HostID) > 0
+
 	data := types.RecacheAPIData{
 		HostID:            req.HostID,
 		URLsCount:         len(req.URLs),
 		DimensionIDsCount: len(dimensionIDs),
 		EntriesEnqueued:   entriesEnqueued,
 		Priority:          req.Priority,
+		Paused:            paused,
 	}
 	httputil.JSONData(ctx, data, fasthttp.StatusOK)
 
@@ -248,7 +260,8 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("urls_count", len(req.URLs)),
 		zap.Int("dimensions_count", len(dimensionIDs)),
 		zap.Int("entries_enqueued", entriesEnqueued),
-		zap.String("priority", req.Priority))
+		zap.String("priority", req.Priority),
+		zap.Bool("paused", paused))
 }
 
 // handleInvalidateAPI handles POST /internal/cache/invalidate
@@ -496,6 +509,116 @@ func (d *CacheDaemon) handleInvalidateAllAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("entries_invalidated", totalDeleted))
 }
 
+// handleQueuePurgeAPI handles POST /internal/cache/queue/purge
+func (d *CacheDaemon) handleQueuePurgeAPI(ctx *fasthttp.RequestCtx) {
+	var req types.QueuePurgeAPIRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		httputil.JSONError(ctx, fmt.Sprintf("invalid json: %s", err.Error()), fasthttp.StatusBadRequest)
+		return
+	}
+
+	if req.HostID == 0 {
+		httputil.JSONError(ctx, "host_id is required", fasthttp.StatusBadRequest)
+		return
+	}
+	if d.GetHost(req.HostID) == nil {
+		httputil.JSONError(ctx, fmt.Sprintf("host_id %d not found", req.HostID), fasthttp.StatusBadRequest)
+		return
+	}
+
+	priorities, err := resolvePurgePriorities(req.Priorities)
+	if err != nil {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
+		return
+	}
+
+	entriesPurged, err := d.PurgeRecacheQueues(context.Background(), req.HostID, priorities)
+	if err != nil {
+		d.logger.Error("Failed to purge recache queues",
+			zap.Int("host_id", req.HostID),
+			zap.Strings("priorities", priorities),
+			zap.Int("entries_purged_before_error", entriesPurged),
+			zap.Error(err))
+		httputil.JSONError(ctx, "internal error during purge", fasthttp.StatusInternalServerError)
+		return
+	}
+
+	httputil.JSONData(ctx, types.QueuePurgeAPIData{EntriesPurged: entriesPurged}, fasthttp.StatusOK)
+
+	d.logger.Info("Queue purge request processed",
+		zap.Int("host_id", req.HostID),
+		zap.Strings("priorities", priorities),
+		zap.Int("entries_purged", entriesPurged))
+}
+
+// decodePauseRequest validates the body shared by the pause and resume endpoints. It answers
+// the client itself on failure, so a false second return means the handler must stop.
+func (d *CacheDaemon) decodePauseRequest(ctx *fasthttp.RequestCtx) (int, bool) {
+	var req types.RecachePauseAPIRequest
+	if err := json.Unmarshal(ctx.Request.Body(), &req); err != nil {
+		httputil.JSONError(ctx, fmt.Sprintf("invalid json: %s", err.Error()), fasthttp.StatusBadRequest)
+		return 0, false
+	}
+
+	if req.HostID == 0 {
+		httputil.JSONError(ctx, "host_id is required", fasthttp.StatusBadRequest)
+		return 0, false
+	}
+	if d.GetHost(req.HostID) == nil {
+		httputil.JSONError(ctx, fmt.Sprintf("host_id %d not found", req.HostID), fasthttp.StatusBadRequest)
+		return 0, false
+	}
+	return req.HostID, true
+}
+
+// handleRecachePauseAPI handles POST /internal/cache/recache/pause.
+//
+// Unlike the global /internal/scheduler/pause this is not gated behind
+// scheduler_control_api: a per-host pause is the cluster manager's routine remedy for an
+// origin under strain and has to be available on every deployment.
+func (d *CacheDaemon) handleRecachePauseAPI(ctx *fasthttp.RequestCtx) {
+	hostID, ok := d.decodePauseRequest(ctx)
+	if !ok {
+		return
+	}
+
+	expiresAt, err := d.PauseHost(context.Background(), hostID)
+	if err != nil {
+		d.logger.Error("Failed to pause recache draining",
+			zap.Int("host_id", hostID),
+			zap.Error(err))
+		httputil.JSONError(ctx, "internal error during pause", fasthttp.StatusInternalServerError)
+		return
+	}
+
+	httputil.JSONData(ctx, types.RecachePauseAPIData{Paused: true, ExpiresAt: expiresAt}, fasthttp.StatusOK)
+
+	d.logger.Info("Recache draining paused for host",
+		zap.Int("host_id", hostID),
+		zap.Int64("expires_at", expiresAt),
+		zap.Duration("pause_ttl", pauseTTL))
+}
+
+// handleRecacheResumeAPI handles POST /internal/cache/recache/resume
+func (d *CacheDaemon) handleRecacheResumeAPI(ctx *fasthttp.RequestCtx) {
+	hostID, ok := d.decodePauseRequest(ctx)
+	if !ok {
+		return
+	}
+
+	if err := d.ResumeHost(context.Background(), hostID); err != nil {
+		d.logger.Error("Failed to resume recache draining",
+			zap.Int("host_id", hostID),
+			zap.Error(err))
+		httputil.JSONError(ctx, "internal error during resume", fasthttp.StatusInternalServerError)
+		return
+	}
+
+	httputil.JSONData(ctx, types.RecachePauseAPIData{Paused: false}, fasthttp.StatusOK)
+
+	d.logger.Info("Recache draining resumed for host", zap.Int("host_id", hostID))
+}
+
 // handleStatusAPI handles GET /status
 func (d *CacheDaemon) handleStatusAPI(ctx *fasthttp.RequestCtx) {
 	d.lastTickMu.RLock()
@@ -532,6 +655,14 @@ func (d *CacheDaemon) GetQueuesStatus() map[int]HostQueuesStatus {
 	now := time.Now().UTC().Unix()
 	reqCtx := context.Background()
 
+	// One HGETALL covers every host below, so the pause column costs a single round trip
+	// regardless of host count. An unreadable pause hash reports every host as running,
+	// matching the scheduler's fail-open policy.
+	pausedHosts, err := d.PausedHosts(reqCtx, now)
+	if err != nil {
+		d.logger.Error("Failed to read recache pause state for status", zap.Error(err))
+	}
+
 	for _, hostID := range hosts {
 		highKey := d.keyGenerator.RecacheQueueKey(hostID, redis.PriorityHigh)
 		normalKey := d.keyGenerator.RecacheQueueKey(hostID, redis.PriorityNormal)
@@ -546,10 +677,12 @@ func (d *CacheDaemon) GetQueuesStatus() map[int]HostQueuesStatus {
 		normalDue, _ := d.redis.ZCount(reqCtx, normalKey, "-inf", fmt.Sprintf("%d", now))
 		autoDue, _ := d.redis.ZCount(reqCtx, autoKey, "-inf", fmt.Sprintf("%d", now))
 
+		_, paused := pausedHosts[hostID]
 		queuesStatus[hostID] = HostQueuesStatus{
 			High:        QueueStatus{Total: int(highTotal), DueNow: int(highDue)},
 			Normal:      QueueStatus{Total: int(normalTotal), DueNow: int(normalDue)},
 			Autorecache: QueueStatus{Total: int(autoTotal), DueNow: int(autoDue)},
+			Paused:      paused,
 		}
 	}
 
@@ -1015,8 +1148,7 @@ func (d *CacheDaemon) handleCacheQueueAPI(ctx *fasthttp.RequestCtx) {
 	var priorityFilter []string
 	priorityRaw := queryParamString(ctx, "priority")
 	if priorityRaw != "" {
-		allowed := map[string]bool{"high": true, "normal": true, "autorecache": true}
-		priorityFilter, err = httputil.ParseCSVFilter(priorityRaw, allowed, "priority")
+		priorityFilter, err = httputil.ParseCSVFilter(priorityRaw, recachePrioritySet, "priority")
 		if err != nil {
 			httputil.JSONError(ctx, err.Error(), fasthttp.StatusBadRequest)
 			return
@@ -1054,12 +1186,16 @@ func (d *CacheDaemon) handleCacheQueueSummaryAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	result.PausedUntil = d.pauseExpiryForResponse(context.Background(), host.ID)
+	result.Paused = result.PausedUntil > 0
+
 	httputil.JSONData(ctx, result, fasthttp.StatusOK)
 
 	d.logger.Debug("Cache queue summary request served",
 		zap.Int("host_id", host.ID),
 		zap.Int("pending", result.Pending),
-		zap.Int("processing", result.Processing))
+		zap.Int("processing", result.Processing),
+		zap.Bool("paused", result.Paused))
 }
 
 func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {

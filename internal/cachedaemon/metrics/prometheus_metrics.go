@@ -40,6 +40,10 @@ type PrometheusMetrics struct {
 	// every tick, not just on the old 60s cadence.
 	recachePulledTotal *prometheus.CounterVec
 
+	// Per-host operator pause gauge: 1 while the scheduler is held back from
+	// pulling new recache work for the host, 0 otherwise.
+	recachePaused *prometheus.GaugeVec
+
 	// Tracks last published totals per host so SetHostConcurrency can publish
 	// the delta only — never deletes the series, never produces false counter
 	// resets observable to scrapers.
@@ -159,6 +163,16 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 		[]string{"priority", "host_id"},
 	)
 
+	pm.recachePaused = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: "cd",
+			Name:      "recache_paused",
+			Help:      "Whether recache draining is paused for the host (1 = paused)",
+		},
+		[]string{"host_id"},
+	)
+
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(pm.recacheRequestsTotal)
 	registry.MustRegister(pm.queueDepth)
@@ -170,6 +184,7 @@ func NewPrometheusMetrics(namespace string, logger *zap.Logger) *PrometheusMetri
 	registry.MustRegister(pm.recacheAcquiredTotal)
 	registry.MustRegister(pm.recacheDeniedTotal)
 	registry.MustRegister(pm.recachePulledTotal)
+	registry.MustRegister(pm.recachePaused)
 
 	pm.gatherer = registry
 
@@ -231,6 +246,15 @@ func (pm *PrometheusMetrics) RecordRecachePulled(priority string, hostID int, n 
 		return
 	}
 	pm.recachePulledTotal.WithLabelValues(priority, strconv.Itoa(hostID)).Add(float64(n))
+}
+
+// SetRecachePaused publishes whether recache draining is currently paused for a host.
+func (pm *PrometheusMetrics) SetRecachePaused(hostID int, paused bool) {
+	value := float64(0)
+	if paused {
+		value = 1
+	}
+	pm.recachePaused.WithLabelValues(strconv.Itoa(hostID)).Set(value)
 }
 
 // ServeHTTP gathers the registered metrics and writes the Prometheus text

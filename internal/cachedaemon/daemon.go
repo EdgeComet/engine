@@ -56,6 +56,12 @@ type CacheDaemon struct {
 	hostSetPtr *types.Host
 	hostSetLen int
 
+	// pausedMetricHosts holds the host IDs the recache pause gauge last reported as
+	// paused, so a host that leaves the configured set while paused (a cluster move)
+	// keeps being reported until its pause is gone instead of freezing at 1. Read and
+	// written only by the Run goroutine, like hostCursor, so no synchronisation.
+	pausedMetricHosts map[int]bool
+
 	// dispatchHook, when non-nil, replaces the EG dispatch path inside
 	// ProcessInternalQueue. Used by scheduler unit tests to observe gated
 	// entries without standing up a real EG. The hook owns slot release for
@@ -306,6 +312,41 @@ func (d *CacheDaemon) publishConcurrencyMetrics() {
 		}
 		d.metricsCollector.SetHostConcurrency(hostID, domain, s.InFlight, int64(s.MaxConcurrent), s.AcquiredTotal, s.DeniedTotal)
 	}
+}
+
+// publishPauseMetrics exports the per-host recache pause gauge. Every configured host is
+// published on every tick, not just the paused ones, so a resumed host reports 0 instead of
+// holding its last 1 forever.
+//
+// Hosts this daemon last reported as paused are published too, even once they are gone from
+// the configured set. A host cluster-moved away while paused would otherwise keep a gauge
+// stuck at 1 until the process restarts, long after its pause field was swept, and read as a
+// forgotten pause that nobody can clear.
+func (d *CacheDaemon) publishPauseMetrics(hostIDs []int, pausedHosts map[int]int64) {
+	if d.metricsCollector == nil {
+		return
+	}
+
+	reported := make(map[int]bool, len(hostIDs)+len(pausedHosts)+len(d.pausedMetricHosts))
+	for _, hostID := range hostIDs {
+		reported[hostID] = true
+	}
+	for hostID := range pausedHosts {
+		reported[hostID] = true
+	}
+	for hostID := range d.pausedMetricHosts {
+		reported[hostID] = true
+	}
+
+	stillPaused := make(map[int]bool, len(pausedHosts))
+	for hostID := range reported {
+		_, paused := pausedHosts[hostID]
+		d.metricsCollector.SetRecachePaused(hostID, paused)
+		if paused {
+			stillPaused[hostID] = true
+		}
+	}
+	d.pausedMetricHosts = stillPaused
 }
 
 // actionForEntry resolves the effective action for a queue entry. A per-request

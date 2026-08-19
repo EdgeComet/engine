@@ -27,6 +27,8 @@ CD maintains three queue types as Redis sorted sets, each with URLs scored by sc
 - Normal queue - General cache updating queue for bulk recache operations.
 - Autorecache queue - Populated automatically by EG when bots hit cached content. URLs are scheduled based on configured intervals.
 
+Two operator controls act on these queues per host: purge drops what is queued, and pause stops the drain for up to three hours while still accepting new work. Both act on the Redis queues only, so requests the daemon has already picked up still complete. See the API reference for the tail this leaves and for the render-host case where pause does not stop origin requests.
+
 ## Drain loop
 
 CD runs a unified drain on every `scheduler.tick_interval`. On each tick the scheduler walks all configured hosts and, per host, pulls at most one priority's worth of work in strict order: `high` first, then `normal`, then due `autorecache` (entries scheduled at or before "now"). Strict priority within a host is preserved by stopping at the first non-empty priority — a host's `normal` items wait only for that host's `high` to drain, never for an unrelated host's backlog.

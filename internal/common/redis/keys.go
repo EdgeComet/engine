@@ -9,6 +9,11 @@ import (
 const (
 	lockKeyPrefix     = "lock:"
 	metadataKeyPrefix = "meta:"
+
+	// recachePausedKey holds one field per paused host (field = host_id, value =
+	// unix expiry). A single cluster-wide hash keeps the scheduler's per-tick read
+	// at one HGETALL instead of one lookup per configured host.
+	recachePausedKey = "recache:paused"
 )
 
 // Priority levels for recache queues
@@ -66,4 +71,9 @@ func (kg *KeyGenerator) GenerateMetadataKey(cacheKey *types.CacheKey) string {
 // Format: recache:{hostID}:{priority}
 func (kg *KeyGenerator) RecacheQueueKey(hostID int, priority string) string {
 	return fmt.Sprintf("recache:%d:%s", hostID, priority)
+}
+
+// RecachePausedKey returns the Redis key of the cluster-wide recache pause hash.
+func (kg *KeyGenerator) RecachePausedKey() string {
+	return recachePausedKey
 }

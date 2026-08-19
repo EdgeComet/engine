@@ -36,6 +36,9 @@ type HostQueuesStatus struct {
 	High        QueueStatus `json:"high"`
 	Normal      QueueStatus `json:"normal"`
 	Autorecache QueueStatus `json:"autorecache"`
+	// Paused reports an operator pause on this host: the queues below still accept new
+	// work but the scheduler is not pulling from them.
+	Paused bool `json:"paused"`
 }
 
 // QueueStatus represents metrics for a single recache queue

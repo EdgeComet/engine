@@ -51,6 +51,10 @@ type RecacheAPIData struct {
 	DimensionIDsCount int    `json:"dimension_ids_count"`
 	EntriesEnqueued   int    `json:"entries_enqueued"`
 	Priority          string `json:"priority"`
+	// Paused reports that the entries were queued but the host's recache draining is
+	// paused, so nothing is about to happen. Always serialized: a caller that reads the
+	// enqueue count as "work started" needs to see the flag that contradicts it.
+	Paused bool `json:"paused"`
 }
 
 // InvalidateAPIRequest is the request body for POST /internal/cache/invalidate
@@ -79,4 +83,31 @@ type InvalidateAllAPIData struct {
 	HostID             int `json:"host_id"`
 	DimensionIDsCount  int `json:"dimension_ids_count"`
 	EntriesInvalidated int `json:"entries_invalidated"`
+}
+
+// QueuePurgeAPIRequest is the request body for POST /internal/cache/queue/purge
+type QueuePurgeAPIRequest struct {
+	HostID int `json:"host_id"`
+	// Priorities to purge. Omitted and empty both mean high + normal; autorecache is
+	// purged only when it is named.
+	Priorities []string `json:"priorities"`
+}
+
+// QueuePurgeAPIData is the data payload for POST /internal/cache/queue/purge response
+type QueuePurgeAPIData struct {
+	EntriesPurged int `json:"entries_purged"`
+}
+
+// RecachePauseAPIRequest is the request body for POST /internal/cache/recache/pause and
+// POST /internal/cache/recache/resume
+type RecachePauseAPIRequest struct {
+	HostID int `json:"host_id"`
+}
+
+// RecachePauseAPIData is the data payload for the recache pause and resume responses.
+// ExpiresAt carries the unix time the pause lifts by itself, which makes a repeat pause
+// observable: it extends the window rather than being a no-op.
+type RecachePauseAPIData struct {
+	Paused    bool  `json:"paused"`
+	ExpiresAt int64 `json:"expires_at,omitempty"`
 }

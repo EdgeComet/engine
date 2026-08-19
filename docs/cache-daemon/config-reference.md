@@ -91,7 +91,11 @@ http_api:
   # Default: 30s
   request_timeout: 30s
 
-  # Enable scheduler control API endpoints (pause/resume)
+  # Enable the daemon-wide scheduler control endpoints
+  # (/internal/scheduler/pause and /internal/scheduler/resume), which stop and
+  # start processing for every host at once. The per-host recache pause
+  # (/internal/cache/recache/pause) is a different endpoint and is always
+  # available regardless of this setting.
   # Default: false
   scheduler_control_api: false
 

@@ -73,6 +73,14 @@ func (mc *MetricsCollector) RecordRecachePulled(priority string, hostID int, n i
 	mc.prometheus.RecordRecachePulled(priority, hostID, n)
 }
 
+// SetRecachePaused exposes the per-host recache pause state to Prometheus. Published on
+// each scheduler tick for every configured host plus any host the gauge last reported as
+// paused, so neither a resumed host nor one moved to another cluster holds its last 1.
+// While the whole scheduler is paused no tick runs and the gauge holds its last values.
+func (mc *MetricsCollector) SetRecachePaused(hostID int, paused bool) {
+	mc.prometheus.SetRecachePaused(hostID, paused)
+}
+
 func (mc *MetricsCollector) ServeHTTP(ctx *fasthttp.RequestCtx) {
 	mc.prometheus.ServeHTTP(ctx)
 }
