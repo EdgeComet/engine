@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -115,38 +116,46 @@ func TestBuildInjectedHeaders(t *testing.T) {
 	})
 }
 
-func TestIsSameHost(t *testing.T) {
-	const targetOrigin = "https://example.com"
+func TestRenderKeyInjectionScope(t *testing.T) {
+	// Mirrors the predicate at the fetch interception in buildTasks: a paused request carries the
+	// forwarded client headers and the render key only when its host is same-origin with the render
+	// target. Subdomains qualify - see the call site for why.
+	const targetHost = "example.com"
 
-	t.Run("same origin", func(t *testing.T) {
-		assert.True(t, isSameHost("https://example.com/api/data", targetOrigin))
-	})
+	sameOrigin := func(requestURL string) bool {
+		return urlutil.IsSameOrigin(targetHost, urlutil.ExtractHost(requestURL))
+	}
 
-	t.Run("different scheme", func(t *testing.T) {
-		assert.False(t, isSameHost("http://example.com/api/data", targetOrigin))
-	})
-
-	t.Run("different port", func(t *testing.T) {
-		assert.False(t, isSameHost("https://example.com:8443/api/data", targetOrigin))
+	t.Run("exact host", func(t *testing.T) {
+		assert.True(t, sameOrigin("https://example.com/api/data"))
 	})
 
 	t.Run("sibling subdomain", func(t *testing.T) {
-		assert.False(t, isSameHost("https://api.example.com/data", targetOrigin))
+		assert.True(t, sameOrigin("https://platform.example.com/api/v2/casino/producer"))
 	})
 
 	t.Run("parent domain of a subdomain target", func(t *testing.T) {
-		assert.False(t, isSameHost("https://example.com/data", "https://www.example.com"))
+		assert.True(t, urlutil.IsSameOrigin("www.example.com", urlutil.ExtractHost("https://example.com/data")))
 	})
 
-	t.Run("different host", func(t *testing.T) {
-		assert.False(t, isSameHost("https://cdn.other.com/lib.js", targetOrigin))
+	t.Run("port and scheme are ignored", func(t *testing.T) {
+		assert.True(t, sameOrigin("https://example.com:8443/api/data"))
+		assert.True(t, sameOrigin("http://example.com/api/data"))
 	})
 
-	t.Run("empty target origin", func(t *testing.T) {
-		assert.False(t, isSameHost("https://example.com/api/data", ""))
+	t.Run("unrelated host", func(t *testing.T) {
+		assert.False(t, sameOrigin("https://cdn.other.com/lib.js"))
+	})
+
+	t.Run("host that merely suffixes the target", func(t *testing.T) {
+		assert.False(t, sameOrigin("https://notexample.com/data"))
+	})
+
+	t.Run("empty target host", func(t *testing.T) {
+		assert.False(t, urlutil.IsSameOrigin("", urlutil.ExtractHost("https://example.com/api/data")))
 	})
 
 	t.Run("unparseable request URL", func(t *testing.T) {
-		assert.False(t, isSameHost("://not a url", targetOrigin))
+		assert.False(t, sameOrigin("://not a url"))
 	})
 }

@@ -235,7 +235,7 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.RenderResponse, blocklist *Blocklist,
 	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Tasks {
 	timeOrigin := time.Now().UnixMilli()
-	targetOrigin := extractOrigin(req.URL)
+	targetHost := urlutil.ExtractHost(req.URL)
 	injectedHeaders := buildInjectedHeaders(req)
 
 	// Track active fetch handler goroutines
@@ -296,8 +296,11 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 									zap.String("url", event.Request.URL),
 									zap.Error(err))
 							}
-						} else if len(injectedHeaders) > 0 && isSameHost(event.Request.URL, targetOrigin) {
-							// Same-origin request - inject client headers and the render key
+						} else if len(injectedHeaders) > 0 && urlutil.IsSameOrigin(targetHost, urlutil.ExtractHost(event.Request.URL)) {
+							// Same-origin request - inject client headers and the render key.
+							// Subdomains count: SPAs routinely serve their API from a sibling host
+							// (platform.example.com), and origins gate those calls on the render key
+							// too - excluding them silently returns geo/bot-filtered data.
 							headers := mergeRequestHeaders(event.Request.Headers, injectedHeaders)
 							err := fetch.ContinueRequest(event.RequestID).WithHeaders(headers).Do(ctxExecutor)
 							if err != nil {
@@ -775,28 +778,6 @@ func enableLifeCycle() chromedp.ActionFunc {
 	}
 }
 
-// isSameHost checks if requestURL has the same scheme and host as targetOrigin.
-// This is a strict check: scheme, host, and port must match exactly.
-// Note: This differs from urlutil.IsSameOrigin which allows subdomains.
-func isSameHost(requestURL, targetOrigin string) bool {
-	if targetOrigin == "" {
-		return false
-	}
-
-	reqParsed, err := url.Parse(requestURL)
-	if err != nil {
-		return false
-	}
-
-	targetParsed, err := url.Parse(targetOrigin)
-	if err != nil {
-		return false
-	}
-
-	return reqParsed.Scheme == targetParsed.Scheme &&
-		reqParsed.Host == targetParsed.Host
-}
-
 // buildInjectedHeaders combines forwarded client headers with engine-managed headers.
 // The render key is applied last so a forwarded client header of the same name cannot
 // override it, matching the bypass path. Returns nil when there is nothing to inject.
@@ -863,15 +844,6 @@ func mergeRequestHeaders(original map[string]interface{}, injected map[string][]
 	}
 
 	return headers
-}
-
-// extractOrigin extracts scheme+host from URL for same-origin checking.
-func extractOrigin(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	return fmt.Sprintf("%s://%s", parsed.Scheme, parsed.Host)
 }
 
 // urlsMatchIgnoringFragment compares URLs while ignoring fragments and handling encoding differences
