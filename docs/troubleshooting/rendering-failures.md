@@ -99,6 +99,8 @@ render:
 
 **wait_for**: The `networkIdle` event waits until network activity stops. This is the safest option for pages with complex AJAX workflows, though it increases render time.
 
+On a host configured with `prerenderContentReady` or `prerenderReady`, the wait ends on a property the application sets rather than on a browser event, so the failures look different. A soft timeout there usually means the application stopped setting the property, and the capture is its loading shell rather than a partially rendered page. A render that finishes quickly with a near-empty shell usually means the application parked a redirect, which happens on redirects and not-found URLs. Both are visible in the HAR metadata: the readiness property is recorded in `lifecycleEvents` when it fires, so a render with `timedOut: true` and no such entry never got the signal at all, and a render that parked carries the URL it parked in `renderMetrics.prerenderRedirectUrl`. See [Readiness property wait](../edge-gateway/render-mode.md#readiness-property-wait).
+
 **additional_wait**: Adds a fixed delay after the wait event fires. Use as a last resort for pages that modify the DOM after network activity stops. Keep this value at 1-2 seconds maximum to avoid excessive render times.
 
 ## Step 5: Stale cache fallback
@@ -144,7 +146,7 @@ The HAR file is compatible with standard viewers such as the Chrome DevTools Net
 
 - **blockedRequests**: Resources blocked by `block_resources` rules
 - **failedRequests**: Network requests that failed during rendering
-- **lifecycleEvents**: Browser events with timestamps (DOMContentLoaded, networkIdle, etc.)
+- **lifecycleEvents**: Browser events with timestamps (DOMContentLoaded, networkIdle, etc.), plus the readiness property on hosts using a readiness `wait_for` value
 - **renderConfig**: The exact render configuration applied to the request
 
 <img src="/images/har-metadata.png" alt="HAR metadata in viewer" style="width: 50%;" />

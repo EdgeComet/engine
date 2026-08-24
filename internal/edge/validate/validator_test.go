@@ -1358,6 +1358,20 @@ func TestValidateConfiguration_RenderEvents(t *testing.T) {
         wait_for: "networkAlmostIdle"`,
 			wantErr: false,
 		},
+		{
+			name: "valid prerenderReady",
+			eventsConfig: `
+      events:
+        wait_for: "prerenderReady"`,
+			wantErr: false,
+		},
+		{
+			name: "valid prerenderContentReady",
+			eventsConfig: `
+      events:
+        wait_for: "prerenderContentReady"`,
+			wantErr: false,
+		},
 		// Invalid wait_for values
 		{
 			name: "invalid networkidle0 (old Puppeteer value)",
@@ -1390,6 +1404,14 @@ func TestValidateConfiguration_RenderEvents(t *testing.T) {
         wait_for: "ready"`,
 			wantErr:       true,
 			expectedError: "events.wait_for 'ready' is invalid",
+		},
+		{
+			name: "error message lists every accepted value",
+			eventsConfig: `
+      events:
+        wait_for: "prerender"`,
+			wantErr:       true,
+			expectedError: "must be one of: 'DOMContentLoaded', 'load', 'networkIdle', 'networkAlmostIdle', 'prerenderReady', 'prerenderContentReady'",
 		},
 		// Valid additional_wait values
 		{

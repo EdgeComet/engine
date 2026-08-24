@@ -130,13 +130,21 @@ render:
   # LIFECYCLE EVENTS
   # -------------------------------------------------------------------------
   events:
-    # Page lifecycle event to wait for before capturing content
-    # Options: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+    # Signal to wait for before capturing content
     # Default: "networkIdle"
+    #
+    # Page lifecycle events:
     # "DOMContentLoaded" - DOM parsed, external resources may not be loaded
     # "load" - page fully loaded including images
     # "networkIdle" - no network activity for 500ms (recommended for JS-heavy pages)
     # "networkAlmostIdle" - max 2 network connections for 500ms
+    #
+    # Readiness properties, for applications that announce their own readiness.
+    # These wait on a property the page sets on itself, and also set
+    # window.isPrerender before any page script runs. They change how redirects and
+    # not-found URLs render - read the render mode guide before using them:
+    # "prerenderContentReady" - preferred, set once and never reset
+    # "prerenderReady" - a page may reset this one on a route change
     wait_for: "networkIdle"
 
     # Additional wait time after lifecycle event fires

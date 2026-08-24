@@ -376,7 +376,7 @@ func (c *HARCollector) Build(lifecycleEvents []LifecycleEvent, consoleErrors []s
 	// Set metadata
 	builder.SetLifecycleEvents(lifecycleEvents)
 	builder.SetConsoleErrors(consoleErrors)
-	builder.SetRenderMetrics(renderMetrics.Duration, renderMetrics.TimedOut, renderMetrics.ServiceID)
+	builder.SetRenderMetrics(renderMetrics)
 	builder.SetRequestConfig(requestConfig)
 
 	return builder.Finalize()

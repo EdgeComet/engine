@@ -326,13 +326,10 @@ func (b *HARBuilder) SetConsoleErrors(errors []string) {
 	b.metadata.ConsoleErrors = errors
 }
 
-// SetRenderMetrics sets the render metrics in metadata
-func (b *HARBuilder) SetRenderMetrics(duration int64, timedOut bool, serviceID string) {
-	b.metadata.RenderMetrics = &RenderMetrics{
-		Duration:  duration,
-		TimedOut:  timedOut,
-		ServiceID: serviceID,
-	}
+// SetRenderMetrics sets the render metrics in metadata. It takes the struct, as SetRequestConfig
+// below does, so a metric added to it reaches the HAR without another parameter here.
+func (b *HARBuilder) SetRenderMetrics(metrics RenderMetrics) {
+	b.metadata.RenderMetrics = &metrics
 }
 
 // SetRequestConfig sets the request configuration in metadata

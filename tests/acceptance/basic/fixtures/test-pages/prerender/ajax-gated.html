@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prerender AJAX Gated Content</title>
+</head>
+<body>
+    <h1>AJAX Gated Content</h1>
+    <p id="immediate">PRERENDER_IMMEDIATE_CONTENT</p>
+    <div id="gated"></div>
+
+    <script>
+        // A real request rather than a timer: with nothing in flight Chrome reaches the page's
+        // ready state before the gated content exists, and the spec would pass on a renderer
+        // that never waited at all.
+        fetch('/api/mock-data?delay=1500')
+            .then(function (response) { return response.json(); })
+            .then(function () {
+                var section = document.createElement('div');
+                section.textContent = 'PRERENDER_AJAX_CONTENT';
+                document.getElementById('gated').appendChild(section);
+
+                window.prerenderContentReady = true;
+            });
+    </script>
+</body>
+</html>

@@ -9,10 +9,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// scrollBudgetWarnInterval throttles the misconfiguration warning below. The condition is a
-// property of a host's configuration, not of the individual request, so one line per interval
+// budgetWarnInterval throttles the misconfiguration warnings raised per request. Each condition is
+// a property of a host's configuration, not of the individual request, so one line per interval
 // carries the whole signal while a busy host cannot flood the log with it.
-const scrollBudgetWarnInterval = 5 * time.Minute
+const budgetWarnInterval = 5 * time.Minute
 
 // logGate admits one event per interval.
 type logGate struct {
@@ -33,7 +33,7 @@ func (g *logGate) allow(now time.Time) bool {
 	return true
 }
 
-var scrollBudgetGate = &logGate{interval: scrollBudgetWarnInterval}
+var scrollBudgetGate = &logGate{interval: budgetWarnInterval}
 
 // warnOnScrollBudgetShortfall reports a request whose scroll pass cannot fit inside the hard
 // render timeout. Neither process holds both values at startup - max_timeout is render-service

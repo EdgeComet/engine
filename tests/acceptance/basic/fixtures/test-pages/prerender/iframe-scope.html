@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prerender Iframe Scope</title>
+    <script>
+        // The child's DOM is not part of the parent's outerHTML, so the answer has to be read
+        // out of the child window and written into the parent for a spec to see it at all.
+        function reportIframeFlag() {
+            var seen;
+            try {
+                seen = String(document.getElementById('child').contentWindow.isPrerender);
+            } catch (e) {
+                seen = 'unreadable';
+            }
+            document.getElementById('iframe-report').textContent = 'PRERENDER_IN_IFRAME:' + seen;
+
+            window.prerenderContentReady = true;
+        }
+    </script>
+</head>
+<body>
+    <h1>Iframe Scope</h1>
+    <p id="immediate">PRERENDER_IMMEDIATE_CONTENT</p>
+    <p id="iframe-report"></p>
+    <iframe id="child" src="iframe-child.html" width="300" height="120" onload="reportIframeFlag()"></iframe>
+</body>
+</html>

@@ -546,7 +546,7 @@ func TestSetConsoleErrors(t *testing.T) {
 func TestSetRenderMetrics(t *testing.T) {
 	builder := NewHARBuilder("https://example.com", "req-1", "")
 
-	builder.SetRenderMetrics(2500, false, "render-1")
+	builder.SetRenderMetrics(RenderMetrics{Duration: 2500, ServiceID: "render-1"})
 
 	metadata := builder.GetMetadata()
 	require.NotNil(t, metadata.RenderMetrics)
@@ -558,7 +558,7 @@ func TestSetRenderMetrics(t *testing.T) {
 func TestSetRenderMetricsTimedOut(t *testing.T) {
 	builder := NewHARBuilder("https://example.com", "req-1", "")
 
-	builder.SetRenderMetrics(30000, true, "render-2")
+	builder.SetRenderMetrics(RenderMetrics{Duration: 30000, TimedOut: true, ServiceID: "render-2"})
 
 	metadata := builder.GetMetadata()
 	assert.True(t, metadata.RenderMetrics.TimedOut)
@@ -617,7 +617,7 @@ func TestMetadataIncludedInJSONOutput(t *testing.T) {
 		{Name: "load", Timestamp: 200},
 	})
 	builder.SetConsoleErrors([]string{"Error: test error"})
-	builder.SetRenderMetrics(1500, false, "render-1")
+	builder.SetRenderMetrics(RenderMetrics{Duration: 1500, ServiceID: "render-1"})
 	builder.SetRequestConfig(RequestConfig{WaitFor: "networkIdle", BlockedPatterns: []string{"*.analytics.com"}})
 
 	// Add a blocked entry to test blocked requests in metadata

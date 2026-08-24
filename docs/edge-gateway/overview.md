@@ -39,7 +39,7 @@ Render mode is the default action. In this mode, EG sends the URL to a Render Se
 
 Bypass serves two purposes. First, as explicit configuration for parts of a website that don't need rendering: for eg, /api/* endpoints, or already server-rendered pages. Second, as an automatic fallback when rendering fails: no available render services, render timeout, Chrome errors, or unmatched User-Agent with `unmatched_dimension: "bypass"`.
 
-Render configuration includes event waiting behavior. The `wait_for` field specifies when Chrome considers the page ready: `DOMContentLoaded` (DOM ready, resources may still load), `load` (all resources loaded), `networkIdle` (recommended), or `networkAlmostIdle`. The `additional_wait` field adds extra delay after the event fires, useful for JavaScript that executes after network activity stops. Both settings are configurable at all three levels: global, host, and URL pattern.
+Render configuration includes event waiting behavior. The `wait_for` field specifies when Chrome considers the page ready: `DOMContentLoaded` (DOM ready, resources may still load), `load` (all resources loaded), `networkIdle` (recommended), or `networkAlmostIdle`. Two further values, `prerenderContentReady` and `prerenderReady`, wait on a JavaScript property the page sets on itself rather than on a browser event, for applications built to announce their own readiness. The `additional_wait` field adds extra delay after the wait ends, useful for JavaScript that executes after network activity stops. Both settings are configurable at all three levels: global, host, and URL pattern.
 
 
 

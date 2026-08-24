@@ -214,6 +214,11 @@ type RenderMetrics struct {
 	Duration  int64  `json:"duration"`
 	TimedOut  bool   `json:"timedOut,omitempty"`
 	ServiceID string `json:"serviceId,omitempty"`
+
+	// PrerenderRedirectURL is the URL the page parked instead of rendering. Set only under a
+	// readiness wait, and the one thing that tells a captured loading shell apart
+	// from a page that genuinely has nothing on it.
+	PrerenderRedirectURL string `json:"prerenderRedirectUrl,omitempty"`
 }
 
 // RequestConfig contains render request configuration

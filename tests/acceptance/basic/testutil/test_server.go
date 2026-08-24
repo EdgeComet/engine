@@ -35,6 +35,18 @@ const (
 	scrollFixtureDir = "scroll"
 )
 
+// Readiness wait fixtures. The same files answer on every prefix; only the host URL rules
+// differ, so one page can be captured under a readiness wait, under a lifecycle wait, and
+// against a budget too short for it to ever signal.
+const (
+	PrerenderPathPrefix          = "/prerender/"
+	PrerenderLifecyclePathPrefix = "/prerender-lifecycle/"
+	PrerenderTimeoutPathPrefix   = "/prerender-timeout/"
+	PrerenderExtraWaitPathPrefix = "/prerender-extra-wait/"
+
+	prerenderFixtureDir = "prerender"
+)
+
 // Body-text fingerprint fixtures. Exported names are the URL segments the specs request.
 const (
 	ContentChangeRenderPath = "/content-change/render/"
@@ -1161,6 +1173,13 @@ startxref
 	for _, prefix := range []string{ScrollEnabledPathPrefix, ScrollCachedPathPrefix} {
 		mux.Handle(prefix,
 			http.StripPrefix(prefix, http.FileServer(http.Dir(filepath.Join(fixturesDir, scrollFixtureDir)))))
+	}
+
+	// The readiness fixtures do the same, so one page answers under a readiness wait and under
+	// a lifecycle wait. PrerenderPathPrefix is already served by the fixture file server above.
+	for _, prefix := range []string{PrerenderLifecyclePathPrefix, PrerenderTimeoutPathPrefix, PrerenderExtraWaitPathPrefix} {
+		mux.Handle(prefix,
+			http.StripPrefix(prefix, http.FileServer(http.Dir(filepath.Join(fixturesDir, prerenderFixtureDir)))))
 	}
 
 	registerRenderKeyRoutes(mux, ts.thirdPartyBaseURL)

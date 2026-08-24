@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Prerender Flag Report</title>
+    <script>
+        // The first script on the page. What it reads is what a real application's bootstrap
+        // reads, so asserting on this value asserts the flag arrived early enough to matter
+        // rather than merely that it arrived.
+        window.flagAtFirstScript = String(window.isPrerender);
+    </script>
+</head>
+<body>
+    <h1>Prerender Flag Report</h1>
+    <p id="immediate">PRERENDER_IMMEDIATE_CONTENT</p>
+    <p id="first-script-report"></p>
+    <p id="dom-ready-report"></p>
+
+    <script>
+        document.getElementById('first-script-report').textContent =
+            'PRERENDER_AT_FIRST_SCRIPT:' + window.flagAtFirstScript;
+
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('dom-ready-report').textContent =
+                'PRERENDER_AT_DOM_READY:' + String(window.isPrerender);
+
+            // Readiness is signalled last, so everything the specs assert on is already in the
+            // DOM by the time the wait is allowed to end.
+            window.prerenderContentReady = true;
+        });
+    </script>
+</body>
+</html>

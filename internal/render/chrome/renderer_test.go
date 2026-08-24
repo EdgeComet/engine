@@ -4,7 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/page"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/pkg/types"
@@ -158,4 +161,127 @@ func TestRenderKeyInjectionScope(t *testing.T) {
 	t.Run("unparseable request URL", func(t *testing.T) {
 		assert.False(t, sameOrigin("://not a url"))
 	})
+}
+
+// lifecycleEvent builds the CDP event the recorder listens for.
+func lifecycleEvent(name, frameID, loaderID string) *page.EventLifecycleEvent {
+	return &page.EventLifecycleEvent{
+		FrameID:  cdp.FrameID(frameID),
+		LoaderID: cdp.LoaderID(loaderID),
+		Name:     name,
+	}
+}
+
+// newTestRecorder builds a recorder and its listener without a browser, which is the seam that
+// makes the matching and signalling rules testable at all: installing the real listener needs a
+// chromedp context with a live target.
+func newTestRecorder(t *testing.T, metrics *types.PageMetrics, targetEvent string) (*lifecycleRecorder, func(ev interface{}), *bool) {
+	t.Helper()
+
+	stopped := false
+	recorder := newLifecycleRecorder(metrics, func() { stopped = true })
+
+	return recorder, recorder.listener(testFrameID, testLoaderID, targetEvent, time.Now().UnixMilli()), &stopped
+}
+
+const (
+	testFrameID  = "frame-1"
+	testLoaderID = "loader-1"
+)
+
+func TestLifecycleRecorder(t *testing.T) {
+	t.Run("records every event of the navigation", func(t *testing.T) {
+		var metrics types.PageMetrics
+		_, listen, _ := newTestRecorder(t, &metrics, types.LifecycleEventNetworkIdle)
+
+		for _, name := range []string{"init", types.LifecycleEventDOMContentLoaded, types.LifecycleEventLoad} {
+			listen(lifecycleEvent(name, testFrameID, testLoaderID))
+		}
+
+		require.Len(t, metrics.LifecycleEvents, 3)
+		assert.Equal(t, "init", metrics.LifecycleEvents[0].Name)
+		assert.Equal(t, types.LifecycleEventLoad, metrics.LifecycleEvents[2].Name)
+		for _, ev := range metrics.LifecycleEvents {
+			assert.GreaterOrEqual(t, ev.Time, 0.0)
+		}
+	})
+
+	t.Run("ignores other navigations and other event types", func(t *testing.T) {
+		var metrics types.PageMetrics
+		recorder, listen, _ := newTestRecorder(t, &metrics, types.LifecycleEventLoad)
+
+		listen(lifecycleEvent(types.LifecycleEventLoad, "other-frame", testLoaderID))
+		listen(lifecycleEvent(types.LifecycleEventLoad, testFrameID, "other-loader"))
+		listen(&page.EventJavascriptDialogClosed{})
+
+		assert.Empty(t, metrics.LifecycleEvents)
+		assertNotSignaled(t, recorder)
+	})
+
+	t.Run("signals and stops the listener on the target event", func(t *testing.T) {
+		var metrics types.PageMetrics
+		recorder, listen, stopped := newTestRecorder(t, &metrics, types.LifecycleEventNetworkIdle)
+
+		listen(lifecycleEvent(types.LifecycleEventLoad, testFrameID, testLoaderID))
+		assertNotSignaled(t, recorder)
+
+		listen(lifecycleEvent(types.LifecycleEventNetworkIdle, testFrameID, testLoaderID))
+
+		select {
+		case <-recorder.signal():
+		default:
+			t.Fatal("target event did not signal")
+		}
+		assert.True(t, *stopped, "the listener context is cancelled as soon as the target arrives")
+	})
+
+	t.Run("a repeated target event does not panic", func(t *testing.T) {
+		var metrics types.PageMetrics
+		recorder, listen, _ := newTestRecorder(t, &metrics, types.LifecycleEventNetworkIdle)
+
+		listen(lifecycleEvent(types.LifecycleEventNetworkIdle, testFrameID, testLoaderID))
+		listen(lifecycleEvent(types.LifecycleEventNetworkIdle, testFrameID, testLoaderID))
+
+		assert.Len(t, metrics.LifecycleEvents, 2, "the repeat is still recorded")
+		select {
+		case <-recorder.signal():
+		default:
+			t.Fatal("target event did not signal")
+		}
+	})
+
+	t.Run("an empty target records without ever signalling", func(t *testing.T) {
+		var metrics types.PageMetrics
+		recorder, listen, stopped := newTestRecorder(t, &metrics, "")
+
+		for _, name := range []string{types.LifecycleEventLoad, types.LifecycleEventNetworkIdle} {
+			listen(lifecycleEvent(name, testFrameID, testLoaderID))
+		}
+
+		assert.Len(t, metrics.LifecycleEvents, 2, "a render on a readiness wait keeps its lifecycle analytics")
+		assertNotSignaled(t, recorder)
+		assert.False(t, *stopped)
+	})
+
+	t.Run("a wait records its own entry alongside the events", func(t *testing.T) {
+		var metrics types.PageMetrics
+		recorder, listen, _ := newTestRecorder(t, &metrics, "")
+
+		listen(lifecycleEvent(types.LifecycleEventLoad, testFrameID, testLoaderID))
+		recorder.record(types.WaitForPrerenderContentReady, 4.4)
+
+		require.Len(t, metrics.LifecycleEvents, 2)
+		assert.Equal(t, types.LifecycleEvent{Name: types.WaitForPrerenderContentReady, Time: 4.4},
+			metrics.LifecycleEvents[1])
+	})
+}
+
+func assertNotSignaled(t *testing.T, recorder *lifecycleRecorder) {
+	t.Helper()
+
+	select {
+	case <-recorder.signal():
+		t.Fatal("wait signalled when it should not have")
+	default:
+	}
 }

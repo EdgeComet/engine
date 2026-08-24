@@ -97,6 +97,35 @@ const (
 	LifecycleEventNetworkAlmostIdle = "networkAlmostIdle" // At most 2 network connections for 500ms
 )
 
+// Readiness property constants for wait_for. These are not lifecycle events: each names a window
+// property the page itself sets once its content is in the DOM, which is the only signal a
+// framework with lazily resolved content gives. Selecting one also marks the page as being
+// captured - the renderer seeds window.isPrerender before any page script runs.
+const (
+	WaitForPrerenderReady        = "prerenderReady"        // page reports itself ready
+	WaitForPrerenderContentReady = "prerenderContentReady" // page reports its content resolved, preferred where a page sets both
+)
+
+// ValidWaitForValues returns every accepted wait_for value. Configuration validation and its error
+// message both read from it so neither can drift from the constants above.
+func ValidWaitForValues() []string {
+	return []string{
+		LifecycleEventDOMContentLoaded,
+		LifecycleEventLoad,
+		LifecycleEventNetworkIdle,
+		LifecycleEventNetworkAlmostIdle,
+		WaitForPrerenderReady,
+		WaitForPrerenderContentReady,
+	}
+}
+
+// IsPrerenderWait reports whether wait_for selects the prerender readiness wait instead of a page
+// lifecycle event. It is the single place that decision is made: the renderer picks the wait
+// mechanism with it, and the render service warns on the timeout budget with it.
+func IsPrerenderWait(waitFor string) bool {
+	return waitFor == WaitForPrerenderReady || waitFor == WaitForPrerenderContentReady
+}
+
 // RenderServer represents a render service instance
 type RenderServer struct {
 	ID       string    `json:"id"`
@@ -121,7 +150,7 @@ type RenderRequest struct {
 
 	// Timing configuration
 	Timeout   time.Duration `json:"timeout"`    // render timeout duration
-	WaitFor   string        `json:"wait_for"`   // lifecycle event: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+	WaitFor   string        `json:"wait_for"`   // lifecycle event or readiness property, see ValidWaitForValues
 	ExtraWait time.Duration `json:"extra_wait"` // additional wait duration after event
 
 	// Request blocking configuration
@@ -264,7 +293,7 @@ type PageMetrics struct {
 	DomainStats map[string]*DomainStats `json:"domain_stats,omitempty"`
 
 	// Render configuration used (for analytics)
-	WaitForEvent   string  `json:"wait_for_event,omitempty"`  // target lifecycle event
+	WaitForEvent   string  `json:"wait_for_event,omitempty"`  // configured wait_for value: lifecycle event or readiness property
 	ExtraWait      float64 `json:"extra_wait,omitempty"`      // configured extra wait (seconds)
 	Timeout        float64 `json:"timeout,omitempty"`         // configured timeout (seconds)
 	ViewportWidth  int     `json:"viewport_width,omitempty"`  // viewport width
@@ -282,6 +311,9 @@ type PageMetrics struct {
 	ScrollStopReason    string  `json:"scroll_stop_reason,omitempty"`    // settled, duration, max_steps, no_target, cancelled or error
 	ScrollDuration      float64 `json:"scroll_duration,omitempty"`       // wall time spent scrolling (seconds)
 	ScrollFinalHeight   int     `json:"scroll_final_height,omitempty"`   // scrollHeight of the page scroller at the last step
+
+	// Readiness wait outcome
+	PrerenderRedirectURL string `json:"prerender_redirect_url,omitempty"` // URL the page parked on instead of rendering its own content; a non-empty value means the captured HTML is the page's loading shell, not the destination
 }
 
 // DomainStats contains per-domain network statistics.

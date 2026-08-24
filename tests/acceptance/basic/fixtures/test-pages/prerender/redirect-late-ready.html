@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Parked Then Ready</title>
+    <script>
+        // The soft-404 shape: the application parks a redirect and then builds a page anyway.
+        // The parked URL is the truth for this URL, so the wait has to leave on it rather than
+        // on the readiness that arrives seconds later describing somewhere else.
+        window.prerenderRedirectUrl = '/prerender/destination.html';
+    </script>
+</head>
+<body>
+    <p id="shell">PRERENDER_PARKED_SHELL</p>
+    <div id="late"></div>
+
+    <script>
+        fetch('/api/mock-data?delay=4000')
+            .then(function (response) { return response.json(); })
+            .then(function () {
+                var section = document.createElement('div');
+                section.textContent = 'PRERENDER_LATE_CONTENT';
+                document.getElementById('late').appendChild(section);
+
+                window.prerenderContentReady = true;
+            });
+    </script>
+</body>
+</html>

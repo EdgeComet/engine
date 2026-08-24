@@ -163,6 +163,7 @@ func HandleRender(ctx *fasthttp.RequestCtx, pool *chrome.ChromePool, tabManager 
 	}
 
 	warnOnScrollBudgetShortfall(&req, time.Duration(renderConfig.MaxTimeout), logger)
+	warnOnPrerenderBudgetShortfall(&req, time.Duration(renderConfig.MaxTimeout), logger)
 
 	// Validate tab reservation and extend TTL
 	if req.TabID < 0 || req.TabID >= tabManager.GetPoolSize() {

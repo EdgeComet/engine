@@ -173,8 +173,12 @@ render:
       stale_ttl: 24h
 
   events:
-    # Page ready event
-    # Options: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+    # Page ready signal
+    # Lifecycle events: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+    # Readiness properties: "prerenderContentReady", "prerenderReady"
+    #   These wait on a property the page sets on itself and also set
+    #   window.isPrerender before any page script runs. They change how redirects
+    #   and not-found URLs render - read the render mode guide before using them.
     # Default: "networkIdle"
     wait_for: "networkIdle"
 

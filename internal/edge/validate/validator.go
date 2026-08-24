@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1805,6 +1806,16 @@ func validateGlobalUnmatchedDimension(cfg *configtypes.EgConfig, filename string
 	}
 }
 
+// quoteList renders accepted values for an error message, as 'a', 'b', 'c'.
+func quoteList(values []string) string {
+	quoted := make([]string, len(values))
+	for i, value := range values {
+		quoted[i] = "'" + value + "'"
+	}
+
+	return strings.Join(quoted, ", ")
+}
+
 // validateRenderEvents validates render.events configuration
 func validateRenderEvents(events *types.RenderEvents, contextPrefix string, filename string, collector *ErrorCollector) {
 	if events == nil {
@@ -1813,28 +1824,11 @@ func validateRenderEvents(events *types.RenderEvents, contextPrefix string, file
 
 	// Validate wait_for if specified
 	if events.WaitFor != "" {
-		validEvents := []string{
-			types.LifecycleEventDOMContentLoaded,
-			types.LifecycleEventLoad,
-			types.LifecycleEventNetworkIdle,
-			types.LifecycleEventNetworkAlmostIdle,
-		}
+		validValues := types.ValidWaitForValues()
 
-		isValid := false
-		for _, valid := range validEvents {
-			if events.WaitFor == valid {
-				isValid = true
-				break
-			}
-		}
-
-		if !isValid {
-			collector.Add(filename, 0, "%s: events.wait_for '%s' is invalid (must be '%s', '%s', '%s', or '%s')",
-				contextPrefix, events.WaitFor,
-				types.LifecycleEventDOMContentLoaded,
-				types.LifecycleEventLoad,
-				types.LifecycleEventNetworkIdle,
-				types.LifecycleEventNetworkAlmostIdle)
+		if !slices.Contains(validValues, events.WaitFor) {
+			collector.Add(filename, 0, "%s: events.wait_for '%s' is invalid (must be one of: %s)",
+				contextPrefix, events.WaitFor, quoteList(validValues))
 		}
 	}
 

@@ -33,6 +33,8 @@ The choice is typically between `networkAlmostIdle` and `networkIdle`:
 - `networkAlmostIdle` allows some network requests to remain in flight. It works for most websites but may fire too early in some cases.
 - `networkIdle` is the recommended event that works for most cases.
 
+Two further `wait_for` values are not lifecycle events at all. `prerenderContentReady` and `prerenderReady` wait for a JavaScript property the page sets on itself once its content is in the DOM. They apply only to applications built around that contract, and they change how redirects and not-found URLs render. See [Readiness property wait](#readiness-property-wait).
+
 ### additional_wait
 
 For some websites, even `networkIdle` is not sufficient and HTML is not fully ready. The `additional_wait` setting specifies how long to wait after the `wait_for` event before capturing HTML content. Use Go duration format (e.g., `"500ms"`, `"2s"`).
@@ -112,6 +114,92 @@ chrome:
     max_timeout: "60s"  # Maximum time before force-cancelling render
 ```
 :::
+
+## Readiness property wait
+
+Some single-page applications resolve their content lazily and never reach a quiet network at a moment when the page is actually complete. Frameworks built to be captured by a bot renderer solve this with a contract: the application announces that it has finished by setting a property on `window`, and the renderer waits for that property instead of inferring readiness from network activity.
+
+Two `wait_for` values select that wait:
+
+- `prerenderContentReady` (preferred)
+- `prerenderReady`
+
+Neither is a Chrome lifecycle event. The renderer polls the page for the named property and captures HTML as soon as the property is truthy.
+
+### window.isPrerender
+
+Selecting either value also marks the page as being captured rather than browsed: the renderer sets `window.isPrerender = true` before any of the page's own scripts run. This is not separately configurable, and it is the half of the contract that carries the feature.
+
+An application that implements this contract reads the flag during bootstrap and never reads it again. A flag that arrives after the page's first script changes nothing, and without the flag the application stays in its ordinary mode: its lazily resolved sections never resolve and it never sets a readiness property at all.
+
+The flag is set for the whole page, same-origin iframes included, and only for the render that asked for it. It does not carry into the next render on the same browser.
+
+### Which value to prefer
+
+Prefer `prerenderContentReady`. Where an application sets both, the two are not equivalent.
+
+`prerenderReady` is usually wired into application state and is not monotonic: a route change sets it back to `false` after it has been true. Nothing within a single render recovers from that. The value can be true when the renderer looks and false a moment later, and which of the two a render sees is a race.
+
+`prerenderContentReady` is normally guarded so that it is set once and never reset, and it is set from the event that fires when lazily resolved components have finished resolving. It also tends to fire slightly later, which is the point: it describes content that is in the DOM rather than a state machine reaching a step.
+
+Confirm which properties an application actually sets before configuring either one.
+
+### Parked redirects
+
+The wait also ends as soon as `window.prerenderRedirectUrl` holds a non-empty value, whichever comes first.
+
+An application that has seen the flag does not navigate. When it decides that a URL belongs somewhere else - a redirect, or a not-found - it parks the destination in that property and stops. Without this exit, such a URL would sit on its loading shell until the render timeout expired, on every crawl. Applications set the parked URL early, well ahead of any readiness signal, so leaving on it costs a render nothing.
+
+The parked URL wins over readiness within the same check. An application can park a redirect and then go on to build a page anyway; when it does, the content it builds belongs to the destination rather than to the URL being rendered.
+
+`additional_wait` is not paid on this exit. It is settling time for a page that reported its content was in the DOM, which a parked page never does, and the only thing such a page can build while the render sleeps is the destination's content - the content the exit exists to keep out of the capture.
+
+The parked URL is recorded on the render metrics, and appears as `prerenderRedirectUrl` in a debug HAR. It is what separates a captured loading shell from a page that genuinely had nothing to render.
+
+### Redirects and not-found URLs change behaviour
+
+This is the constraint to resolve before switching a host.
+
+Because the application no longer navigates, a URL that would have redirected and a URL that would have served a not-found page both render a near-empty loading shell instead of the destination. Nothing about that shell marks it as a failure, so it is served as a 200 and cached as a 200 for the configured TTL.
+
+Have origin status handling in place for those URLs before moving a host to a readiness `wait_for` value. On a host where every crawled URL renders content, the wait is a straight improvement; on a host with redirects or soft not-found pages, it is not.
+
+### Timeout budget
+
+A readiness wait is far more likely to run its full length than a lifecycle wait. Lifecycle events fire on almost every page, while a property an application has stopped setting - after a bundle upgrade, a refactor, a renamed flag - never fires at all.
+
+Keep the host `render.timeout` below the Render Service `chrome.render.max_timeout`, with room to spare. The render timeout is soft and still yields partial HTML; the hard timeout is not, and cancels the render outright with no HTML at all. When the two are equal, a wait that runs its full length leaves nothing for HTML extraction and the render ends as a 504 instead of as a usable partial capture. The Render Service logs a warning when it receives a request in that state.
+
+### Configuration example
+
+::: code-group
+```yaml [Host - example.com.yaml]
+hosts:
+  - id: 1
+    render:
+      # Below the Render Service max_timeout, so an application that stops
+      # signalling still yields a partial capture rather than a 504.
+      timeout: 30s
+      events:
+        wait_for: "prerenderContentReady"
+        # Paid only after a readiness signal - never after a timeout, never
+        # after a parked redirect - and the signal is the point.
+        additional_wait: 0s
+```
+```yaml [URL pattern]
+url_rules:
+  - match: "/catalog/*"
+    action: "render"
+    render:
+      events:
+        wait_for: "prerenderContentReady"
+```
+:::
+
+### What to watch after switching
+
+- The readiness property appears in `lifecycleEvents` in a debug HAR, alongside `load` and `networkIdle`. It is recorded like an event, so an application that stopped setting it shows up as a missing entry rather than only as a rise in timeouts.
+- Timeouts should not rise. A rise means URLs are reaching the render timeout, which on such a host usually means either that the property is no longer set or that those URLs are parking a redirect the render is not leaving on.
 
 ## Resource blocking
 

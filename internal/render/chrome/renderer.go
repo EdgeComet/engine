@@ -31,6 +31,7 @@ import (
 const (
 	maxConsoleMessagesSize = 5120     // Maximum total size of console messages in bytes (5KB)
 	maxHTMLResponseSize    = 20971520 // Maximum HTML response size in bytes (20MB)
+	millisPerSecond        = 1000.0   // CDP timings arrive in milliseconds, render metrics carry seconds
 )
 
 // Render performs page rendering with the Chrome instance
@@ -185,9 +186,10 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 			harLifecycleEvents,
 			consoleErrorStrings,
 			har.RenderMetrics{
-				Duration:  resp.RenderTime.Milliseconds(),
-				TimedOut:  resp.Metrics.TimedOut,
-				ServiceID: resp.ChromeID,
+				Duration:             resp.RenderTime.Milliseconds(),
+				TimedOut:             resp.Metrics.TimedOut,
+				ServiceID:            resp.ChromeID,
+				PrerenderRedirectURL: resp.Metrics.PrerenderRedirectURL,
 			},
 			har.RequestConfig{
 				WaitFor:              req.WaitFor,
@@ -563,6 +565,10 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 			req.ViewportWidth < 768, // Mobile if width < 768px
 		),
 
+		// Must precede navigation: the flag has to be in place before the page's own bootstrap
+		// reads it, which is the first thing that script does.
+		ci.seedPrerenderFlag(req),
+
 		// Navigate and wait for page ready (with soft timeout)
 		ci.navigateAndWait(req, timeOrigin, &resp.Metrics),
 
@@ -660,8 +666,9 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 	}
 }
 
-// navigateAndWait navigates to URL and waits for the specified event
-// Supported events: "DOMContentLoaded", "load", "networkIdle", "networkAlmostIdle"
+// navigateAndWait navigates to URL and waits for the page to be ready
+// Supported waits: the lifecycle events "DOMContentLoaded", "load", "networkIdle",
+// "networkAlmostIdle", and the readiness properties (see types.IsPrerenderWait)
 // Uses soft timeout - if wait exceeds timeout, it sets metrics.TimedOut=true but continues
 func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin int64, metrics *types.PageMetrics) chromedp.ActionFunc {
 	return func(ctx context.Context) error {
@@ -671,8 +678,25 @@ func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin i
 			return errors.Join(ErrNavigateFailed, err)
 		}
 
-		// Wait for lifecycle event with timeout (soft - we continue on timeout)
-		err = waitForEvent(ctx, req.WaitFor, string(frameId), string(loaderId), req.Timeout, metrics, timeOrigin)
+		// Wait for the page to be ready with timeout (soft - we continue on timeout)
+		var parkedURL string
+		if types.IsPrerenderWait(req.WaitFor) {
+			parkedURL, err = waitForPrerenderReady(ctx, req.WaitFor, string(frameId), string(loaderId),
+				req.Timeout, metrics, timeOrigin)
+		} else {
+			err = waitForEvent(ctx, req.WaitFor, string(frameId), string(loaderId), req.Timeout, metrics, timeOrigin)
+		}
+		metrics.PrerenderRedirectURL = parkedURL
+
+		if parkedURL != "" {
+			// The page decided this URL renders somewhere else and stopped, so what gets captured
+			// is its loading shell. Worth seeing: it is served and cached as a normal response.
+			ci.logger.Info("Page parked on a redirect instead of rendering",
+				zap.String("request_id", req.RequestID),
+				zap.Int("instance_id", ci.ID),
+				zap.String("url", req.URL),
+				zap.String("redirect_url", parkedURL))
+		}
 
 		// If timeout occurred, mark it but don't fail
 		if errors.Is(err, ErrWaitTimeout) {
@@ -688,8 +712,11 @@ func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin i
 			return err
 		}
 
-		// Extra wait if requested (skip if already timed out)
-		if req.ExtraWait > 0 && !metrics.TimedOut {
+		// Extra wait if requested. Skipped after a timeout, and after a parked redirect: settling
+		// time is for a page that signalled it had finished rendering, and a parked page never
+		// will. All it can build during the wait is content belonging to the URL it parked on,
+		// which is exactly what leaving the wait on the parked URL is there to avoid capturing.
+		if req.ExtraWait > 0 && !metrics.TimedOut && parkedURL == "" {
 			time.Sleep(req.ExtraWait)
 		}
 
@@ -697,38 +724,96 @@ func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin i
 	}
 }
 
+// lifecycleRecorder collects every page lifecycle event of one navigation onto the render metrics
+// and, when a target event is named, signals the first time that event arrives. The two jobs are
+// separate because a wait driven by something other than a lifecycle event still needs the events
+// recorded: without them a render carries no load or networkIdle timings at all.
+type lifecycleRecorder struct {
+	// mu guards the append. Chrome delivers events on its own goroutine, and a wait that records
+	// an entry of its own does so from the goroutine driving the wait.
+	mu      sync.Mutex
+	metrics *types.PageMetrics
+
+	// stop ends the listener as soon as the target event arrives, matching the lifetime the
+	// listener had when it was inline in waitForEvent.
+	stop     context.CancelFunc
+	reached  chan struct{}
+	signaled sync.Once
+}
+
+func newLifecycleRecorder(metrics *types.PageMetrics, stop context.CancelFunc) *lifecycleRecorder {
+	return &lifecycleRecorder{
+		metrics: metrics,
+		stop:    stop,
+		reached: make(chan struct{}),
+	}
+}
+
+// recordLifecycleEvents installs the lifecycle listener for one navigation. An empty targetEvent
+// records only and never signals. The returned cancel func must be called by the caller: the
+// recorder cancels the listener itself only when its target arrives.
+func recordLifecycleEvents(ctx context.Context, frameID, loaderID, targetEvent string,
+	metrics *types.PageMetrics, timeOrigin int64) (*lifecycleRecorder, context.CancelFunc) {
+	listenerCtx, cancel := context.WithCancel(ctx)
+	recorder := newLifecycleRecorder(metrics, cancel)
+
+	chromedp.ListenTarget(listenerCtx, recorder.listener(frameID, loaderID, targetEvent, timeOrigin))
+
+	return recorder, cancel
+}
+
+// listener returns the event handler, separated from installation so the matching and signalling
+// rules can be exercised without a browser.
+func (r *lifecycleRecorder) listener(frameID, loaderID, targetEvent string, timeOrigin int64) func(ev interface{}) {
+	return func(ev interface{}) {
+		e, ok := ev.(*page.EventLifecycleEvent)
+		// Both IDs must match: a frame can be reused across navigations, so the loader is what
+		// pins the events to this one.
+		if !ok || string(e.FrameID) != frameID || string(e.LoaderID) != loaderID {
+			return
+		}
+
+		r.record(string(e.Name), float64(time.Now().UnixMilli()-timeOrigin)/millisPerSecond)
+
+		if targetEvent != "" && string(e.Name) == targetEvent {
+			r.markReached()
+		}
+	}
+}
+
+// record appends one entry to the render metrics.
+func (r *lifecycleRecorder) record(name string, seconds float64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.metrics.LifecycleEvents = append(r.metrics.LifecycleEvents, types.LifecycleEvent{
+		Name: name,
+		Time: seconds,
+	})
+}
+
+// markReached reports the target event as reached. Chrome repeats a lifecycle event name for the
+// same frame and loader, so this has to be idempotent - a second close would panic.
+func (r *lifecycleRecorder) markReached() {
+	r.signaled.Do(func() {
+		r.stop()
+		close(r.reached)
+	})
+}
+
+// signal is closed when the target event arrives, and never closed when no target was named.
+func (r *lifecycleRecorder) signal() <-chan struct{} {
+	return r.reached
+}
+
 // waitForEvent waits for a specific page lifecycle event matching frameId and loaderId
 // Tracks ALL lifecycle events for the page and signals completion when the target event arrives
 func waitForEvent(ctx context.Context, eventName, frameId, loaderId string, timeout time.Duration, metrics *types.PageMetrics, timeOrigin int64) error {
-	ch := make(chan struct{})
-
-	listenerCtx, cancel := context.WithCancel(ctx)
+	recorder, cancel := recordLifecycleEvents(ctx, frameId, loaderId, eventName, metrics, timeOrigin)
 	defer cancel()
 
-	chromedp.ListenTarget(listenerCtx, func(ev interface{}) {
-		if e, ok := ev.(*page.EventLifecycleEvent); ok {
-			// Match both frameId AND loaderId to track correct navigation
-			if string(e.FrameID) == frameId && string(e.LoaderID) == loaderId {
-				now := time.Now().UnixMilli()
-				delta := now - timeOrigin
-
-				// Track ALL lifecycle events with timestamps
-				metrics.LifecycleEvents = append(metrics.LifecycleEvents, types.LifecycleEvent{
-					Name: string(e.Name),
-					Time: float64(delta) / 1000.0,
-				})
-
-				// Signal completion when target event arrives
-				if string(e.Name) == eventName {
-					cancel()
-					close(ch)
-				}
-			}
-		}
-	})
-
 	select {
-	case <-ch:
+	case <-recorder.signal():
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()

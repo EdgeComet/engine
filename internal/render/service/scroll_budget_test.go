@@ -52,7 +52,7 @@ func TestWarnOnScrollBudgetShortfall(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			core, logs := observer.New(zap.WarnLevel)
-			scrollBudgetGate = &logGate{interval: scrollBudgetWarnInterval}
+			scrollBudgetGate = &logGate{interval: budgetWarnInterval}
 
 			warnOnScrollBudgetShortfall(scrollBudgetRequest(tt.scroll, tt.timeout), testMaxTimeout, zap.New(core))
 
@@ -67,7 +67,7 @@ func TestWarnOnScrollBudgetShortfall(t *testing.T) {
 
 func TestWarnOnScrollBudgetShortfallIsThrottled(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
-	scrollBudgetGate = &logGate{interval: scrollBudgetWarnInterval}
+	scrollBudgetGate = &logGate{interval: budgetWarnInterval}
 	logger := zap.New(core)
 
 	req := scrollBudgetRequest(true, testMaxTimeout)

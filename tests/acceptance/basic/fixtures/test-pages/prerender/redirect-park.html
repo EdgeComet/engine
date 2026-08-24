@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Loading...</title>
+    <script>
+        // What a prerender-aware application does with a URL it will not render: it parks the
+        // destination and stops, so readiness never arrives and nothing but this shell is built.
+        window.prerenderRedirectUrl = '/prerender/destination.html';
+    </script>
+</head>
+<body>
+    <p id="shell">PRERENDER_PARKED_SHELL</p>
+</body>
+</html>

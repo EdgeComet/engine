@@ -812,3 +812,59 @@ hosts:
             enabled: true
           cache:
             ttl: 5m
+
+      # --- PRERENDER READINESS TESTS (for prerender_test.go) ---
+      # The prerender fixtures answer on four prefixes, so the same page can be captured under
+      # a readiness wait, under a lifecycle wait, and against a budget it cannot meet. Caching
+      # is off everywhere here so every spec renders.
+
+      # The readiness wait with room to spare: a spec that finishes well inside this budget
+      # left the wait on a signal rather than on expiry, which is the whole distinction the
+      # redirect specs turn on.
+      - match: "/prerender/*"
+        action: "render"
+        render:
+          timeout: 20s
+          events:
+            wait_for: "prerenderContentReady"
+            additional_wait: 0s
+          cache:
+            ttl: 0s
+
+      # The same files under a lifecycle wait. Nothing rendered through here may see
+      # window.isPrerender, which is what makes it the control for every seeding spec.
+      - match: "/prerender-lifecycle/*"
+        action: "render"
+        render:
+          timeout: 10s
+          events:
+            wait_for: "networkIdle"
+            additional_wait: 0s
+          cache:
+            ttl: 0s
+
+      # A page that never signals spends whatever budget it is given, so the budget here is
+      # small enough to keep the spec quick and large enough for the page itself to load.
+      - match: "/prerender-timeout/*"
+        action: "render"
+        render:
+          timeout: 3s
+          events:
+            wait_for: "prerenderContentReady"
+            additional_wait: 0s
+          cache:
+            ttl: 0s
+
+      # The same short budget with an additional wait several times larger. The additional wait
+      # is paid only after a readiness signal, so neither a render that expires here nor one
+      # that leaves on a parked redirect may pay it - the wall clock is the only place that is
+      # visible.
+      - match: "/prerender-extra-wait/*"
+        action: "render"
+        render:
+          timeout: 3s
+          events:
+            wait_for: "prerenderContentReady"
+            additional_wait: 10s
+          cache:
+            ttl: 0s

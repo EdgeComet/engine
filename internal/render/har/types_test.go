@@ -313,9 +313,10 @@ func TestFailedRequestMetadata(t *testing.T) {
 
 func TestRenderMetrics(t *testing.T) {
 	metrics := RenderMetrics{
-		Duration:  2500,
-		TimedOut:  false,
-		ServiceID: "render-1",
+		Duration:             2500,
+		TimedOut:             false,
+		ServiceID:            "render-1",
+		PrerenderRedirectURL: "/en/404",
 	}
 
 	data, err := json.Marshal(metrics)
@@ -327,6 +328,7 @@ func TestRenderMetrics(t *testing.T) {
 
 	assert.Equal(t, float64(2500), result["duration"])
 	assert.Equal(t, "render-1", result["serviceId"])
+	assert.Equal(t, "/en/404", result["prerenderRedirectUrl"])
 	_, hasTimedOut := result["timedOut"]
 	assert.False(t, hasTimedOut, "timedOut should be omitted when false")
 }
