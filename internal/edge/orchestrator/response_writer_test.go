@@ -374,3 +374,49 @@ func TestResponseWriters_KeepAliveEnabled(t *testing.T) {
 		assert.False(t, renderCtx.HTTPCtx.Response.ConnectionClose(), "status response must not force Connection: close")
 	})
 }
+
+func TestWriteCacheResponse_LocationGatedByStatus(t *testing.T) {
+	rw := NewResponseWriter()
+
+	newCtx := func() *edgectx.RenderContext {
+		return newTestRenderContext(&config.ResolvedConfig{
+			SafeResponseHeaders: []string{"Content-Type", "Location"},
+			Cache: config.ResolvedCacheConfig{
+				Expired: types.CacheExpiredConfig{StaleTTL: ptrDuration(time.Hour)},
+			},
+		})
+	}
+
+	// Entries written before the save-side gate still carry a Location on a 200.
+	t.Run("200 entry drops a stored Location", func(t *testing.T) {
+		renderCtx := newCtx()
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 200,
+			Headers:    map[string][]string{"Location": {"https://example.com/final"}},
+			ExpiresAt:  time.Now().UTC().Add(time.Hour),
+			CreatedAt:  time.Now().UTC(),
+		}
+		resp := &cache.CacheResponse{Content: []byte("<html>page</html>")}
+
+		assert.NoError(t, rw.WriteCacheResponse(renderCtx, entry, resp))
+		assert.Empty(t, renderCtx.HTTPCtx.Response.Header.Peek("Location"))
+	})
+
+	// Redirects normally take the metadata-only path; the guard here keeps Location intact
+	// if a 3xx ever arrives with a body.
+	t.Run("301 entry keeps a stored Location", func(t *testing.T) {
+		renderCtx := newCtx()
+		entry := &cache.CacheMetadata{
+			Source:     cache.SourceRender,
+			StatusCode: 301,
+			Headers:    map[string][]string{"Location": {"https://example.com/new-page"}},
+			ExpiresAt:  time.Now().UTC().Add(time.Hour),
+			CreatedAt:  time.Now().UTC(),
+		}
+		resp := &cache.CacheResponse{Content: []byte("<html>moved</html>")}
+
+		assert.NoError(t, rw.WriteCacheResponse(renderCtx, entry, resp))
+		assert.Equal(t, "https://example.com/new-page", string(renderCtx.HTTPCtx.Response.Header.Peek("Location")))
+	})
+}

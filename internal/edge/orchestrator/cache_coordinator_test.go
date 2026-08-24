@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -14,8 +15,33 @@ import (
 	customredis "github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
+	"github.com/edgecomet/engine/internal/edge/sharding"
 	"github.com/edgecomet/engine/pkg/types"
 )
+
+// stubShardingManager satisfies ShardingManager for tests that store an entry with a file
+// on disk: SaveCache stamps eg_ids from the manager even when sharding is disabled.
+type stubShardingManager struct{ egID string }
+
+func (s *stubShardingManager) IsEnabled() bool { return false }
+func (s *stubShardingManager) ComputeTargets(context.Context, *types.CacheKey) ([]string, error) {
+	return nil, nil
+}
+func (s *stubShardingManager) IsTargetForCache(context.Context, *types.CacheKey) (bool, error) {
+	return true, nil
+}
+func (s *stubShardingManager) PushToTargets(context.Context, *types.CacheKey, []byte, *cache.CacheMetadata, []string, string) ([]string, error) {
+	return nil, nil
+}
+func (s *stubShardingManager) PullFromRemote(context.Context, *types.CacheKey, []string) ([]byte, error) {
+	return nil, nil
+}
+func (s *stubShardingManager) GetEgID() string                  { return s.egID }
+func (s *stubShardingManager) GetReplicationFactor() int        { return 1 }
+func (s *stubShardingManager) GetInterEgTimeout() time.Duration { return time.Second }
+func (s *stubShardingManager) GetHealthyEGs(context.Context) ([]sharding.EGInfo, error) {
+	return nil, nil
+}
 
 func TestFilterSafeHeaders(t *testing.T) {
 	tests := []struct {
@@ -556,7 +582,7 @@ func newOverrideCacheCoordinator(t *testing.T) (*CacheCoordinator, *miniredis.Mi
 	fsCache := cache.NewFilesystemCache(logger)
 	cacheService := cache.NewCacheService(metadataStore, fsCache, logger)
 
-	cc := NewCacheCoordinator(metadataStore, fsCache, cacheService, nil, nil, logger)
+	cc := NewCacheCoordinator(metadataStore, fsCache, cacheService, &stubShardingManager{egID: "eg-test"}, nil, logger)
 	return cc, mr
 }
 
@@ -644,5 +670,57 @@ func TestSaveOverrideCache(t *testing.T) {
 		// TTL should be base (1h) + stale (30m) = 90m
 		assert.Greater(t, ttl, 89*time.Minute)
 		assert.LessOrEqual(t, ttl, 91*time.Minute)
+	})
+}
+
+func TestSaveRenderCache_LocationGatedByStatus(t *testing.T) {
+	newCtx := func(cacheKey *types.CacheKey) *edgectx.RenderContext {
+		renderCtx := overrideRenderCtx(cacheKey)
+		renderCtx.ResolvedConfig = &config.ResolvedConfig{
+			Compression:         "none",
+			SafeResponseHeaders: []string{"Content-Type", "Location"},
+			Cache:               config.ResolvedCacheConfig{TTL: time.Hour},
+		}
+		return renderCtx
+	}
+
+	// RedirectLocation carries the render's final URL on every status code, so a 200 must
+	// not persist it: cache hits replay stored headers verbatim.
+	t.Run("200 render does not store Location from final URL", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x2000}
+		renderCtx := newCtx(cacheKey)
+
+		err := cc.SaveRenderCache(renderCtx, &RenderServiceResult{
+			HTML:             []byte("<html>page</html>"),
+			StatusCode:       200,
+			RedirectLocation: "https://example.com/final",
+			Headers:          map[string][]string{"Content-Type": {"text/html"}},
+		}, nil)
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		assert.Equal(t, "200", mr.HGet(metaKey, "status_code"))
+		assert.NotContains(t, mr.HGet(metaKey, "headers"), "Location")
+		assert.NotContains(t, mr.HGet(metaKey, "headers"), "https://example.com/final")
+	})
+
+	t.Run("301 render stores Location from final URL", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+
+		cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x3010}
+		renderCtx := newCtx(cacheKey)
+
+		err := cc.SaveRenderCache(renderCtx, &RenderServiceResult{
+			StatusCode:       301,
+			RedirectLocation: "https://example.com/new-page",
+			Headers:          map[string][]string{"Content-Type": {"text/html"}},
+		}, nil)
+		require.NoError(t, err)
+
+		metaKey := "meta:" + cacheKey.String()
+		assert.Equal(t, "301", mr.HGet(metaKey, "status_code"))
+		assert.Contains(t, mr.HGet(metaKey, "headers"), "https://example.com/new-page")
 	})
 }

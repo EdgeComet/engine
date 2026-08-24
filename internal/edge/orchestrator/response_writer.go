@@ -131,7 +131,13 @@ func (rw *ResponseWriter) WriteCacheResponse(renderCtx *edgectx.RenderContext, c
 
 	// Serve headers from cache (re-filter against current config for security)
 	filteredHeaders := FilterHeaders(cacheEntry.Headers, renderCtx.ResolvedConfig.SafeResponseHeaders, cacheEntry.StatusCode, false)
+	servesLocation := isRedirectStatusCode(cacheEntry.StatusCode)
 	for name, values := range filteredHeaders {
+		// Mirrors the fresh-render path: Location belongs only on a 3xx. Entries written
+		// before the save-side gate still carry one on a 200, so drop it at serve time too.
+		if !servesLocation && strings.EqualFold(name, "Location") {
+			continue
+		}
 		for _, value := range values {
 			renderCtx.HTTPCtx.Response.Header.Add(name, value)
 		}

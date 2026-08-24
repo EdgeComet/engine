@@ -271,9 +271,12 @@ func (cc *CacheCoordinator) SaveRenderCache(
 	renderResult *RenderServiceResult,
 	pageSEO *types.PageSEO,
 ) error {
-	// Ensure Location is in headers for redirects (render service provides it separately)
+	// Ensure Location is in headers for redirects (render service provides it separately).
+	// RedirectLocation carries the render's final URL for every status code, not just 3xx,
+	// so it must be gated: stored on a 200 it makes every later cache hit serve a stray
+	// Location, pointing at whatever URL the page client-navigated to during the render.
 	headersWithLocation := renderResult.Headers
-	if renderResult.RedirectLocation != "" {
+	if renderResult.RedirectLocation != "" && isRedirectStatusCode(renderResult.StatusCode) {
 		if headersWithLocation == nil {
 			headersWithLocation = make(map[string][]string)
 		} else {
