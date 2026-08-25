@@ -112,11 +112,23 @@ type RenderOrchestrator struct {
 	configManager    configtypes.EGConfigManager
 
 	contentProcessor ContentProcessor // optional, nil = no-op
+	preRenderHook    PreRenderHook    // optional, nil = no-op
 }
 
 // SetContentProcessor sets an optional content processor for post-render transformations.
 func (ro *RenderOrchestrator) SetContentProcessor(cp ContentProcessor) {
 	ro.contentProcessor = cp
+}
+
+// SetPreRenderHook sets an optional hook that can answer a request without rendering it.
+//
+// Wire this together with RecacheService.SetPreRenderHook or not at all. With only this one set,
+// the hook writes a correct status for a URL and the next scheduled or bot-hit recache renders the
+// same URL without consulting it, overwriting that status with whatever the origin returned; live
+// requests then take the early cache hit, which never reaches the hook, so the URL alternates
+// between the two answers on every cache cycle.
+func (ro *RenderOrchestrator) SetPreRenderHook(h PreRenderHook) {
+	ro.preRenderHook = h
 }
 
 // RenderServiceResult encapsulates the complete result from a render service call
@@ -380,6 +392,33 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 			return ro.serveStaleCache(renderCtx, staleCache, "request_timeout")
 		}
 		return ro.serveBypass(renderCtx, "request_timeout")
+	}
+
+	// Ahead of tab reservation so a short-circuit never occupies Chrome, and behind the cache
+	// lookup and the lock so it runs at most once per URL and never on a cache hit. The lock is
+	// released here rather than by the defer below, which is only installed once a tab is held.
+	hookStart := time.Now().UTC()
+	if decision := RunPreRenderHook(reqCtx, ro.preRenderHook, renderCtx); decision != nil {
+		// Deferred, not immediate: serveOverride writes the cache metadata, and step 4 above
+		// requires the lock to be held until that commit lands. Releasing first opens a window
+		// where a second request misses the cache, takes the freed lock, and runs the hook again.
+		defer ro.lockCoord.ReleaseLock(renderCtx)
+
+		// The render path records this after the render returns, and serveOverride does not record
+		// it at all, so without this line a hook-answered status is the only served status missing
+		// from the metric.
+		ro.metricsCollector.RecordStatusCodeResponse(renderCtx.Host.Domain, renderCtx.Dimension, decision.StatusCode)
+
+		// Timed from before the hook so the reported duration carries the hook's own cost, which
+		// is what tells you whether answering early is cheaper than the render it replaced.
+		return ro.serveOverride(renderCtx, decision.AsProcessedContent(), overrideParams{
+			source:       ServedFromRender,
+			cacheSource:  cache.SourceRender,
+			cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
+			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
+			cacheEnabled: true,
+			startTime:    hookStart,
+		})
 	}
 
 	renderCtx.Logger.Debug("Selecting render service and reserving tab",

@@ -51,6 +51,7 @@ type RecacheService struct {
 	metadataStore    *cache.MetadataStore
 	eventEmitter     events.EventEmitter
 	contentProcessor orchestrator.ContentProcessor
+	preRenderHook    orchestrator.PreRenderHook
 	instanceID       string
 	logger           *zap.Logger
 }
@@ -195,6 +196,18 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// resolved cache section at all. Terminal by configuration, exactly like the bypass sibling.
 	if renderCtx.ResolvedConfig.Cache.TTL == 0 {
 		return fmt.Errorf("%w: render cache TTL is 0", ErrRecacheSkipped)
+	}
+
+	// Ahead of tab reservation so a short-circuit never occupies Chrome. Precache is where this
+	// pays: a URL the origin cannot report a status for otherwise costs a full render, every
+	// scheduled pass, to produce content that should not be cached at all.
+	if decision := orchestrator.RunPreRenderHook(ctx, rs.preRenderHook, renderCtx); decision != nil {
+		return rs.saveOverrideToCache(ctx, renderCtx, decision.AsProcessedContent(), attempt.startTime, overrideParams{
+			cacheSource: cache.SourceRender,
+			cacheTTL:    renderCtx.ResolvedConfig.Cache.TTL,
+			expired:     renderCtx.ResolvedConfig.Cache.Expired,
+			eventSource: orchestrator.ServedFromRender,
+		})
 	}
 
 	// Select and reserve render service tab
@@ -632,6 +645,14 @@ func (rs *RecacheService) releaseTabReservation(ctx context.Context, reservation
 
 func (rs *RecacheService) SetContentProcessor(cp orchestrator.ContentProcessor) {
 	rs.contentProcessor = cp
+}
+
+// SetPreRenderHook sets an optional hook that can resolve a recache without rendering it.
+//
+// Wire this together with RenderOrchestrator.SetPreRenderHook or not at all: see the note there
+// for what a half-wired pair does to a URL's cached status.
+func (rs *RecacheService) SetPreRenderHook(h orchestrator.PreRenderHook) {
+	rs.preRenderHook = h
 }
 
 // hostHasDomain checks if the given hostname matches any of the host's configured domains
