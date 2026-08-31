@@ -1423,9 +1423,10 @@ func (ro *RenderOrchestrator) serveStaleBypassCache(
 	return nil, fmt.Errorf("stale bypass cache unavailable: %w", err)
 }
 
-// resolveRenderConfig resolves render configuration for a URL the same way the live render path
-// does, so HAR debug and preview honour URL-rule-level overrides instead of host defaults only.
-func (ro *RenderOrchestrator) resolveRenderConfig(targetURL string, host *types.Host) *config.ResolvedRenderConfig {
+// resolveRenderConfig resolves render configuration and origin request headers for a URL the same
+// way the live render path does, so HAR debug and preview honour URL-rule-level overrides instead
+// of host defaults only.
+func (ro *RenderOrchestrator) resolveRenderConfig(targetURL string, host *types.Host) *config.ResolvedConfig {
 	globalConfig := ro.configManager.GetConfig()
 	resolver := config.NewConfigResolver(&globalConfig.Render, &globalConfig.Bypass, globalConfig.TrackingParams,
 		globalConfig.CacheSharding, globalConfig.BothitRecache, globalConfig.Headers, globalConfig.Storage.Compression, host)
@@ -1458,9 +1459,19 @@ func (ro *RenderOrchestrator) RenderWithHAR(ctx context.Context, req *types.Rend
 	// The caller owns the timeout: both callers size their own context around the value they
 	// passed, so a resolved timeout that is larger would simply be cut off by that deadline.
 	callerTimeout := req.Timeout
-	applyRenderConfig(req, ro.resolveRenderConfig(req.URL, host))
+	resolved := ro.resolveRenderConfig(req.URL, host)
+	applyRenderConfig(req, &resolved.Render)
 	if callerTimeout > 0 {
 		req.Timeout = callerTimeout
+	}
+
+	// The callers of this path build their request elsewhere and have no render context, so the
+	// headers configuration sets are applied here instead of on the request context.
+	req.Headers = resolved.ApplyRequestHeaders(req.Headers)
+	if names := resolved.RequestHeaderNames(); len(names) > 0 {
+		// Names only: a configured value may be a credential.
+		logger.Debug("Applied configured request headers",
+			zap.Strings("headers", names))
 	}
 
 	// Build service URL

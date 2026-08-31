@@ -3,6 +3,7 @@ package validate
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -49,6 +50,12 @@ var validResourceTypes = map[string]bool{
 
 // requestHeadersDenyList contains headers that must NEVER be forwarded to origin.
 // These headers could cause security issues or break HTTP semantics if forwarded.
+//
+// accept-encoding and range are listed for a different reason than the hop-by-hop names: they let
+// the origin change the representation of the body it returns, to compressed bytes or to a single
+// byte range. The bypass path stores and serves the origin body verbatim - nothing decompresses or
+// reassembles it, and the response header allow-list drops Content-Encoding - so either header
+// turns the cached entry into bytes labelled text/html that no bot can read.
 var requestHeadersDenyList = map[string]bool{
 	"host":              true,
 	"content-length":    true,
@@ -58,12 +65,41 @@ var requestHeadersDenyList = map[string]bool{
 	"keep-alive":        true,
 	"te":                true,
 	"trailer":           true,
+	"accept-encoding":   true,
+	"range":             true,
 }
 
 // requestHeadersDenyListPrefixes contains header prefixes that are blocked.
 var requestHeadersDenyListPrefixes = []string{
 	"proxy-",
 }
+
+// headerUserAgent is owned by the dimension configuration, not by request_headers_set.
+const headerUserAgent = "User-Agent"
+
+// requestHeadersSetReserved names headers that must not be given an explicit value.
+// User-Agent comes from the dimension: the bypass path skips a forwarded User-Agent entirely
+// while the render path would honour one, so a single config line would mean two different
+// things, and cache keys are per dimension so the change would also be invisible to the cache.
+// The render key and the edge-render marker are the origin's proof that a request came from
+// EdgeComet and stay engine-managed.
+var requestHeadersSetReserved = map[string]bool{
+	strings.ToLower(types.HeaderRenderKey):  true,
+	strings.ToLower(types.HeaderEdgeRender): true,
+	strings.ToLower(headerUserAgent):        true,
+}
+
+const (
+	// maxRequestHeadersSet caps request_headers_set entries per configuration level.
+	maxRequestHeadersSet = 20
+	// maxRequestHeaderValueLength caps the length in bytes of one explicit header value.
+	maxRequestHeaderValueLength = 2000
+	// minHeaderValueByte is the lowest byte allowed in a header value; anything below it is a
+	// control character, and CR or LF would let a value inject headers into the origin request.
+	minHeaderValueByte = 0x20
+	// headerValueDeleteByte is the one control character above the printable range.
+	headerValueDeleteByte = 0x7f
+)
 
 const (
 	minStaleTTL                 = 1 * time.Hour
@@ -157,6 +193,97 @@ func validateHeadersConfig(headers *types.HeadersConfig, level string) error {
 	for i, header := range headers.SafeResponseAdd {
 		if err := ValidateHTTPHeaderName(header); err != nil {
 			return fmt.Errorf("%s safe_response_add[%d]: %w", level, i, err)
+		}
+	}
+
+	return validateRequestHeadersSet(headers.RequestHeadersSet, level)
+}
+
+// validateRequestHeadersSet validates explicit origin request headers: the per-level entry cap,
+// header name charset and deny-list, reserved names, and value contents. Keys are also compared
+// against each other case-insensitively, because HTTP header names are case-insensitive while Go
+// map keys are not, so two spellings of one name would otherwise both reach the origin.
+// Keys are visited in sorted order so the reported error does not depend on map iteration order.
+func validateRequestHeadersSet(headersSet map[string]string, level string) error {
+	if len(headersSet) == 0 {
+		return nil
+	}
+
+	if len(headersSet) > maxRequestHeadersSet {
+		return fmt.Errorf("%s request_headers_set: %d entries exceeds maximum of %d",
+			level, len(headersSet), maxRequestHeadersSet)
+	}
+
+	seen := make(map[string]string, len(headersSet))
+	for _, name := range slices.Sorted(maps.Keys(headersSet)) {
+		lowerName := strings.ToLower(name)
+		if previous, exists := seen[lowerName]; exists {
+			return fmt.Errorf("%s request_headers_set[%s]: %q and %q differ only in case, header names are case-insensitive",
+				level, name, previous, name)
+		}
+		seen[lowerName] = name
+
+		if err := validateRequestHeader(name); err != nil {
+			return fmt.Errorf("%s request_headers_set[%s]: %w", level, name, err)
+		}
+
+		if requestHeadersSetReserved[lowerName] {
+			return fmt.Errorf("%s request_headers_set[%s]: header %q is reserved and set by the engine",
+				level, name, name)
+		}
+
+		if err := validateRequestHeaderValue(headersSet[name]); err != nil {
+			return fmt.Errorf("%s request_headers_set[%s]: %w", level, name, err)
+		}
+	}
+
+	return nil
+}
+
+// validateRequestHeaderValue validates an explicit header value sent to the origin. An empty value
+// is refused so that it stays available later as the way to spell "remove this header", the meaning
+// nginx gives proxy_set_header with an empty argument. The control-character scan runs over bytes
+// on purpose: ranging over a string yields runes, which would step past a control byte embedded in
+// a malformed multi-byte sequence.
+func validateRequestHeaderValue(value string) error {
+	if value == "" {
+		return fmt.Errorf("value cannot be empty")
+	}
+
+	if len(value) > maxRequestHeaderValueLength {
+		return fmt.Errorf("value is %d bytes, maximum is %d", len(value), maxRequestHeaderValueLength)
+	}
+
+	for i := 0; i < len(value); i++ {
+		if value[i] < minHeaderValueByte || value[i] == headerValueDeleteByte {
+			return fmt.Errorf("value contains control character 0x%02x at position %d", value[i], i)
+		}
+	}
+
+	return nil
+}
+
+// ValidateHeaders validates one headers block from any configuration source. level names the block
+// in the error message ("headers", "url_rules[2].headers").
+func ValidateHeaders(headers *types.HeadersConfig, level string) error {
+	return validateHeadersConfig(headers, level)
+}
+
+// ValidateHostHeaders validates a host's own headers block and every url_rules[] block. A host
+// loaded from a store instead of a file never passes through file validation and would otherwise
+// reach the Edge Gateway unchecked; keeping the rule iteration here means callers do not restate it.
+func ValidateHostHeaders(host *types.Host) error {
+	if host == nil {
+		return nil
+	}
+
+	if err := validateHeadersConfig(host.Headers, "headers"); err != nil {
+		return err
+	}
+
+	for i := range host.URLRules {
+		if err := validateHeadersConfig(host.URLRules[i].Headers, fmt.Sprintf("url_rules[%d].headers", i)); err != nil {
+			return err
 		}
 	}
 
@@ -1066,6 +1193,14 @@ func validateHeadersConfigGlobal(cfg *configtypes.EgConfig, filename string, col
 
 	if err := validateHeadersConfig(cfg.Headers, "global"); err != nil {
 		collector.Add(filename, 0, "%v", err)
+	}
+
+	// A globally set header carries a value, not just a name, and the realistic value is a
+	// credential for one customer's origin - which every other customer's origin would receive too.
+	for _, name := range slices.Sorted(maps.Keys(cfg.Headers.RequestHeadersSet)) {
+		collector.AddWarning(filename, 0,
+			"global headers.request_headers_set[%s] is sent to the origin of every host. Set it on the host or url rule that needs it.",
+			name)
 	}
 }
 

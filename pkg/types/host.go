@@ -25,6 +25,11 @@ type HeadersConfig struct {
 	SafeResponse []string `yaml:"safe_response,omitempty" json:"safe_response,omitempty"`
 	// SafeResponseAdd adds to parent's response headers list
 	SafeResponseAdd []string `yaml:"safe_response_add,omitempty" json:"safe_response_add,omitempty"`
+	// RequestHeadersSet sets headers with explicit values on requests to the origin, unlike the
+	// safe_* lists which can only forward a header the incoming request already carried. Values
+	// are static strings taken from configuration, so nothing varies per request. Levels merge
+	// per key: a deeper level overrides the keys it names and inherits the rest.
+	RequestHeadersSet map[string]string `yaml:"request_headers_set,omitempty" json:"request_headers_set,omitempty"`
 }
 
 // ClientIPConfig defines HTTP headers for extracting the client's real IP address.

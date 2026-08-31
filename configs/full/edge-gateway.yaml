@@ -516,7 +516,8 @@ headers:
   # Request headers to forward to origin (same-origin requests only)
   # REPLACES inherited list (mutually exclusive with safe_request_add)
   # Deny-list (always blocked): Host, Content-Length, Transfer-Encoding, Connection,
-  #                             Upgrade, Keep-Alive, Proxy-*, TE, Trailer
+  #                             Upgrade, Keep-Alive, Proxy-*, TE, Trailer,
+  #                             Accept-Encoding, Range
   safe_request:
     - "Authorization"
     - "Cookie"
@@ -545,6 +546,22 @@ headers:
   # Add to inherited response headers (mutually exclusive with safe_response)
   # safe_response_add:
   #   - "X-Custom-Response"
+
+  # Headers set on requests to the origin with explicit values. Unlike safe_request*, which can
+  # only forward a header the incoming bot request already carried, these are sent whether or not
+  # the bot sent anything - including on precache, which has no incoming request at all.
+  #
+  # Levels merge per key: a host or url rule overrides the keys it names and inherits the rest.
+  # A set header replaces a forwarded header of the same name in any spelling.
+  # Rejected at load: User-Agent (owned by the dimension), X-Render-Key and X-Edge-Render (set by
+  # the engine), the request deny-list above, an empty value, and two keys differing only in case.
+  # There is no way to unset an inherited value; set the header where it is needed instead.
+  #
+  # Left commented out on purpose: a value set here is sent to EVERY host's origin, and the
+  # realistic value is a credential belonging to one of them. Configuration validation warns
+  # about each globally set header for that reason. Set them on the host or url rule instead.
+  # request_headers_set:
+  #   X-Render-Origin: "edgecomet"
 
 # =============================================================================
 # CLIENT IP CONFIGURATION

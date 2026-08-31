@@ -213,10 +213,19 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	// Store resolved config in context for use by orchestrator and cache key generation
 	renderCtx.ResolvedConfig = resolved
 
-	// Extract safe client request headers for forwarding to origin
+	// Extract safe client request headers for forwarding to origin, then overlay the headers
+	// configuration sets with explicit values.
 	clientHeaders := ExtractClientHeaders(ctx, resolved.SafeRequestHeaders)
-	if clientHeaders != nil {
+	clientHeaders = resolved.ApplyRequestHeaders(clientHeaders)
+	if len(clientHeaders) > 0 {
 		renderCtx.WithClientHeaders(clientHeaders)
+	}
+	if names := resolved.RequestHeaderNames(); len(names) > 0 {
+		// Set headers are invisible in the response by design, so this line is the only way to
+		// answer whether they applied without reading the origin's own log. Names only: values
+		// may be credentials.
+		renderCtx.Logger.Debug("Applied configured request headers",
+			zap.Strings("headers", names))
 	}
 
 	// Apply dimension override if specified in URL pattern

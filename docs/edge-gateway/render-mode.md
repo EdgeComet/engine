@@ -306,31 +306,36 @@ Default safe headers:
 - `Last-Modified`
 - `ETag`
 - `Location`
+- `X-Robots-Tag`
 
-You can customize this list at global, host, or URL pattern level. Like other arrays, host/pattern level configurations **replace** the parent level entirely.
+You can customize this list at global, host, or URL pattern level, under the `headers` block.
+`safe_response` **replaces** the inherited list; `safe_response_add` extends it. The two are
+mutually exclusive at the same level.
 
 ::: code-group
 ```yaml [Global - edge-gateway.yaml]
-safe_headers:
-  - "Content-Type"
-  - "Cache-Control"
-  - "X-Custom-Header"
+headers:
+  safe_response:
+    - "Content-Type"
+    - "Cache-Control"
+    - "X-Custom-Header"
 ```
 ```yaml [Host - example.com.yaml]
 hosts:
   - id: 1
-    safe_headers:
-      - "Content-Type"
-      - "X-App-Version"
+    headers:
+      safe_response:
+        - "Content-Type"
+        - "X-App-Version"
 ```
 ```yaml [URL pattern]
 url_rules:
   - match: "/api/*"
     action: "render"
-    safe_headers:
-      - "Content-Type"
-      - "X-API-Version"
-      - "X-RateLimit-Remaining"
+    headers:
+      safe_response_add:
+        - "X-API-Version"
+        - "X-RateLimit-Remaining"
 ```
 :::
 

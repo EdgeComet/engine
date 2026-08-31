@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,9 +32,14 @@ type ResolvedConfig struct {
 	BothitRecache       ResolvedBothitRecache   // bot hit automatic recache configuration
 	SafeRequestHeaders  []string                // client request headers to forward to origin
 	SafeResponseHeaders []string                // response headers to return to client
-	MatchedRuleID       string                  // Identifier of the matched URL rule (empty if no rule matched)
-	MatchedPattern      string                  // The URL pattern that matched (e.g., "/blog/*")
-	Compression         string                  // Storage compression algorithm: none, snappy, lz4
+	// RequestHeadersSet carries headers set on origin requests with explicit configured values.
+	// Read-only and shared: when a single configuration level defines the field this IS that
+	// level's own map, held by the loaded configuration and read concurrently by every in-flight
+	// request for the host. Writing into it would rewrite the host's configuration at runtime.
+	RequestHeadersSet map[string]string
+	MatchedRuleID     string // Identifier of the matched URL rule (empty if no rule matched)
+	MatchedPattern    string // The URL pattern that matched (e.g., "/blog/*")
+	Compression       string // Storage compression algorithm: none, snappy, lz4
 }
 
 // ResolvedCacheConfig contains resolved cache configuration
@@ -192,17 +199,19 @@ func (r *ConfigResolver) ResolveForURL(targetURL string) *ResolvedConfig {
 	return resolved
 }
 
-// ResolveRenderForURL resolves only the render section for a URL, ignoring the matched rule's
-// action. Paths that render unconditionally - HAR debug and Edge SEO preview - still need render
-// configuration for a URL that a rule marks bypass or status, where ResolveForURL leaves the
-// render section empty because nothing would render it.
-func (r *ConfigResolver) ResolveRenderForURL(targetURL string) *ResolvedRenderConfig {
+// ResolveRenderForURL forces render resolution for a URL, ignoring the matched rule's action, and
+// resolves headers alongside it. Paths that render unconditionally - HAR debug and Edge SEO
+// preview - still need render configuration and origin request headers for a URL that a rule marks
+// bypass or status, where ResolveForURL leaves the render section empty because nothing would
+// render it. Sections other than render and headers are left at their zero values.
+func (r *ConfigResolver) ResolveRenderForURL(targetURL string) *ResolvedConfig {
 	matchedRule, _ := r.matcher.FindMatchingRule(targetURL)
 
 	resolved := &ResolvedConfig{}
 	r.resolveRenderConfig(resolved, matchedRule)
+	r.resolveHeaders(resolved, matchedRule)
 
-	return &resolved.Render
+	return resolved
 }
 
 // formatRuleID generates a human-readable rule identifier
@@ -759,6 +768,102 @@ func (r *ConfigResolver) resolveHeaders(resolved *ResolvedConfig, matchedRule *t
 
 	resolved.SafeRequestHeaders = requestHeaders
 	resolved.SafeResponseHeaders = responseHeaders
+
+	var matchedRuleHeaders *types.HeadersConfig
+	if matchedRule != nil {
+		matchedRuleHeaders = matchedRule.Headers
+	}
+	resolved.RequestHeadersSet = mergeRequestHeadersSet(
+		requestHeadersSetOf(r.globalHeaders),
+		requestHeadersSetOf(r.host.Headers),
+		requestHeadersSetOf(matchedRuleHeaders),
+	)
+}
+
+// requestHeadersSetOf reads the explicit request headers of one configuration level.
+func requestHeadersSetOf(headers *types.HeadersConfig) map[string]string {
+	if headers == nil {
+		return nil
+	}
+	return headers.RequestHeadersSet
+}
+
+// mergeRequestHeadersSet merges explicit request headers per key, from the shallowest level to the
+// deepest. Header names are case-insensitive, so a deeper level naming a header in a different
+// spelling replaces the shallower entry outright, spelling and value together, leaving one entry.
+//
+// The result is never written to, which lets the single-level case return that level's own map
+// instead of copying it: nothing is allocated for the common configuration, and a new map is built
+// only when two or more levels contribute.
+func mergeRequestHeadersSet(levels ...map[string]string) map[string]string {
+	defined := make([]map[string]string, 0, len(levels))
+	for _, level := range levels {
+		if len(level) > 0 {
+			defined = append(defined, level)
+		}
+	}
+
+	if len(defined) == 0 {
+		return nil
+	}
+	if len(defined) == 1 {
+		return defined[0]
+	}
+
+	merged := make(map[string]string)
+	spellingByLowerName := make(map[string]string)
+	for _, level := range defined {
+		for name, value := range level {
+			lowerName := strings.ToLower(name)
+			if previous, exists := spellingByLowerName[lowerName]; exists {
+				delete(merged, previous)
+			}
+			spellingByLowerName[lowerName] = name
+			merged[name] = value
+		}
+	}
+
+	return merged
+}
+
+// ApplyRequestHeaders returns clientHeaders with the configured explicit headers applied. A set
+// header wins over a forwarded header of the same name in any spelling, so an origin sees the
+// configured value and one entry rather than both. Neither input is mutated: RequestHeadersSet may
+// be the loaded configuration's own map and clientHeaders belongs to the caller. Returns
+// clientHeaders unchanged when nothing is configured, so the common path does not allocate.
+func (rc *ResolvedConfig) ApplyRequestHeaders(clientHeaders map[string][]string) map[string][]string {
+	if len(rc.RequestHeadersSet) == 0 {
+		return clientHeaders
+	}
+
+	setNames := make(map[string]bool, len(rc.RequestHeadersSet))
+	for name := range rc.RequestHeadersSet {
+		setNames[strings.ToLower(name)] = true
+	}
+
+	result := make(map[string][]string, len(clientHeaders)+len(rc.RequestHeadersSet))
+	for name, values := range clientHeaders {
+		if setNames[strings.ToLower(name)] {
+			continue
+		}
+		result[name] = values
+	}
+	for name, value := range rc.RequestHeadersSet {
+		result[name] = []string{value}
+	}
+
+	return result
+}
+
+// RequestHeaderNames returns the names of the headers ApplyRequestHeaders sets, sorted so a log
+// line is stable across requests. Names only: a configured value is routinely a credential and
+// must never be logged.
+func (rc *ResolvedConfig) RequestHeaderNames() []string {
+	if len(rc.RequestHeadersSet) == 0 {
+		return nil
+	}
+
+	return slices.Sorted(maps.Keys(rc.RequestHeadersSet))
 }
 
 // applyHeadersDirective applies replace or add directive to a headers list.

@@ -15,6 +15,16 @@ hosts:
         - "ETag"
         - "Last-Modified"
 
+      # Forwarded so a spec can send X-Api-Key from the bot and prove the configured value
+      # replaces it instead of arriving alongside it (for request_headers_set_test.go)
+      safe_request_add:
+        - "X-Api-Key"
+
+      # Headers set with explicit values on every request this host makes to the origin
+      request_headers_set:
+        X-Api-Key: "host-api-key"
+        X-Tenant-Id: "host-tenant"
+
     # Tracking parameter stripping configuration
     tracking_params:
       strip: true
@@ -108,6 +118,28 @@ hosts:
         action: "block"
         status:
           reason: "Admin exact match"
+
+      # --- EXPLICIT REQUEST HEADERS (for request_headers_set_test.go) ---
+      # Overrides one of the host's set headers; X-Tenant-Id is inherited unchanged. The name is
+      # spelled in another case on purpose: header names are case-insensitive, so the origin must
+      # receive one header with the rule's value, not both spellings
+      - match: "/set-headers-test/override/*"
+        action: "render"
+        headers:
+          request_headers_set:
+            x-api-key: "rule-api-key"
+
+      # Bypass, so the origin fetch is a direct request instead of a render
+      - match: "/set-headers-test/bypass/*"
+        action: "bypass"
+
+      # Bypass with caching, which a precache pass needs to have anything to write
+      - match: "/set-headers-test/bypass-cache/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
 
       # --- WILDCARD PATTERNS (RECURSIVE) ---
       - match: "/blog/*"

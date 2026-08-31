@@ -52,9 +52,11 @@ func decisionStatusServable(statusCode int) bool {
 // already-cancelled context and IsTimedOut always reports true.
 //
 // Read only the fields both paths populate: TargetURL, OriginalURL, URLHash, Host, Dimension,
-// CacheKey, ResolvedConfig, RequestID, Logger and IsPrecache. HTTPCtx, ClientHeaders and ClientIP
-// are live-request only and are nil during recache - and recache is where the volume is, so a hook
+// CacheKey, ResolvedConfig, RequestID, Logger and IsPrecache. HTTPCtx and ClientIP are
+// live-request only and are nil during recache - and recache is where the volume is, so a hook
 // that reaches for HTTPCtx passes every live test and then panics on the scheduled pass.
+// ClientHeaders is populated on both paths, but during recache it holds only the headers
+// configuration sets explicitly: there is no incoming request to forward anything from.
 type PreRenderHook func(ctx context.Context, renderCtx *edgectx.RenderContext) (*PreRenderDecision, error)
 
 // PreRenderDecision short-circuits a render with a status response. It is a struct rather than

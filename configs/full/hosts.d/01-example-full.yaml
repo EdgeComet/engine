@@ -193,6 +193,13 @@ hosts:
         - "X-Frame-Options"
         - "X-Content-Type-Options"
 
+      # Headers set on every request this host makes to the origin, with explicit values, whether
+      # or not the bot sent anything - including on precache, which has no incoming request.
+      # A url rule below overrides one of these keys and inherits the other.
+      request_headers_set:
+        X-Api-Key: "abc123"
+        X-Tenant-ID: "acme"
+
     # -------------------------------------------------------------------------
     # HOST-LEVEL CLIENT IP
     # -------------------------------------------------------------------------
@@ -240,6 +247,10 @@ hosts:
           safe_request:
             - "Authorization"
             - "X-API-Key"
+          # Per-key merge: X-Api-Key takes this value for URLs matching this rule, while the
+          # host's X-Tenant-ID is inherited unchanged.
+          request_headers_set:
+            X-Api-Key: "def456"
         tracking_params:
           strip: true
           params_add:

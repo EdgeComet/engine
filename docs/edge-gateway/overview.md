@@ -86,7 +86,7 @@ When an EG renders a page, it saves locally and pushes to replica EGs in paralle
 ## Configuration
 
 EG uses a three-level configuration hierarchy: _global_ (edge-gateway.yaml), _host_ (hosts.d/*.yaml), and _URL pattern_ (`url_rules` within hosts). Settings merge from global to host to pattern, with each level overriding specific fields from its parent. 
-Scalar values like `timeout` and `ttl` override directly. Array values like `blocked_resource_types` and `safe_headers` replace the parent entirely rather than appending.
+Scalar values like `timeout` and `ttl` override directly. Array values like `blocked_resource_types` and `headers.safe_response` replace the parent entirely rather than appending, unless the level uses the `_add` form (`safe_request_add`, `safe_response_add`), which extends the inherited list instead.
 
 Each host defines a domain, render key for authentication, and optional overrides. Hosts inherit global dimensions and settings when not explicitly defined. Within hosts, URL rules specify behavior for specific paths using pattern matching.
 

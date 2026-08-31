@@ -92,6 +92,12 @@ func (b *ConfigBuilder) BuildEGConfig(tempDir string) *config.EgConfig {
 		Hosts: config.HostsIncludeConfig{
 			Include: "hosts.d/",
 		},
+		// A globally set request header reaches the origin of every host, including one that
+		// configures no headers block of its own. That is deliberate multi-tenant behaviour a
+		// spec pins, and the reason the validator warns about it at load.
+		Headers: &types.HeadersConfig{
+			RequestHeadersSet: map[string]string{SetHeaderGlobal: SetHeaderGlobalValue},
+		},
 		EventLogging: &configtypes.EventLoggingConfig{
 			File: configtypes.EventFileConfig{
 				Enabled:  true,

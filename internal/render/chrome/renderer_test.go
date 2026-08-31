@@ -111,6 +111,22 @@ func TestBuildInjectedHeaders(t *testing.T) {
 		assert.NotContains(t, injected, "x-render-key")
 	})
 
+	t.Run("a configured render key cannot reach the wire", func(t *testing.T) {
+		// Configuration refuses X-Render-Key in request_headers_set, so this shape should never
+		// be built. The render-side guard is the backstop for that rejection and must stay
+		// proven: whatever spelling arrives in the forwarded map, the engine's own key wins.
+		injected := buildInjectedHeaders(&types.RenderRequest{
+			Headers: map[string][]string{
+				"X-Render-Key": {"configured-key"},
+				"x-render-KEY": {"another-configured-key"},
+			},
+			RenderKey: "sk_test_123",
+		})
+
+		assert.Len(t, injected, 1, "no configured spelling may survive alongside the engine key")
+		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
+	})
+
 	t.Run("client headers are not mutated", func(t *testing.T) {
 		clientHeaders := map[string][]string{"x-render-key": {"client-supplied"}}
 		buildInjectedHeaders(&types.RenderRequest{Headers: clientHeaders, RenderKey: "sk_test_123"})

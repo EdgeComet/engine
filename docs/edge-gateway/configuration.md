@@ -442,16 +442,44 @@ cache_sharding:
   # Default: true
   replicate_on_pull: true
 
-# HTTP headers to pass through from responses
-# Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"]
-safe_headers:
-  - "Content-Type"
-  - "Cache-Control"
-  - "Expires"
-  - "Last-Modified"
-  - "ETag"
-  - "Location"
-  - "X-Robots-Tag"
+# HTTP header rules for requests to the origin and responses to the client.
+# Every field below is available at global, host and url_rules[] level.
+headers:
+  # Client request headers forwarded to the origin (same-origin requests only).
+  # Replaces the inherited list; mutually exclusive with safe_request_add.
+  # Default: empty - forwarding is opt-in.
+  # Always blocked: Host, Content-Length, Transfer-Encoding, Connection, Upgrade,
+  #                 Keep-Alive, Proxy-*, TE, Trailer, Accept-Encoding, Range
+  safe_request:
+    - "Authorization"
+
+  # Adds to the inherited request header list; mutually exclusive with safe_request,
+  # so only one of the two may be uncommented at a level.
+  # safe_request_add:
+  #   - "X-Tenant-ID"
+
+  # Response headers returned to the client. Replaces the inherited list;
+  # mutually exclusive with safe_response_add.
+  # Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"]
+  safe_response:
+    - "Content-Type"
+    - "Cache-Control"
+    - "Expires"
+    - "Last-Modified"
+    - "ETag"
+    - "Location"
+    - "X-Robots-Tag"
+
+  # Adds to the inherited response header list; mutually exclusive with safe_response,
+  # so only one of the two may be uncommented at a level.
+  # safe_response_add:
+  #   - "X-Custom-Response"
+
+  # Headers set on requests to the origin with explicit values. See "Explicit request
+  # headers" below. A global entry is sent to every host's origin, so configuration
+  # validation warns about each one; prefer the host or url rule that needs it.
+  # request_headers_set:
+  #   X-Render-Origin: "edgecomet"
 
 hosts:
   # Glob pattern to load host configurations
@@ -569,11 +597,19 @@ hosts:
     recache:
       max_concurrent: 50
 
-    # Override safe headers (replaces global array)
-    safe_headers:
-      - "Content-Type"
-      - "Cache-Control"
-      - "X-Custom-Header"
+    # Header rules for this host. Each field merges with the global block on its own:
+    # safe_response replaces the global list, safe_response_add extends it.
+    headers:
+      safe_response:
+        - "Content-Type"
+        - "Cache-Control"
+        - "X-Custom-Header"
+      safe_request_add:
+        - "X-Tenant-ID"
+      # Sent on every request this host makes to the origin
+      request_headers_set:
+        X-Api-Key: "abc123"
+        X-Tenant-ID: "acme"
 
     # URL pattern rules
     # See url-patterns.md for pattern syntax
@@ -620,6 +656,82 @@ hosts:
       - match: "~*\\.(css|js|woff2?)$"
         action: "bypass"
 ```
+
+## Explicit request headers
+
+`headers.safe_request` and `safe_request_add` are an allow-list applied to the incoming bot
+request: they can forward a header the bot already sent, and nothing else. `request_headers_set`
+sends a header with a value taken from configuration, whether or not the bot sent anything.
+
+```yaml
+headers:
+  request_headers_set:
+    X-Api-Key: "abc123"
+    X-Tenant-ID: "acme"
+```
+
+Available at global, host and `url_rules[]` level. **Levels merge per key**, so a rule overrides
+only the keys it names:
+
+```yaml
+# host level
+headers:
+  request_headers_set:
+    X-Api-Key: "abc123"
+    X-Tenant-ID: "acme"
+
+url_rules:
+  # Effective for a matching URL: X-Api-Key=def456, X-Tenant-ID=acme
+  - match: "/api/*"
+    action: "render"
+    headers:
+      request_headers_set:
+        X-Api-Key: "def456"
+```
+
+Because a map merges unambiguously, there is no `request_headers_set_add` counterpart to
+`safe_request_add`.
+
+**Where they are sent.** Every request EdgeComet makes to the origin carries them: a live render,
+a live bypass fetch, a precached render or bypass fetch, and a `/debug/har/render` debug render.
+On the render path they reach the document and same-origin subresources, subdomains included, and
+never a third-party request - the same scope the render key uses. Precache is the case a
+`safe_request_add` workaround cannot reach at all: it has no incoming request to forward from.
+
+**Precedence on the wire**, later winning:
+
+1. the dimension's (or bypass configuration's) User-Agent
+2. forwarded client headers (`safe_request` / `safe_request_add`)
+3. `request_headers_set`
+4. `X-Edge-Render` and `X-Render-Key`, which the engine always sets last
+
+A set header replaces a forwarded header of the same name in any spelling, so the origin receives
+one value, not two.
+
+**Rejected at configuration load:**
+
+| Rejected | Why |
+|---|---|
+| `User-Agent` | Owned by the dimension. The bypass path ignores it and the render path would honour it, so one config line would mean two things. |
+| `X-Render-Key`, `X-Edge-Render` | The origin's proof that a request came from EdgeComet; engine-managed. |
+| `Host`, `Content-Length`, `Transfer-Encoding`, `Connection`, `Upgrade`, `Keep-Alive`, `TE`, `Trailer`, `Proxy-*` | Hop-by-hop or transport-owned, the same deny-list `safe_request` uses. |
+| `Accept-Encoding`, `Range` | They change the representation of the body the origin returns. A bypass fetch stores that body verbatim, so a compressed or partial response would be cached and served as unreadable HTML. |
+| An empty value | Reserved as the future spelling of "remove this header". |
+| A value with a control character, or over 2000 bytes | A CR or LF in a value would let it inject headers into the origin request. |
+| More than 20 entries at one level | |
+| Two keys differing only in case | HTTP header names are case-insensitive; there is no sane merge of a value with itself. |
+
+**Limitations.**
+
+- A deeper level can override an inherited value but cannot remove it. Set the header where it is
+  needed rather than globally.
+- A value set at global level is sent to **every** host's origin, and the realistic value is one
+  customer's credential. The field stays allowed there for single-tenant deployments, and
+  configuration validation warns about each globally set header.
+- Values are plaintext in the host configuration file, like `render_key`, and cross the internal
+  network to the render service in the render request, like `render_key`.
+- The applied header names (never the values) are logged at Debug level. Nothing about the feature
+  appears in a response to the bot, so the other way to confirm it is the origin's own log.
 
 ## TLS/HTTPS configuration
 

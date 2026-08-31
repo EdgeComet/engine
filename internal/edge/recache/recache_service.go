@@ -226,6 +226,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Dimensions[dimensionName]
 	renderReq := orchestrator.BuildRenderRequest(url, requestID, host.RenderKey, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
+	renderReq.Headers = renderCtx.ClientHeaders
 
 	// Build service URL
 	serviceURL := fmt.Sprintf("http://%s:%d", reservation.Address, reservation.Port)
@@ -419,7 +420,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("%w: bypass cache TTL is 0", ErrRecacheSkipped)
 	}
 
-	bypassResp, err := rs.bypassSvc.FetchContent(url, nil, renderCtx.Host.RenderKey, renderCtx.Logger)
+	bypassResp, err := rs.bypassSvc.FetchContent(url, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
 			fmt.Sprintf("bypass fetch failed: %v", err)).withCause(err)
@@ -575,6 +576,15 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 		host,
 	)
 	renderCtx.ResolvedConfig = resolver.ResolveForURL(url)
+
+	// Precache has no incoming request, so headers set in configuration are the only headers this
+	// fetch can carry to the origin.
+	renderCtx.ClientHeaders = renderCtx.ResolvedConfig.ApplyRequestHeaders(nil)
+	if names := renderCtx.ResolvedConfig.RequestHeaderNames(); len(names) > 0 {
+		// Names only: a configured value may be a credential.
+		renderCtx.Logger.Debug("Applied configured request headers",
+			zap.Strings("headers", names))
+	}
 
 	return renderCtx, nil
 }

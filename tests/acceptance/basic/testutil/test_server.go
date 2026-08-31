@@ -169,6 +169,7 @@ type TestServer struct {
 	thirdPartyBaseURL  string
 	thirdPartyShutdown chan struct{}
 	redisClient        *redis.Client
+	receivedHeaders    *headerRecorder
 }
 
 // NewTestServer creates a new test server instance
@@ -181,6 +182,7 @@ func NewTestServer(port, thirdPartyPort int, redisClient *redis.Client) *TestSer
 		thirdPartyBaseURL:  fmt.Sprintf("http://%s:%d", thirdPartyHost, thirdPartyPort),
 		thirdPartyShutdown: make(chan struct{}),
 		redisClient:        redisClient,
+		receivedHeaders:    newHeaderRecorder(),
 	}
 }
 
@@ -1183,6 +1185,7 @@ startxref
 	}
 
 	registerRenderKeyRoutes(mux, ts.thirdPartyBaseURL)
+	ts.registerSetHeadersRoutes(mux)
 
 	ts.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ts.port),
