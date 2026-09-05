@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/urlutil"
 	"github.com/edgecomet/engine/pkg/types"
 )
@@ -29,6 +30,10 @@ type BypassResponse struct {
 	Body        []byte
 	ContentType string
 	Headers     map[string][]string
+	// SentHeaders is what the EG set on the outgoing origin request, read back after the header
+	// block was built and before the request was sent. Host is absent: fasthttp fills it from
+	// the URI while sending, after this capture.
+	SentHeaders map[string][]string
 	// TransportError is set only when the origin was never reached and StatusCode/Body are the
 	// synthetic 502 below. Consumers that must not confuse "origin unreachable" with "origin
 	// said 502" (recache classification) check it; the serving path ignores it and keeps
@@ -106,6 +111,10 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 		req.Header.Set(types.HeaderRenderKey, renderKey)
 	}
 
+	// Read back before Do: the request goes back to the fasthttp pool, and the synthetic 502
+	// below must carry what was prepared.
+	sentHeaders := httputil.CopyHeaders(req.Header.All())
+
 	if err := bs.client.Do(req, resp); err != nil {
 		// Check if error is timeout-related or connection failure
 		// All timeout/connection errors should return 502 Bad Gateway
@@ -119,16 +128,12 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 			Body:           []byte("Bad Gateway: Origin unreachable"),
 			ContentType:    "text/plain; charset=utf-8",
 			Headers:        make(map[string][]string),
+			SentHeaders:    sentHeaders,
 			TransportError: err.Error(),
 		}, nil
 	}
 
-	// Extract headers using All iterator to capture all values for multi-value headers
-	headers := make(map[string][]string)
-	for key, value := range resp.Header.All() {
-		k := string(key)
-		headers[k] = append(headers[k], string(value))
-	}
+	headers := httputil.CopyHeaders(resp.Header.All())
 
 	// Determine content type
 	contentType := string(resp.Header.ContentType())
@@ -141,6 +146,7 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 		Body:        append([]byte(nil), resp.Body()...), // Copy the body
 		ContentType: contentType,
 		Headers:     headers,
+		SentHeaders: sentHeaders,
 	}
 
 	logger.Info("Bypass request completed successfully",

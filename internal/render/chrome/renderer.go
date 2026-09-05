@@ -238,7 +238,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Tasks {
 	timeOrigin := time.Now().UnixMilli()
 	targetHost := urlutil.ExtractHost(req.URL)
-	injectedHeaders := buildInjectedHeaders(req)
+	injectedHeaders := req.InjectedHeaders()
 
 	// Track active fetch handler goroutines
 	var fetchHandlerCount int64
@@ -357,6 +357,11 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 						statusCodeMu.Lock()
 						resp.Metrics.StatusCode = int(ev.RedirectResponse.Status)
 						resp.Metrics.FinalURL = ev.Request.URL
+						// EventResponseReceived captures headers only while StatusCode is still 0,
+						// so a redirect must record its own here or the response carries none.
+						if headers := convertCDPHeaders(ev.RedirectResponse.Headers); headers != nil {
+							resp.Headers = headers
+						}
 						statusCodeMu.Unlock()
 
 						err := chromedp.Cancel(ctx)
@@ -416,30 +421,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 					if urlsMatchIgnoringFragment(ev.Response.URL, req.URL) && resp.Metrics.StatusCode == 0 {
 						resp.Metrics.StatusCode = int(ev.Response.Status)
 
-						// Capture response headers (handles both single and multi-value headers)
-						if ev.Response.Headers != nil {
-							headers := make(map[string][]string)
-							for key, value := range ev.Response.Headers {
-								switch v := value.(type) {
-								case string:
-									// Chrome CDP returns multi-value headers as newline-separated string
-									if strings.Contains(v, "\n") {
-										for _, part := range strings.Split(v, "\n") {
-											if trimmed := strings.TrimSpace(part); trimmed != "" {
-												headers[key] = append(headers[key], trimmed)
-											}
-										}
-									} else {
-										headers[key] = []string{v}
-									}
-								case []interface{}:
-									for _, item := range v {
-										if str, ok := item.(string); ok {
-											headers[key] = append(headers[key], str)
-										}
-									}
-								}
-							}
+						if headers := convertCDPHeaders(ev.Response.Headers); headers != nil {
 							resp.Headers = headers
 						}
 					}
@@ -863,31 +845,37 @@ func enableLifeCycle() chromedp.ActionFunc {
 	}
 }
 
-// buildInjectedHeaders combines forwarded client headers with engine-managed headers.
-// The render key is applied last so a forwarded client header of the same name cannot
-// override it, matching the bypass path. Returns nil when there is nothing to inject.
-func buildInjectedHeaders(req *types.RenderRequest) map[string][]string {
-	if len(req.Headers) == 0 && req.RenderKey == "" {
+// convertCDPHeaders converts a CDP response header map into the multi-value form used by
+// RenderResponse. Chrome returns repeated headers either as a newline-separated string or as an
+// array. Returns nil for nil input so a caller can leave an already-captured set alone.
+func convertCDPHeaders(cdpHeaders network.Headers) map[string][]string {
+	if cdpHeaders == nil {
 		return nil
 	}
 
-	injected := make(map[string][]string, len(req.Headers)+1)
-	for name, values := range req.Headers {
-		injected[name] = values
-	}
-
-	if req.RenderKey != "" {
-		// Drop any forwarded spelling first: map keys are case-sensitive, HTTP header names are
-		// not, so two spellings would send duplicate X-Render-Key entries to the origin.
-		for name := range injected {
-			if strings.EqualFold(name, types.HeaderRenderKey) {
-				delete(injected, name)
+	headers := make(map[string][]string, len(cdpHeaders))
+	for key, value := range cdpHeaders {
+		switch v := value.(type) {
+		case string:
+			if strings.Contains(v, "\n") {
+				for _, part := range strings.Split(v, "\n") {
+					if trimmed := strings.TrimSpace(part); trimmed != "" {
+						headers[key] = append(headers[key], trimmed)
+					}
+				}
+			} else {
+				headers[key] = []string{v}
+			}
+		case []interface{}:
+			for _, item := range v {
+				if str, ok := item.(string); ok {
+					headers[key] = append(headers[key], str)
+				}
 			}
 		}
-		injected[types.HeaderRenderKey] = []string{req.RenderKey}
 	}
 
-	return injected
+	return headers
 }
 
 // mergeRequestHeaders merges original Chrome headers with injected client headers.

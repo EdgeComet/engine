@@ -40,6 +40,12 @@ type RenderContext struct {
 	ClientHeaders      map[string][]string    // Extracted safe request headers from client
 	ClientIP           string
 
+	// Headers of the last upstream attempt made while serving this request. Written as a pair by
+	// every stamp site, so a later attempt fully replaces an earlier one and the two can never
+	// describe different attempts. Nil means nothing was recorded, not that nothing was sent.
+	OriginRequestHeaders  map[string][]string
+	OriginResponseHeaders map[string][]string
+
 	// Dimension action tracking
 	DimensionAction string
 

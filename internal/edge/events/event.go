@@ -25,10 +25,13 @@ type RequestEvent struct {
 	ClientIP        string `json:"client_ip"`
 	MatchedRule     string `json:"matched_rule"`
 
-	// HTTP headers (client request and final response); not written by the
-	// file emitter, captured for downstream emitters
-	RequestHeaders  map[string][]string `json:"request_headers,omitempty"`
-	ResponseHeaders map[string][]string `json:"response_headers,omitempty"`
+	// HTTP headers of the four hops (bot -> EG -> origin -> EG -> bot); not written by the
+	// file emitter, captured for downstream emitters. The origin pair describes the last
+	// upstream attempt made while serving the request and is absent when none was recorded.
+	RequestHeaders        map[string][]string `json:"request_headers,omitempty"`
+	OriginRequestHeaders  map[string][]string `json:"origin_request_headers,omitempty"`
+	OriginResponseHeaders map[string][]string `json:"origin_response_headers,omitempty"`
+	ResponseHeaders       map[string][]string `json:"response_headers,omitempty"`
 
 	// Response
 	StatusCode int     `json:"status_code"`

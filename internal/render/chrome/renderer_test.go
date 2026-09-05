@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,80 +59,6 @@ func TestConsoleMessageCapture(t *testing.T) {
 	t.Run("console type constants", func(t *testing.T) {
 		assert.Equal(t, "error", types.ConsoleTypeError)
 		assert.Equal(t, "warning", types.ConsoleTypeWarning)
-	})
-}
-
-func TestBuildInjectedHeaders(t *testing.T) {
-	t.Run("no headers and no key returns nil", func(t *testing.T) {
-		injected := buildInjectedHeaders(&types.RenderRequest{})
-
-		assert.Nil(t, injected)
-	})
-
-	t.Run("key only", func(t *testing.T) {
-		injected := buildInjectedHeaders(&types.RenderRequest{RenderKey: "sk_test_123"})
-
-		assert.Len(t, injected, 1)
-		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
-	})
-
-	t.Run("client headers only", func(t *testing.T) {
-		injected := buildInjectedHeaders(&types.RenderRequest{
-			Headers: map[string][]string{
-				"Authorization": {"Bearer token"},
-				"Cookie":        {"a=1", "b=2"},
-			},
-		})
-
-		assert.Len(t, injected, 2)
-		assert.Equal(t, []string{"Bearer token"}, injected["Authorization"])
-		assert.Equal(t, []string{"a=1", "b=2"}, injected["Cookie"])
-		assert.NotContains(t, injected, types.HeaderRenderKey)
-	})
-
-	t.Run("client headers and key", func(t *testing.T) {
-		injected := buildInjectedHeaders(&types.RenderRequest{
-			Headers:   map[string][]string{"Authorization": {"Bearer token"}},
-			RenderKey: "sk_test_123",
-		})
-
-		assert.Len(t, injected, 2)
-		assert.Equal(t, []string{"Bearer token"}, injected["Authorization"])
-		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
-	})
-
-	t.Run("forwarded render key is replaced by the engine value", func(t *testing.T) {
-		injected := buildInjectedHeaders(&types.RenderRequest{
-			Headers:   map[string][]string{"x-render-key": {"client-supplied"}},
-			RenderKey: "sk_test_123",
-		})
-
-		assert.Len(t, injected, 1, "only one spelling may survive")
-		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
-		assert.NotContains(t, injected, "x-render-key")
-	})
-
-	t.Run("a configured render key cannot reach the wire", func(t *testing.T) {
-		// Configuration refuses X-Render-Key in request_headers_set, so this shape should never
-		// be built. The render-side guard is the backstop for that rejection and must stay
-		// proven: whatever spelling arrives in the forwarded map, the engine's own key wins.
-		injected := buildInjectedHeaders(&types.RenderRequest{
-			Headers: map[string][]string{
-				"X-Render-Key": {"configured-key"},
-				"x-render-KEY": {"another-configured-key"},
-			},
-			RenderKey: "sk_test_123",
-		})
-
-		assert.Len(t, injected, 1, "no configured spelling may survive alongside the engine key")
-		assert.Equal(t, []string{"sk_test_123"}, injected[types.HeaderRenderKey])
-	})
-
-	t.Run("client headers are not mutated", func(t *testing.T) {
-		clientHeaders := map[string][]string{"x-render-key": {"client-supplied"}}
-		buildInjectedHeaders(&types.RenderRequest{Headers: clientHeaders, RenderKey: "sk_test_123"})
-
-		assert.Equal(t, map[string][]string{"x-render-key": {"client-supplied"}}, clientHeaders)
 	})
 }
 
@@ -300,4 +227,46 @@ func assertNotSignaled(t *testing.T, recorder *lifecycleRecorder) {
 		t.Fatal("wait signalled when it should not have")
 	default:
 	}
+}
+
+func TestConvertCDPHeaders(t *testing.T) {
+	t.Run("nil input returns nil so an existing capture is left alone", func(t *testing.T) {
+		assert.Nil(t, convertCDPHeaders(nil))
+	})
+
+	t.Run("single value", func(t *testing.T) {
+		headers := convertCDPHeaders(network.Headers{"content-type": "text/html"})
+
+		assert.Equal(t, []string{"text/html"}, headers["content-type"])
+	})
+
+	t.Run("newline-separated repeats are split", func(t *testing.T) {
+		headers := convertCDPHeaders(network.Headers{"set-cookie": "a=1\nb=2"})
+
+		assert.Equal(t, []string{"a=1", "b=2"}, headers["set-cookie"])
+	})
+
+	t.Run("array repeats", func(t *testing.T) {
+		headers := convertCDPHeaders(network.Headers{"set-cookie": []interface{}{"a=1", "b=2"}})
+
+		assert.Equal(t, []string{"a=1", "b=2"}, headers["set-cookie"])
+	})
+
+	t.Run("non-string values are skipped", func(t *testing.T) {
+		headers := convertCDPHeaders(network.Headers{"x-count": 42})
+
+		assert.NotContains(t, headers, "x-count")
+	})
+
+	t.Run("redirect header block", func(t *testing.T) {
+		headers := convertCDPHeaders(network.Headers{
+			"location":      "https://example.com/new",
+			"cache-control": "no-store",
+			"set-cookie":    "session=abc\npath=/",
+		})
+
+		assert.Equal(t, []string{"https://example.com/new"}, headers["location"])
+		assert.Equal(t, []string{"no-store"}, headers["cache-control"])
+		assert.Equal(t, []string{"session=abc", "path=/"}, headers["set-cookie"])
+	})
 }

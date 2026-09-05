@@ -1,9 +1,11 @@
 package acceptance_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -127,6 +129,38 @@ var _ = Describe("Render Cache - Redirect Handling", Serial, func() {
 			Expect(metadata["status_code"]).To(Equal("308"))
 			Expect(metadata["eg_ids"]).To(BeEmpty())
 			Expect(metadata["size"]).To(Equal("0"))
+		})
+
+		It("should store the redirect response headers with one absolute Location", func() {
+			url := "/stale-test/multi-status?status=302&location=/relative-target"
+
+			By("Rendering a redirect whose Location the origin sent as a relative path")
+			resp := testEnv.RequestRender(url)
+			Expect(resp.Error).To(BeNil())
+
+			cacheKey, err := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
+			Expect(err).To(BeNil())
+			metadata, err := testEnv.GetCacheMetadata(cacheKey)
+			Expect(err).To(BeNil())
+
+			var headers map[string][]string
+			Expect(json.Unmarshal([]byte(metadata["headers"]), &headers)).To(Succeed())
+
+			By("Verifying the redirect response carried its own headers, not just a status code")
+			Expect(headers).To(HaveKey("Cache-Control"),
+				"a redirect is cancelled before the response event fires, so its headers have to be read off the redirect itself")
+
+			By("Verifying exactly one Location survived, resolved to an absolute URL")
+			var spellings []string
+			for name := range headers {
+				if strings.EqualFold(name, "Location") {
+					spellings = append(spellings, name)
+				}
+			}
+			Expect(spellings).To(HaveLen(1),
+				"two spellings make every case-insensitive reader pick one at random: %v", headers)
+			Expect(headers[spellings[0]][0]).To(HavePrefix("http"),
+				"a relative Location served by the gateway resolves against the gateway host, not the origin")
 		})
 	})
 

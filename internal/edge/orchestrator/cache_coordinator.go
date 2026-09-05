@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -277,16 +278,19 @@ func (cc *CacheCoordinator) SaveRenderCache(
 	// Location, pointing at whatever URL the page client-navigated to during the render.
 	headersWithLocation := renderResult.Headers
 	if renderResult.RedirectLocation != "" && isRedirectStatusCode(renderResult.StatusCode) {
-		if headersWithLocation == nil {
-			headersWithLocation = make(map[string][]string)
-		} else {
-			// Copy to avoid modifying original
-			headersWithLocation = make(map[string][]string, len(renderResult.Headers)+1)
-			for k, v := range renderResult.Headers {
-				headersWithLocation[k] = v
+		// The origin's own Location is dropped rather than kept alongside the canonical one: map
+		// keys are case-sensitive and header names are not, so an HTTP/2 origin's lowercase
+		// "location" would survive next to "Location" and every case-insensitive reader of the
+		// stored entry would then pick one of the two at random. The origin's value is frequently
+		// relative, RedirectLocation is always absolute.
+		headersWithLocation = make(map[string][]string, len(renderResult.Headers)+1)
+		for k, v := range renderResult.Headers {
+			if strings.EqualFold(k, headerLocation) {
+				continue
 			}
+			headersWithLocation[k] = v
 		}
-		headersWithLocation["Location"] = []string{renderResult.RedirectLocation}
+		headersWithLocation[headerLocation] = []string{renderResult.RedirectLocation}
 	}
 
 	// Filter headers using safe_response_headers configuration (forCache=true: block Set-Cookie)

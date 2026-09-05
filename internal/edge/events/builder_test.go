@@ -983,3 +983,84 @@ func createTestRenderContext() *edgectx.RenderContext {
 		},
 	}
 }
+
+func TestBuildRequestEvent_CapturesOriginHeaders(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.OriginRequestHeaders = map[string][]string{
+		"X-Render-Key": {"sk_test_123"},
+		"User-Agent":   {"EdgeComet/1.0"},
+	}
+	renderCtx.OriginResponseHeaders = map[string][]string{
+		"Content-Type": {"text/html"},
+		"Set-Cookie":   {"a=1", "b=2"},
+	}
+
+	event := BuildRequestEvent(renderCtx, &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromBypass,
+		StatusCode: 200,
+	}, 50*time.Millisecond, "eg-1")
+
+	assert.Equal(t, []string{"sk_test_123"}, event.OriginRequestHeaders["X-Render-Key"])
+	assert.Equal(t, []string{"a=1", "b=2"}, event.OriginResponseHeaders["Set-Cookie"])
+}
+
+// A genuine cache hit made no upstream attempt, so both origin hops stay absent and omitempty
+// keeps them off the wire.
+func TestBuildRequestEvent_CacheHitCarriesNoOriginHeaders(t *testing.T) {
+	renderCtx := createTestRenderContext()
+
+	event := BuildRequestEvent(renderCtx, &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromCache,
+		StatusCode: 200,
+		CacheAge:   time.Minute,
+	}, 5*time.Millisecond, "eg-1")
+
+	require.Equal(t, EventTypeCacheHit, event.EventType)
+	assert.Nil(t, event.OriginRequestHeaders)
+	assert.Nil(t, event.OriginResponseHeaders)
+
+	encoded, err := json.Marshal(event)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "origin_request_headers")
+	assert.NotContains(t, string(encoded), "origin_response_headers")
+}
+
+// Precache inverts the pattern: no client request exists, so it is the only event type with
+// origin headers and no client ones.
+func TestBuildRequestEvent_PrecacheCarriesOriginHeadersWithoutClientHeaders(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.HTTPCtx = nil
+	renderCtx.IsPrecache = true
+	renderCtx.OriginRequestHeaders = map[string][]string{"X-Render-Key": {"sk_test_123"}}
+	renderCtx.OriginResponseHeaders = map[string][]string{"Content-Type": {"text/html"}}
+
+	event := BuildRequestEvent(renderCtx, &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromBypass,
+		StatusCode: 200,
+	}, 50*time.Millisecond, "eg-1")
+
+	require.Equal(t, EventTypePrecache, event.EventType)
+	assert.Equal(t, []string{"sk_test_123"}, event.OriginRequestHeaders["X-Render-Key"])
+	assert.Equal(t, []string{"text/html"}, event.OriginResponseHeaders["Content-Type"])
+	assert.Nil(t, event.RequestHeaders)
+	assert.Nil(t, event.ResponseHeaders)
+}
+
+// A status action serves from configuration without fetching, so its bypass row shows what was
+// served to the client and nothing on either origin field.
+func TestBuildRequestEvent_StatusActionCarriesServedHeadersOnly(t *testing.T) {
+	renderCtx := createTestRenderContext()
+	renderCtx.HTTPCtx.Response.Header.Set("Location", "https://example.com/new")
+	renderCtx.HTTPCtx.Response.Header.SetStatusCode(301)
+
+	event := BuildRequestEvent(renderCtx, &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromBypass,
+		StatusCode: 301,
+		RedirectTo: "https://example.com/new",
+	}, time.Millisecond, "eg-1")
+
+	require.Equal(t, EventTypeBypass, event.EventType)
+	assert.Equal(t, []string{"https://example.com/new"}, event.ResponseHeaders["Location"])
+	assert.Nil(t, event.OriginRequestHeaders)
+	assert.Nil(t, event.OriginResponseHeaders)
+}

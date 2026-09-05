@@ -1,11 +1,11 @@
 package events
 
 import (
-	"iter"
 	"time"
 
 	"github.com/valyala/fasthttp"
 
+	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/orchestrator"
 	"github.com/edgecomet/engine/pkg/types"
@@ -54,9 +54,11 @@ func BuildRequestEvent(
 		event.Dimension = renderCtx.Dimension
 		if renderCtx.HTTPCtx != nil {
 			event.UserAgent = string(renderCtx.HTTPCtx.UserAgent())
-			event.RequestHeaders = copyHeaders(renderCtx.HTTPCtx.Request.Header.All())
-			event.ResponseHeaders = copyHeaders(renderCtx.HTTPCtx.Response.Header.All())
+			event.RequestHeaders = httputil.CopyHeaders(renderCtx.HTTPCtx.Request.Header.All())
+			event.ResponseHeaders = httputil.CopyHeaders(renderCtx.HTTPCtx.Response.Header.All())
 		}
+		event.OriginRequestHeaders = renderCtx.OriginRequestHeaders
+		event.OriginResponseHeaders = renderCtx.OriginResponseHeaders
 		event.ClientIP = renderCtx.ClientIP
 		event.DimensionAction = renderCtx.DimensionAction
 
@@ -152,25 +154,11 @@ func BuildErrorEvent(
 	}
 
 	if httpCtx != nil {
-		event.RequestHeaders = copyHeaders(httpCtx.Request.Header.All())
-		event.ResponseHeaders = copyHeaders(httpCtx.Response.Header.All())
+		event.RequestHeaders = httputil.CopyHeaders(httpCtx.Request.Header.All())
+		event.ResponseHeaders = httputil.CopyHeaders(httpCtx.Response.Header.All())
 	}
 
 	return event
-}
-
-// copyHeaders copies header key/value pairs out of a pooled fasthttp context.
-// Returns nil when there are no headers.
-func copyHeaders(headers iter.Seq2[[]byte, []byte]) map[string][]string {
-	var result map[string][]string
-	for key, value := range headers {
-		if result == nil {
-			result = make(map[string][]string)
-		}
-		name := string(key)
-		result[name] = append(result[name], string(value))
-	}
-	return result
 }
 
 // mapResponseSource converts orchestrator.ResponseSource to event type and source strings

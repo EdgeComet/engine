@@ -19,6 +19,10 @@ const (
 	defaultScroll        = false
 )
 
+// redactedHeaderValue replaces the value of a header set from configuration wherever that value
+// would be stored or logged. The name is kept so "did the header reach the origin" stays answerable.
+const redactedHeaderValue = "(redacted)"
+
 // ResolvedConfig contains fully resolved configuration for a specific URL
 // after merging global → host → pattern levels
 type ResolvedConfig struct {
@@ -850,6 +854,34 @@ func (rc *ResolvedConfig) ApplyRequestHeaders(clientHeaders map[string][]string)
 	}
 	for name, value := range rc.RequestHeadersSet {
 		result[name] = []string{value}
+	}
+
+	return result
+}
+
+// RedactRequestHeaders returns headers with the value of every configured explicit header replaced
+// by redactedHeaderValue, matching names case-insensitively. A configured value is routinely a
+// credential and must not be persisted. Neither the input map nor its value slices are mutated:
+// ApplyRequestHeaders hands the same slices to RenderContext.ClientHeaders, which the live request
+// still uses. Returns headers unchanged when nothing is configured, so the common path does not
+// allocate.
+func (rc *ResolvedConfig) RedactRequestHeaders(headers map[string][]string) map[string][]string {
+	if len(rc.RequestHeadersSet) == 0 {
+		return headers
+	}
+
+	setNames := make(map[string]bool, len(rc.RequestHeadersSet))
+	for name := range rc.RequestHeadersSet {
+		setNames[strings.ToLower(name)] = true
+	}
+
+	result := make(map[string][]string, len(headers))
+	for name, values := range headers {
+		if setNames[strings.ToLower(name)] {
+			result[name] = []string{redactedHeaderValue}
+			continue
+		}
+		result[name] = values
 	}
 
 	return result

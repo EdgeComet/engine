@@ -237,10 +237,18 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		zap.Int("tab_id", reservation.TabID),
 		zap.String("service_url", serviceURL))
 
+	// Stamped before the call: a call that times out after Chrome already reached the origin
+	// still records what was attempted. OriginResponseHeaders is cleared in the same step so a
+	// response from an earlier attempt cannot outlive the request that produced it.
+	renderCtx.OriginRequestHeaders = renderCtx.ResolvedConfig.RedactRequestHeaders(renderReq.InjectedHeaders())
+	renderCtx.OriginResponseHeaders = nil
+
 	renderResp, err := rs.rsClient.CallRenderService(ctx, serviceURL, renderReq)
 	if err != nil {
 		return classifyRenderCallError(err)
 	}
+
+	renderCtx.OriginResponseHeaders = renderResp.Headers
 
 	if failure := orchestrator.ValidateRenderResponse(renderResp); failure != nil {
 		return classifyRenderFailure(failure)
@@ -425,6 +433,11 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
 			fmt.Sprintf("bypass fetch failed: %v", err)).withCause(err)
 	}
+
+	// Ahead of the transport-error and status classifications below: a failure row is built from
+	// this same context and carries the attempt's headers.
+	renderCtx.OriginRequestHeaders = renderCtx.ResolvedConfig.RedactRequestHeaders(bypassResp.SentHeaders)
+	renderCtx.OriginResponseHeaders = bypassResp.Headers
 
 	// An unreachable origin comes back as a synthetic 502, not an error. Report the transport
 	// failure with no status code - the 502 was never sent by the origin.

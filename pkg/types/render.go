@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/edgecomet/engine/pkg/pattern"
@@ -169,6 +170,33 @@ type RenderRequest struct {
 	// RenderKey is the host's render key, sent as X-Render-Key on same-origin requests so the
 	// origin can verify the request originated from EdgeComet. Mirrors the bypass path.
 	RenderKey string `json:"render_key,omitempty"`
+}
+
+// InjectedHeaders combines forwarded client headers with engine-managed headers.
+// The render key is applied last so a forwarded client header of the same name cannot
+// override it, matching the bypass path. Returns nil when there is nothing to inject.
+func (r *RenderRequest) InjectedHeaders() map[string][]string {
+	if len(r.Headers) == 0 && r.RenderKey == "" {
+		return nil
+	}
+
+	injected := make(map[string][]string, len(r.Headers)+1)
+	for name, values := range r.Headers {
+		injected[name] = values
+	}
+
+	if r.RenderKey != "" {
+		// Drop any forwarded spelling first: map keys are case-sensitive, HTTP header names are
+		// not, so two spellings would send duplicate X-Render-Key entries to the origin.
+		for name := range injected {
+			if strings.EqualFold(name, HeaderRenderKey) {
+				delete(injected, name)
+			}
+		}
+		injected[HeaderRenderKey] = []string{r.RenderKey}
+	}
+
+	return injected
 }
 
 // Error type constants - Infrastructure errors

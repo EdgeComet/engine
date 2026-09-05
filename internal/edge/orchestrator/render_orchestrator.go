@@ -731,6 +731,12 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 	ctx, cancel := renderCtx.GetContext()
 	defer cancel()
 
+	// Stamped before the call: a call that times out after Chrome already reached the origin
+	// still records what was attempted. OriginResponseHeaders is cleared in the same step so a
+	// response from an earlier attempt cannot outlive the request that produced it.
+	renderCtx.OriginRequestHeaders = renderCtx.ResolvedConfig.RedactRequestHeaders(req.InjectedHeaders())
+	renderCtx.OriginResponseHeaders = nil
+
 	resp, err := ro.rsClient.CallRenderService(ctx, serviceURL, req)
 	if err != nil {
 		renderCtx.Logger.Error("Render service call failed",
@@ -740,6 +746,9 @@ func (ro *RenderOrchestrator) performActualRenderWithTab(renderCtx *edgectx.Rend
 			zap.Error(err))
 		return nil, fmt.Errorf("render service call failed: %w", err)
 	}
+
+	// Ahead of validation: a rejected response that falls back to stale cache keeps its evidence.
+	renderCtx.OriginResponseHeaders = resp.Headers
 
 	if failure := ValidateRenderResponse(resp); failure != nil {
 		switch failure.Reason {
@@ -1203,6 +1212,11 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 			zap.Error(err))
 		return nil, fmt.Errorf("bypass request failed: %w", err)
 	}
+
+	// Ahead of the stale-fallback branches below: a row served from stale cache keeps the
+	// evidence of the refetch that made it fall back.
+	renderCtx.OriginRequestHeaders = renderCtx.ResolvedConfig.RedactRequestHeaders(bypassResp.SentHeaders)
+	renderCtx.OriginResponseHeaders = bypassResp.Headers
 
 	// 2.5. CHECK FOR 5xx - serve stale bypass if available (before content processing)
 	if bypassResp.StatusCode >= 500 && staleBypassCache != nil {

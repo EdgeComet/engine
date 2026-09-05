@@ -95,3 +95,102 @@ func TestFetchContentMarksTransportFailure(t *testing.T) {
 	assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType)
 	assert.NotEmpty(t, resp.TransportError)
 }
+
+// SentHeaders is the evidence stored on the event as sent to the origin, so it must show the engine-managed
+// headers and the configured User-Agent rather than whatever the bot sent.
+func TestFetchContentCapturesSentHeaders(t *testing.T) {
+	var got http.Header
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer origin.Close()
+
+	ssrfOff := false
+	svc := NewBypassService(&config.GlobalBypassConfig{
+		UserAgent:      "EdgeCometTest/1.0",
+		SSRFProtection: &ssrfOff,
+	}, zap.NewNop())
+
+	clientHeaders := map[string][]string{
+		"User-Agent":    {"Mozilla/5.0 (compatible; Googlebot/2.1)"},
+		"Authorization": {"Bearer token"},
+	}
+
+	resp, err := svc.FetchContent(origin.URL, clientHeaders, "render-key-123", zap.NewNop())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	assert.Equal(t, []string{"render-key-123"}, resp.SentHeaders[types.HeaderRenderKey])
+	assert.Equal(t, []string{edgeRenderSource}, resp.SentHeaders[types.HeaderEdgeRender])
+	assert.Equal(t, []string{"EdgeCometTest/1.0"}, resp.SentHeaders["User-Agent"],
+		"the configured User-Agent is sent, not the client's")
+	assert.Equal(t, []string{"Bearer token"}, resp.SentHeaders["Authorization"])
+	assert.Equal(t, "EdgeCometTest/1.0", got.Get("User-Agent"))
+}
+
+// The capture happens before the dial, so the row for an origin that was never reached still
+// says what the EG had prepared.
+func TestFetchContentTransportFailureCapturesSentHeaders(t *testing.T) {
+	svc := NewBypassService(&config.GlobalBypassConfig{
+		UserAgent: "EdgeCometTest/1.0",
+	}, zap.NewNop())
+
+	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
+	// without depending on network reachability.
+	resp, err := svc.FetchContent("http://127.0.0.1:1/page", nil, "render-key-123", zap.NewNop())
+
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.TransportError)
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+	assert.Empty(t, resp.Headers, "no response was received")
+	assert.Equal(t, []string{"render-key-123"}, resp.SentHeaders[types.HeaderRenderKey])
+	assert.Equal(t, []string{edgeRenderSource}, resp.SentHeaders[types.HeaderEdgeRender])
+	assert.Equal(t, []string{"EdgeCometTest/1.0"}, resp.SentHeaders["User-Agent"])
+}
+
+// Host is written by fasthttp from the URI during Do, after the capture, so it is on the wire
+// but not in SentHeaders. Pins that difference: the field documents it, and a reader answering
+// "what host did we ask for" must use the event URL.
+func TestFetchContentSentHeadersOmitHostWrittenAtSendTime(t *testing.T) {
+	var gotHost string
+	var got http.Header
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHost = r.Host
+		got = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer origin.Close()
+
+	ssrfOff := false
+	svc := NewBypassService(&config.GlobalBypassConfig{
+		UserAgent:      "EdgeCometTest/1.0",
+		SSRFProtection: &ssrfOff,
+	}, zap.NewNop())
+
+	resp, err := svc.FetchContent(origin.URL, nil, "", zap.NewNop())
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.NotEmpty(t, gotHost, "the listener must have received a Host")
+	assert.Equal(t, strings.TrimPrefix(origin.URL, "http://"), gotHost)
+
+	for name := range resp.SentHeaders {
+		assert.False(t, strings.EqualFold(name, "Host"),
+			"Host is filled from the URI at send time, after the capture")
+	}
+
+	// Every other header the listener saw is in the capture, in some spelling.
+	for name := range got {
+		if strings.EqualFold(name, "Host") {
+			continue
+		}
+		found := false
+		for captured := range resp.SentHeaders {
+			if strings.EqualFold(captured, name) {
+				found = true
+			}
+		}
+		assert.True(t, found, "header %q reached the wire but was not captured", name)
+	}
+}

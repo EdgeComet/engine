@@ -228,3 +228,84 @@ func TestApplyRequestHeaders_DoesNotMutateInputs(t *testing.T) {
 	assert.NotContains(t, clientHeaders, "X-Injected")
 	assert.NotContains(t, set, "X-Injected")
 }
+
+func TestRedactRequestHeaders(t *testing.T) {
+	tests := []struct {
+		name     string
+		set      map[string]string
+		headers  map[string][]string
+		expected map[string][]string
+	}{
+		{
+			name:     "nothing configured returns input unchanged",
+			headers:  map[string][]string{"X-Partner-Token": {"secret"}},
+			expected: map[string][]string{"X-Partner-Token": {"secret"}},
+		},
+		{
+			name:     "configured header keeps its name and loses its value",
+			set:      map[string]string{"X-Partner-Token": "secret"},
+			headers:  map[string][]string{"X-Partner-Token": {"secret"}},
+			expected: map[string][]string{"X-Partner-Token": {redactedHeaderValue}},
+		},
+		{
+			name:     "match is case-insensitive and the source spelling is kept",
+			set:      map[string]string{"X-Partner-Token": "secret"},
+			headers:  map[string][]string{"x-partner-TOKEN": {"secret"}},
+			expected: map[string][]string{"x-partner-TOKEN": {redactedHeaderValue}},
+		},
+		{
+			name: "unconfigured headers pass through",
+			set:  map[string]string{"X-Partner-Token": "secret"},
+			headers: map[string][]string{
+				"X-Partner-Token": {"secret"},
+				"Authorization":   {"Bearer token"},
+			},
+			expected: map[string][]string{
+				"X-Partner-Token": {redactedHeaderValue},
+				"Authorization":   {"Bearer token"},
+			},
+		},
+		{
+			name:     "multi-value configured header collapses to the single marker",
+			set:      map[string]string{"X-Partner-Token": "secret"},
+			headers:  map[string][]string{"X-Partner-Token": {"one", "two"}},
+			expected: map[string][]string{"X-Partner-Token": {redactedHeaderValue}},
+		},
+		{
+			name:     "configured header the caller never sent is not invented",
+			set:      map[string]string{"X-Partner-Token": "secret"},
+			headers:  map[string][]string{"Authorization": {"Bearer token"}},
+			expected: map[string][]string{"Authorization": {"Bearer token"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rc := &ResolvedConfig{RequestHeadersSet: tt.set}
+			assert.Equal(t, tt.expected, rc.RedactRequestHeaders(tt.headers))
+		})
+	}
+}
+
+// ApplyRequestHeaders hands the configured value slice to RenderContext.ClientHeaders, which the
+// live request still uses, so redaction must build its own map and its own slices.
+func TestRedactRequestHeaders_DoesNotMutateInputs(t *testing.T) {
+	rc := &ResolvedConfig{RequestHeadersSet: map[string]string{"X-Partner-Token": "secret"}}
+	clientHeaders := rc.ApplyRequestHeaders(map[string][]string{"Authorization": {"Bearer token"}})
+
+	redacted := rc.RedactRequestHeaders(clientHeaders)
+
+	require.Equal(t, []string{redactedHeaderValue}, redacted["X-Partner-Token"])
+	assert.Equal(t, []string{"secret"}, clientHeaders["X-Partner-Token"],
+		"the map the live request sends must keep the real value")
+
+	redacted["X-Injected"] = []string{"boom"}
+	assert.NotContains(t, clientHeaders, "X-Injected")
+}
+
+func TestRedactRequestHeaders_NilInput(t *testing.T) {
+	rc := &ResolvedConfig{RequestHeadersSet: map[string]string{"X-Partner-Token": "secret"}}
+
+	assert.Empty(t, rc.RedactRequestHeaders(nil))
+	assert.Nil(t, (&ResolvedConfig{}).RedactRequestHeaders(nil))
+}
