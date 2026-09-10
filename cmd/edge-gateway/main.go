@@ -408,6 +408,14 @@ func ptrBool(b bool) *bool {
 
 const serverName = "EdgeGateway/1.0"
 
+// serverReadBufferSize caps the entire inbound request head: the /render request line
+// with its percent-encoded absolute URL plus every header. fasthttp's 4 KB default
+// answers a larger head with a bare 431 written below the handler - no log line, no
+// event row, no X-Render-Source - and integrations that forward the client's own
+// headers (nginx does by default) reach it with an ordinary cookie jar. 32 KB matches
+// bypassReadBufferSize.
+const serverReadBufferSize = 32 * 1024
+
 func newFastHTTPServer(handler fasthttp.RequestHandler, timeout time.Duration) *fasthttp.Server {
 	return &fasthttp.Server{
 		Handler:                      handler,
@@ -415,6 +423,7 @@ func newFastHTTPServer(handler fasthttp.RequestHandler, timeout time.Duration) *
 		ReadTimeout:                  timeout,
 		WriteTimeout:                 timeout,
 		IdleTimeout:                  timeout,
+		ReadBufferSize:               serverReadBufferSize,
 		DisablePreParseMultipartForm: true,
 		NoDefaultServerHeader:        true,
 		NoDefaultDate:                true,

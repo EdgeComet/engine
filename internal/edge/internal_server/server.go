@@ -22,6 +22,11 @@ const (
 	PathDebugHARRender = "/debug/har/render"
 )
 
+// serverReadBufferSize caps the entire inbound request head. fasthttp's 4 KB default
+// answers a larger head with a bare 431 written below the handler, with no log line to
+// show for it. 32 KB matches bypassReadBufferSize.
+const serverReadBufferSize = 32 * 1024
+
 // InternalServer handles inter-EG and daemon-to-EG HTTP requests
 type InternalServer struct {
 	authKey   string
@@ -66,8 +71,9 @@ func (s *InternalServer) Start(address string) error {
 	s.address = address
 
 	s.server = &fasthttp.Server{
-		Handler: httputil.RecoverHandler(s.Handler(), s.logger),
-		Name:    "EdgeGateway-Internal",
+		Handler:        httputil.RecoverHandler(s.Handler(), s.logger),
+		Name:           "EdgeGateway-Internal",
+		ReadBufferSize: serverReadBufferSize,
 	}
 
 	listener, err := net.Listen("tcp", address)
