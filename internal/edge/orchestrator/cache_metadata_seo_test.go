@@ -10,11 +10,13 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
-// TestPageSEOFromCacheMetadata_LeavesDatesNil guards the producer side of the
-// inspected/uninspected distinction. Cache metadata holds no date evidence, so the
-// rebuilt struct must keep a nil slice: an initialized empty one would travel to the
-// event as the claim that the engine inspected the page and found no date signal.
-func TestPageSEOFromCacheMetadata_LeavesDatesNil(t *testing.T) {
+// TestPageSEOFromCacheMetadata_LeavesInspectionEvidenceNil guards the producer side of
+// the inspected/uninspected distinction. A cache hit serves bytes nothing re-read, so
+// every signal that claims the engine looked at the page must stay absent: an
+// initialized empty date slice would travel to the event as "inspected, no date signal",
+// and a JSON-LD envelope of {"blocks":0} as "inspected, carries no structured data".
+// Both are findings a report acts on, and neither was established here.
+func TestPageSEOFromCacheMetadata_LeavesInspectionEvidenceNil(t *testing.T) {
 	t.Run("metadata with title", func(t *testing.T) {
 		seo := pageSEOFromCacheMetadata(&cache.CacheMetadata{
 			Title:       "Cached title",
@@ -22,6 +24,7 @@ func TestPageSEOFromCacheMetadata_LeavesDatesNil(t *testing.T) {
 		})
 		require.NotNil(t, seo)
 		assert.Nil(t, seo.Dates)
+		assert.Nil(t, seo.SchemaOrg)
 	})
 
 	t.Run("empty metadata", func(t *testing.T) {

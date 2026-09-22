@@ -1,9 +1,11 @@
 package events
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/valyala/fasthttp"
+	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
@@ -111,6 +113,9 @@ func BuildRequestEvent(
 		if len(result.Extraction) > 0 {
 			event.Extraction = result.Extraction
 		}
+		if result.PageSEO != nil && result.PageSEO.SchemaOrg != nil {
+			event.SchemaOrg = marshalSchemaOrg(renderCtx, result.PageSEO.SchemaOrg)
+		}
 	}
 
 	// Override EventType for precache requests
@@ -119,6 +124,21 @@ func BuildRequestEvent(
 	}
 
 	return event
+}
+
+// marshalSchemaOrg serializes the page's JSON-LD capture once for the event. The
+// capture is bounded at types.MaxSchemaOrgBytes, so the cost is bounded too. A failure
+// leaves the field absent rather than losing the event; renderCtx.Logger already
+// carries the request ID.
+func marshalSchemaOrg(renderCtx *edgectx.RenderContext, capture *types.SchemaOrgCapture) json.RawMessage {
+	encoded, err := json.Marshal(capture)
+	if err != nil {
+		if renderCtx != nil && renderCtx.Logger != nil {
+			renderCtx.Logger.Warn("Failed to marshal schema.org capture", zap.Error(err))
+		}
+		return nil
+	}
+	return encoded
 }
 
 // BuildErrorEvent creates an error event for early failures (auth, validation, etc.).

@@ -1,5 +1,7 @@
 package types
 
+import "encoding/json"
+
 // IndexStatus represents the indexability status of a rendered page
 type IndexStatus int
 
@@ -122,6 +124,48 @@ type BreadcrumbEntry struct {
 	URL  string `json:"url"`
 }
 
+// Schema.org capture limits. The envelope is assembled metadata first, so every one of
+// these caps is applied before a single node is admitted.
+const (
+	MaxSchemaOrgBytes        = 256 * 1024 // serialized envelope cap, exact, node-level truncation
+	MaxSchemaOrgErrorExcerpt = 200        // bytes of a block kept as evidence
+	MaxSchemaOrgErrors       = 20         // error entries kept per page
+	MaxSchemaOrgContextBytes = 256        // bytes kept of a block @context
+)
+
+// SchemaOrgError.Reason values, naming why a block yielded no node.
+const (
+	SchemaOrgErrorParse    = "parse"    // decode failed, or content followed the first value; Offset set
+	SchemaOrgErrorOversize = "oversize" // block text over MaxJSONLDSize, never decoded
+	SchemaOrgErrorShape    = "shape"    // root decoded to a scalar, or list members were not objects
+)
+
+// SchemaOrgError is the evidence kept for one JSON-LD block the capture could not turn
+// into nodes. Block indexes the page's JSON-LD script blocks in document order.
+type SchemaOrgError struct {
+	Block   int    `json:"block"`
+	Reason  string `json:"reason"`
+	Offset  int64  `json:"offset,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
+}
+
+// SchemaOrgCapture is the JSON-LD a page carried: every top-level node in document
+// order, the block each came from, one @context per block, and per-block failures.
+// Nodes hold already-marshaled node objects, so the envelope is assembled once at
+// capture and never re-decoded in the request path.
+//
+// Blocks deliberately carries no omitempty: {"blocks":0} records a page that was
+// inspected and carries no JSON-LD, which readers must tell apart from an absent
+// capture. Truncated says the node list is incomplete, so absence proves nothing.
+type SchemaOrgCapture struct {
+	Blocks    int               `json:"blocks"`
+	Nodes     []json.RawMessage `json:"nodes,omitempty"`
+	NodeBlock []int             `json:"node_block,omitempty"`
+	Contexts  []string          `json:"contexts,omitempty"`
+	Errors    []SchemaOrgError  `json:"errors,omitempty"`
+	Truncated bool              `json:"truncated,omitempty"`
+}
+
 // PageSEO contains SEO-relevant metadata extracted from rendered HTML
 type PageSEO struct {
 	// Basic metadata
@@ -165,6 +209,10 @@ type PageSEO struct {
 	// Structured data
 	StructuredDataTypes []string          `json:"structured_data_types,omitempty"`
 	Breadcrumbs         []BreadcrumbEntry `json:"breadcrumbs,omitempty"`
+	// SchemaOrg is the page's JSON-LD envelope. In-process signal only (json:"-"):
+	// the event builder marshals it into its own event field, and the serialized SEO
+	// snapshot has no member for it.
+	SchemaOrg *SchemaOrgCapture `json:"-"`
 
 	// Dates carries every captured date signal, grouped by source. The extractor
 	// always initializes it, and the tag is omitzero rather than omitempty so that

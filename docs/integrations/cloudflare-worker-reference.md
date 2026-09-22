@@ -112,6 +112,12 @@ function isStaticAsset(pathname) {
 
 This saves a network round-trip for requests that never need rendering.
 
+## Request methods
+
+Only `GET` and `HEAD` reach Edge Gateway. Any other method is forwarded straight to origin, so a `POST`, `PUT` or `DELETE` from a client whose User-Agent matches the crawler patterns still reaches your application with its body intact.
+
+`HEAD` is forwarded as `HEAD`. Edge Gateway serves it from the same cache entry as the equivalent `GET` - the cache key does not include the method - and answers with the real status, `EC-Source` and `Content-Length` while writing no body, so a crawler checking a URL sees exactly what a `GET` would have returned.
+
 ## Loop prevention
 
 When Edge Gateway renders a page, the Render Service fetches the target URL from your origin server. Without loop prevention, Cloudflare would detect the Render Service request as a crawler and route it back to Edge Gateway, creating an infinite loop.
@@ -172,16 +178,39 @@ try {
 
 This ensures crawlers receive content even if Edge Gateway is temporarily unavailable. They get unrendered JavaScript content rather than an error page.
 
-## Headers reference
+## Header forwarding
 
-### Headers sent to Edge Gateway
+The Worker forwards the crawler's request headers to Edge Gateway unchanged. Two things depend on it:
 
-| Header | Description |
-|--------|-------------|
+- `headers.safe_request` is an allow-list applied to the request that arrives, so it can only forward to your origin a header the bot actually sent. A header the Worker drops can never be allow-listed back.
+- `events.request_headers` records hop 1 of the request - what the bot sent us. It is only evidence if the Worker passes the request through.
+
+### Headers the Worker does not forward
+
+These belong to the connection the request arrived on, not to the one the Worker opens. nginx replaces or drops the same set on its own hop.
+
+| Header | Reason |
+|--------|--------|
+| `Host` | Belongs to this hop; the crawler's host is carried in the `url` parameter. |
+| `Connection`, `Keep-Alive`, `TE`, `Trailer`, `Transfer-Encoding`, `Upgrade` | Hop-by-hop. |
+| `Proxy-Authorization`, `Proxy-Authenticate` | Address the proxy, not the origin. |
+| `Content-Length` | The Worker sends a GET with no body. |
+
+### Headers the Worker sets
+
+Applied after the crawler's headers, so a client-supplied header of the same name cannot override them.
+
+| Header | Value |
+|--------|-------|
 | `X-Render-Key` | Authentication token from host configuration. |
-| `User-Agent` | Original client User-Agent for dimension matching. |
-| `X-Forwarded-For` | Original client IP address. |
 | `X-Forwarded-Proto` | Original request protocol (http/https). |
+| `X-Real-IP`, `X-Forwarded-For` | `CF-Connecting-IP` - the one client IP Cloudflare vouches for. An inbound `X-Forwarded-For` chain is client-supplied and its leftmost entry, the one Edge Gateway reads, is spoofable, so it is replaced rather than extended. |
+| `EC-Request-ID` | `CF-Ray`, so a Cloudflare request and an EdgeComet event share an id. |
+| `Accept-Encoding` | `request.cf.clientAcceptEncoding`. Cloudflare canonicalizes `Accept-Encoding` before the Worker runs, so the inbound value is Cloudflare's rather than the crawler's. |
+
+`User-Agent` needs no special handling: it arrives with the crawler's headers and reaches Edge Gateway for dimension matching untouched.
+
+Requests reaching Edge Gateway through Cloudflare also carry the `CF-*` headers Cloudflare adds at its edge (`CF-Ray`, `CF-Connecting-IP`, `CF-IPCountry`, `CF-Visitor`). They are stored in `events.request_headers` alongside the crawler's own headers.
 
 ## Related documentation
 

@@ -7,7 +7,7 @@ import (
 // ExtractPageSEO populates a PageSEO struct by running every per-field
 // extractor against the parsed document. Each extractor lives in its own file:
 // seo_text.go, seo_links.go, seo_hreflang.go, seo_jsonld.go, seo_breadcrumbs.go,
-// seo_dates.go.
+// seo_dates.go, seo_schemaorg.go.
 func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.PageSEO {
 	seo := &types.PageSEO{}
 
@@ -43,11 +43,14 @@ func (d *domDocument) ExtractPageSEO(statusCode int, pageURL string) *types.Page
 	seo.Hreflang = extractHreflang(d.doc, effectiveBase)
 	seo.HreflangSelf = extractHreflangSelf(seo.Hreflang, pageURL)
 
-	// One parse of the document's JSON-LD, shared by every consumer below.
-	jsonLDBlocks := collectJSONLDBlocks(d.doc)
+	// One parse of the document's JSON-LD, shared by every consumer below. The
+	// derived consumers see only the blocks that parsed; the capture also reports the
+	// ones that did not.
+	jsonLDBlocks, jsonLDOutcomes := collectJSONLDBlocks(d.doc)
 	seo.StructuredDataTypes = extractStructuredDataTypes(jsonLDBlocks)
 	seo.Breadcrumbs = extractBreadcrumbs(jsonLDBlocks, effectiveBase)
 	seo.Dates = extractDates(d.doc, jsonLDBlocks)
+	seo.SchemaOrg = buildSchemaOrgCapture(jsonLDOutcomes)
 
 	return seo
 }

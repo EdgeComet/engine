@@ -66,6 +66,11 @@ type RequestEvent struct {
 	PageSEOOriginal *PageSEOEvent   `json:"page_seo_original,omitempty"`
 	Extraction      json.RawMessage `json:"extraction,omitempty"`
 
+	// SchemaOrg is the served page's JSON-LD as a flattened node list with per-block
+	// provenance and failure evidence (types.SchemaOrgCapture). Absent wherever no
+	// content processing ran; {"blocks":0} where a page was inspected and carries none.
+	SchemaOrg json.RawMessage `json:"schema_org,omitempty"`
+
 	// Timestamps
 	CreatedAt    time.Time `json:"created_at"`
 	EGInstanceID string    `json:"eg_instance_id"`

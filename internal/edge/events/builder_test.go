@@ -1064,3 +1064,134 @@ func TestBuildRequestEvent_StatusActionCarriesServedHeadersOnly(t *testing.T) {
 	assert.Nil(t, event.OriginRequestHeaders)
 	assert.Nil(t, event.OriginResponseHeaders)
 }
+
+// schemaOrgKey is the event's own member for the capture. It must never appear inside
+// either SEO snapshot, which is what the guard test below checks.
+const schemaOrgKey = "schema_org"
+
+// testSchemaOrgCapture is the shape content processing produces for a one-node page. The
+// price literal is deliberate: a float64 round trip anywhere on the way out would turn
+// 19.990 into 19.99 and quietly change a customer's markup.
+func testSchemaOrgCapture(nodeType string) *types.SchemaOrgCapture {
+	return &types.SchemaOrgCapture{
+		Blocks:    1,
+		Nodes:     []json.RawMessage{json.RawMessage(`{"@type":"` + nodeType + `","price":19.990}`)},
+		NodeBlock: []int{0},
+		Contexts:  []string{"https://schema.org"},
+	}
+}
+
+func TestBuildRequestEvent_SchemaOrgReachesTheEvent(t *testing.T) {
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+		PageSEO: &types.PageSEO{
+			Title:     "Product page",
+			SchemaOrg: testSchemaOrgCapture("Product"),
+		},
+	}
+
+	event := BuildRequestEvent(createTestRenderContext(), result, 100*time.Millisecond, "eg-1")
+	require.NotEmpty(t, event.SchemaOrg)
+
+	encoded, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	var m map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(encoded, &m))
+	require.Contains(t, m, schemaOrgKey)
+	assert.JSONEq(t,
+		`{"blocks":1,"nodes":[{"@type":"Product","price":19.990}],"node_block":[0],"contexts":["https://schema.org"]}`,
+		string(m[schemaOrgKey]))
+	assert.Contains(t, string(m[schemaOrgKey]), "19.990",
+		"the node's source literal must survive the event's own marshal")
+}
+
+// TestBuildRequestEvent_SchemaOrgAbsentWithoutCapture pins the distinction the whole
+// column rests on. An absent field says no page was inspected; {"blocks":0} says a page
+// was inspected and carried no structured data. Each case is a PageSEO shape the builder
+// is handed; that a cache hit really does produce the second one is the producer's
+// contract, pinned where pageSEOFromCacheMetadata lives.
+func TestBuildRequestEvent_SchemaOrgAbsentWithoutCapture(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *orchestrator.RenderResult
+	}{
+		{
+			name: "render whose capture was dropped",
+			result: &orchestrator.RenderResult{
+				Source:     orchestrator.ServedFromRender,
+				StatusCode: 200,
+				PageSEO:    &types.PageSEO{Title: "Rendered", IndexStatus: types.IndexStatusIndexable},
+			},
+		},
+		{
+			name: "cache hit shape: title and index status only",
+			result: &orchestrator.RenderResult{
+				Source:     orchestrator.ServedFromCache,
+				StatusCode: 200,
+				PageSEO:    &types.PageSEO{Title: "Cached title", IndexStatus: types.IndexStatusIndexable},
+			},
+		},
+		{
+			name: "no content processing at all",
+			result: &orchestrator.RenderResult{
+				Source:     orchestrator.ServedFromBypass,
+				StatusCode: 200,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := BuildRequestEvent(createTestRenderContext(), tt.result, 100*time.Millisecond, "eg-1")
+			assert.Nil(t, event.SchemaOrg)
+
+			encoded, err := json.Marshal(event)
+			require.NoError(t, err)
+
+			var m map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(encoded, &m))
+			assert.NotContains(t, m, schemaOrgKey)
+		})
+	}
+}
+
+// TestRequestEvent_SchemaOrgLivesOnlyAtTheTopLevel guards the boundary that keeps the
+// capture out of the two stored SEO snapshots. They are a separate struct built field by
+// field, so today the envelope cannot reach them; a member added to PageSEOEvent later
+// would write a quarter-megabyte blob into page_seo and page_seo_original on every
+// event, and the only symptom would be the collector dropping oversized events.
+//
+// It also pins which capture is stored: the served page's. The pre-modification
+// snapshot's capture is deliberately not carried, so the event pays one marshal.
+func TestRequestEvent_SchemaOrgLivesOnlyAtTheTopLevel(t *testing.T) {
+	result := &orchestrator.RenderResult{
+		Source:     orchestrator.ServedFromRender,
+		StatusCode: 200,
+		PageSEO: &types.PageSEO{
+			Title:     "Modified",
+			SchemaOrg: testSchemaOrgCapture("Article"),
+		},
+		OriginalPageSEO: &types.PageSEO{
+			Title:     "Original",
+			SchemaOrg: testSchemaOrgCapture("Product"),
+		},
+	}
+
+	event := BuildRequestEvent(createTestRenderContext(), result, 100*time.Millisecond, "eg-1")
+
+	encoded, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	var m map[string]interface{}
+	require.NoError(t, json.Unmarshal(encoded, &m))
+	assert.Contains(t, m, schemaOrgKey)
+	assert.Contains(t, string(event.SchemaOrg), `"@type":"Article"`, "the served page's capture, not the original's")
+
+	for _, key := range []string{"page_seo", "page_seo_original"} {
+		snapshot, ok := m[key].(map[string]interface{})
+		require.True(t, ok, "%s must be present for this guard to mean anything", key)
+		assert.NotContains(t, snapshot, schemaOrgKey, "%s must not carry the capture", key)
+	}
+}

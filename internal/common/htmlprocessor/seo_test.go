@@ -1,6 +1,7 @@
 package htmlprocessor
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -1350,7 +1351,7 @@ func TestExtractStructuredDataTypes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tt.html)
-			result := extractStructuredDataTypes(collectJSONLDBlocks(doc))
+			result := extractStructuredDataTypes(jsonLDRoots(doc))
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1443,6 +1444,19 @@ func TestExtractPageSEO_Integration(t *testing.T) {
 	// Structured data
 	assert.Contains(t, seo.StructuredDataTypes, "Product")
 	assert.Contains(t, seo.StructuredDataTypes, "Offer")
+
+	// Schema.org capture: the derived types above are a summary, the capture is the
+	// markup itself, so the page's one block has to arrive as one whole node.
+	require.NotNil(t, seo.SchemaOrg)
+	assert.Equal(t, 1, seo.SchemaOrg.Blocks)
+	require.Len(t, seo.SchemaOrg.Nodes, 1)
+	assert.Equal(t, []int{0}, seo.SchemaOrg.NodeBlock)
+	assert.Empty(t, seo.SchemaOrg.Errors)
+
+	var node map[string]interface{}
+	require.NoError(t, json.Unmarshal(seo.SchemaOrg.Nodes[0], &node))
+	assert.Equal(t, "Product", node["@type"])
+	assert.Equal(t, "Test Product", node["name"])
 }
 
 func TestExtractPageSEO_NonIndexable(t *testing.T) {
@@ -1706,7 +1720,7 @@ func TestExtractStructuredDataTypes_GoQuery(t *testing.T) {
 	</head></html>`
 
 	doc := parseGoQueryDoc(t, htmlStr)
-	result := extractStructuredDataTypes(collectJSONLDBlocks(doc))
+	result := extractStructuredDataTypes(jsonLDRoots(doc))
 
 	assert.Equal(t, []string{"Article", "WebPage"}, result)
 }
@@ -1916,7 +1930,7 @@ func TestExtractBreadcrumbs_HappyPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tt.html)
-			result := extractBreadcrumbs(collectJSONLDBlocks(doc), tt.pageURL)
+			result := extractBreadcrumbs(jsonLDRoots(doc), tt.pageURL)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1934,7 +1948,7 @@ func TestExtractBreadcrumbs_TrailSelection(t *testing.T) {
                 "itemListElement":[{"position":1,"name":"B","item":"https://e.com/b"}]
             }</script>
         </head></html>`
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "A", URL: "https://e.com/a"}}, result)
 	})
 
@@ -1943,7 +1957,7 @@ func TestExtractBreadcrumbs_TrailSelection(t *testing.T) {
             {"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"First","item":"https://e.com/1"}]},
             {"@type":"BreadcrumbList","itemListElement":[{"position":1,"name":"Second","item":"https://e.com/2"}]}
         ]`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "First", URL: "https://e.com/1"}}, result)
 	})
 
@@ -1956,7 +1970,7 @@ func TestExtractBreadcrumbs_TrailSelection(t *testing.T) {
                 ]}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -1965,7 +1979,7 @@ func TestExtractBreadcrumbs_TrailSelection(t *testing.T) {
             "@type":["BreadcrumbList","ItemList"],
             "itemListElement":[{"position":1,"name":"Home","item":"https://e.com/"}]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 }
@@ -1979,7 +1993,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":1,"name":"Home","item":"https://e.com/"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{
 			{Name: "Home", URL: "https://e.com/"},
 			{Name: "Guides", URL: "https://e.com/guides"},
@@ -1995,7 +2009,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"name":"Orphan","item":"https://e.com/orphan"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{
 			{Name: "Home", URL: "https://e.com/"},
 			{Name: "Guides", URL: "https://e.com/guides"},
@@ -2012,7 +2026,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":5,"name":"C","item":"https://e.com/c"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Len(t, result, 3)
 		assert.Equal(t, "A", result[0].Name)
 		assert.Equal(t, "B", result[1].Name)
@@ -2027,7 +2041,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":"1","name":"First","item":"https://e.com/1"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, "First", result[0].Name)
 		assert.Equal(t, "Second", result[1].Name)
 	})
@@ -2041,7 +2055,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":3,"name":"Current"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/guides/current")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/guides/current")
 		assert.Equal(t, []types.BreadcrumbEntry{
 			{Name: "Home", URL: "https://e.com/"},
 			{Name: "Guides", URL: "https://e.com/guides"},
@@ -2057,7 +2071,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":3,"name":"Guides","item":"https://e.com/guides"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{
 			{Name: "Home", URL: "https://e.com/"},
 			{Name: "Guides", URL: "https://e.com/guides"},
@@ -2072,7 +2086,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":2,"name":"Skip","item":"javascript:void(0)"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -2084,7 +2098,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":2,"name":"Email","item":"mailto:foo@example.com"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -2096,7 +2110,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":2,"name":"Frag","item":"#section"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -2108,7 +2122,7 @@ func TestExtractBreadcrumbs_OrderingAndDropping(t *testing.T) {
                 {"position":2,"name":"Also no URL"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Nil(t, result, "must be nil (not empty slice) for omitempty to fire")
 	})
 }
@@ -2122,7 +2136,7 @@ func TestExtractBreadcrumbs_Normalization(t *testing.T) {
                 {"position":2,"name":"Guides","item":"/guides"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/guides/current")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/guides/current")
 		assert.Equal(t, []types.BreadcrumbEntry{
 			{Name: "Home", URL: "https://e.com/"},
 			{Name: "Guides", URL: "https://e.com/guides"},
@@ -2142,7 +2156,7 @@ func TestExtractBreadcrumbs_Normalization(t *testing.T) {
                 {"position":7,"name":"Extra","item":"https://e.com/7"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Len(t, result, 5)
 		assert.Equal(t, "Home", result[0].Name)
 		assert.Equal(t, "Variant", result[4].Name)
@@ -2157,7 +2171,7 @@ func TestExtractBreadcrumbs_Normalization(t *testing.T) {
                 {"position":2,"name":"` + longName + `","item":"https://e.com/2"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, "Home Page", result[0].Name)
 		assert.Equal(t, strings.Repeat("a", 500), result[1].Name)
 	})
@@ -2170,7 +2184,7 @@ func TestExtractBreadcrumbs_Normalization(t *testing.T) {
                 {"position":1,"name":"Home","item":"https://e.com/` + longTail + `"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Len(t, result, 1)
 		assert.Equal(t, 2000, utf8.RuneCountInString(result[0].URL))
 	})
@@ -2206,7 +2220,7 @@ func TestExtractBreadcrumbs_Robustness(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := parseGoQueryDoc(t, tc.html)
-			result := extractBreadcrumbs(collectJSONLDBlocks(doc), "https://e.com/")
+			result := extractBreadcrumbs(jsonLDRoots(doc), "https://e.com/")
 			for _, e := range result {
 				assert.NotEmpty(t, e.URL, "any returned entry must have non-empty URL")
 			}
@@ -2225,7 +2239,7 @@ func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
                 {"position":1,"name":"Home","item":"https://e.com/"}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -2236,7 +2250,7 @@ func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
                 {"position":1,"name":42,"item":{"@id":"https://e.com/","name":"Home"}}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Equal(t, []types.BreadcrumbEntry{{Name: "Home", URL: "https://e.com/"}}, result)
 	})
 
@@ -2247,7 +2261,7 @@ func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
                 {"position":1,"name":"Home","item":42}
             ]
         }`)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Nil(t, result)
 	})
 
@@ -2257,7 +2271,7 @@ func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
             "@type":"BreadcrumbList",
             "itemListElement":[{"position":1,"name":"Home","item":"https://e.com/"}]
         }` + padding)
-		result := extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+		result := extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		assert.Nil(t, result)
 	})
 
@@ -2274,7 +2288,7 @@ func TestExtractBreadcrumbs_RobustnessExtras(t *testing.T) {
 		}
 		htmlStr := wrapBreadcrumbScript(b.String())
 		assert.NotPanics(t, func() {
-			_ = extractBreadcrumbs(collectJSONLDBlocks(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
+			_ = extractBreadcrumbs(jsonLDRoots(parseGoQueryDoc(t, htmlStr)), "https://e.com/")
 		})
 	})
 }
@@ -2292,7 +2306,7 @@ func FuzzExtractBreadcrumbs(f *testing.F) {
 		if err != nil {
 			return
 		}
-		_ = extractBreadcrumbs(collectJSONLDBlocks(doc), "https://example.com/")
+		_ = extractBreadcrumbs(jsonLDRoots(doc), "https://example.com/")
 	})
 }
 

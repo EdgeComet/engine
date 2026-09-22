@@ -187,3 +187,74 @@ func TestProcessBypassRecache_CacheableNon200EmitsSuccessRow(t *testing.T) {
 	assert.Equal(t, 404, event.StatusCode)
 	assert.Equal(t, 1, event.HostID)
 }
+
+// A precached 3xx reports where it points. The cache entry keeps the Location, so a row without
+// redirect_to describes a redirect to nowhere - and crawl_redirects argMax-picks the latest 3xx
+// event per URL, so one such row blanks the target the live events had recorded.
+func TestSaveToCache_RedirectEmitsTargetAndStoresLocation(t *testing.T) {
+	rs, emitter := successPathService(t)
+	renderCtx := cacheableNon200Context("https://example.com/moved")
+	renderCtx.ResolvedConfig.Cache.StatusCodes = []int{200, 301}
+
+	renderResult := &orchestrator.RenderServiceResult{
+		StatusCode:       301,
+		RedirectLocation: "https://example.com/destination",
+		Headers:          map[string][]string{"Location": {"/destination"}},
+	}
+
+	err := rs.saveToCache(context.Background(), renderCtx, renderResult, nil, nil, nil, nil, testRenderSvcID, time.Second)
+	require.NoError(t, err)
+
+	require.Len(t, emitter.emitted, 1)
+	event := emitter.emitted[0]
+	assert.Equal(t, 301, event.StatusCode)
+	assert.Empty(t, event.ErrorType)
+	assert.Equal(t, "https://example.com/destination", event.RedirectTo,
+		"the row carries the absolute target the entry was cached with, not the origin's relative header")
+
+	entry, err := rs.metadataStore.GetCacheEntry(context.Background(), renderCtx.CacheKey)
+	require.NoError(t, err)
+	require.NotNil(t, entry)
+	assert.Equal(t, int64(0), entry.DiskSize, "a redirect is a metadata-only entry")
+	assert.Equal(t, []string{"https://example.com/destination"}, entry.Headers["Location"],
+		"serving the cached redirect later depends on this being stored")
+}
+
+// The bypass half, driven through the real origin fetch: the stored and reported target is the
+// origin's own Location header, kept verbatim (relative values included, as the live path reports
+// them).
+func TestProcessBypassRecache_RedirectEmitsTargetAndStoresLocation(t *testing.T) {
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "/destination")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	defer origin.Close()
+
+	rs, emitter := successPathService(t)
+
+	ssrfProtection := false
+	rs.bypassSvc = bypass.NewBypassService(&config.GlobalBypassConfig{
+		UserAgent:      "EdgeCometTest/1.0",
+		SSRFProtection: &ssrfProtection,
+	}, zap.NewNop())
+
+	targetURL := origin.URL + "/moved"
+	renderCtx := cacheableNon200Context(targetURL)
+	renderCtx.ResolvedConfig.Action = types.ActionBypass
+	renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes = []int{200, 301}
+
+	err := rs.processBypassRecache(context.Background(), targetURL, renderCtx, time.Now())
+	require.NoError(t, err)
+
+	require.Len(t, emitter.emitted, 1)
+	event := emitter.emitted[0]
+	assert.Equal(t, 301, event.StatusCode)
+	assert.Empty(t, event.ErrorType)
+	assert.Equal(t, "/destination", event.RedirectTo)
+
+	entry, err := rs.metadataStore.GetCacheEntry(context.Background(), renderCtx.CacheKey)
+	require.NoError(t, err)
+	require.NotNil(t, entry)
+	assert.Equal(t, []string{"/destination"}, entry.Headers["Location"],
+		"FilterHeaders keeps Location on a 3xx regardless of the safe_response list")
+}

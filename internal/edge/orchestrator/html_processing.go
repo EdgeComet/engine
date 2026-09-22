@@ -45,7 +45,7 @@ func ProcessContent(
 		}
 	}
 
-	pageSEO := doc.ExtractPageSEO(statusCode, targetURL)
+	pageSEO := extractPageSEO(doc, statusCode, targetURL, logger)
 	appendLastModifiedDate(pageSEO, responseHeaders)
 
 	processedHTML := html
@@ -97,7 +97,7 @@ func ProcessContent(
 	if output.Modified {
 		result.HTML = doc.HTML()
 		result.OriginalPageSEO = pageSEO
-		result.PageSEO = doc.ExtractPageSEO(statusCode, targetURL)
+		result.PageSEO = extractPageSEO(doc, statusCode, targetURL, logger)
 		appendLastModifiedDate(result.PageSEO, responseHeaders)
 		return result
 	}
@@ -115,11 +115,23 @@ func ProcessContent(
 			return result
 		}
 
-		result.PageSEO = reDoc.ExtractPageSEO(statusCode, targetURL)
+		result.PageSEO = extractPageSEO(reDoc, statusCode, targetURL, logger)
 		appendLastModifiedDate(result.PageSEO, responseHeaders)
 	}
 
 	return result
+}
+
+// extractPageSEO runs the extractors and reports the one failure they cannot report
+// themselves: htmlprocessor has no logger, and on a parsed document a missing JSON-LD
+// capture is its recover guard having fired on hostile markup. Without the line, the
+// page is stored as one nothing ever inspected.
+func extractPageSEO(doc htmlprocessor.Document, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
+	seo := doc.ExtractPageSEO(statusCode, targetURL)
+	if seo.SchemaOrg == nil {
+		logger.Warn("Structured data capture dropped", zap.String("url", targetURL))
+	}
+	return seo
 }
 
 // appendLastModifiedDate records the origin's Last-Modified value as a date candidate.

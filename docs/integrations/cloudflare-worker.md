@@ -104,6 +104,55 @@ function isStaticAsset(pathname) {
 }
 
 // =============================================================================
+// HEADER FORWARDING
+// =============================================================================
+
+// The crawler's headers are forwarded unchanged - only a header that arrives
+// can be passed to your origin by safe_request. These belong to this connection.
+const CONNECTION_HEADERS = new Set([
+  "host",
+  "connection",
+  "keep-alive",
+  "proxy-authorization",
+  "proxy-authenticate",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "content-length",
+]);
+
+function buildRenderHeaders(request, url) {
+  const headers = new Headers();
+
+  for (const [name, value] of request.headers) {
+    if (!CONNECTION_HEADERS.has(name.toLowerCase())) {
+      headers.append(name, value);
+    }
+  }
+
+  // Cloudflare rewrites Accept-Encoding before the worker runs
+  const clientAcceptEncoding = request.cf?.clientAcceptEncoding;
+  if (clientAcceptEncoding) {
+    headers.set("Accept-Encoding", clientAcceptEncoding);
+  }
+
+  // Edge Gateway headers last, so a forwarded header cannot override them
+  headers.set("X-Render-Key", CONFIG.RENDER_KEY);
+  headers.set("X-Forwarded-Proto", url.protocol.replace(":", ""));
+
+  // Always overwritten: an inbound value is client-supplied, and Edge Gateway
+  // reads both of these as trusted. Empty falls back to the connection address
+  // and to a generated request id.
+  const clientIp = request.headers.get("CF-Connecting-IP") || "";
+  headers.set("X-Real-IP", clientIp);
+  headers.set("X-Forwarded-For", clientIp);
+  headers.set("EC-Request-ID", request.headers.get("CF-Ray") || "");
+
+  return headers;
+}
+
+// =============================================================================
 // MAIN HANDLER
 // =============================================================================
 
@@ -111,6 +160,11 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const userAgent = request.headers.get("User-Agent") || "";
+
+    // Only GET and HEAD are renderable; anything else must reach origin intact
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return fetch(request);
+    }
 
     // Loop prevention: if request is from EdgeComet (render or bypass fetch), pass to origin
     if (request.headers.get("X-Edge-Render")) {
@@ -135,13 +189,8 @@ export default {
 
     try {
       const response = await fetch(renderUrl, {
-        method: "GET",
-        headers: {
-          "X-Render-Key": CONFIG.RENDER_KEY,
-          "User-Agent": userAgent,
-          "X-Forwarded-For": request.headers.get("CF-Connecting-IP") || "",
-          "X-Forwarded-Proto": url.protocol.replace(":", ""),
-        },
+        method: request.method,
+        headers: buildRenderHeaders(request, url),
         signal: controller.signal,
       });
 

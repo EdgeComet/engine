@@ -334,13 +334,17 @@ func (rs *RecacheService) saveToCache(
 	// Emit precache event for access logging
 	if rs.eventEmitter != nil {
 		result := &orchestrator.RenderResult{
-			Source:          orchestrator.ServedFromRender,
-			ServiceID:       serviceID,
-			Duration:        totalDuration,
-			BytesServed:     int64(len(renderResult.HTML)),
-			StatusCode:      renderResult.StatusCode,
-			Metrics:         &renderResult.Metrics,
-			RenderTime:      renderResult.RenderTime,
+			Source:      orchestrator.ServedFromRender,
+			ServiceID:   serviceID,
+			Duration:    totalDuration,
+			BytesServed: int64(len(renderResult.HTML)),
+			StatusCode:  renderResult.StatusCode,
+			Metrics:     &renderResult.Metrics,
+			RenderTime:  renderResult.RenderTime,
+			// Same value SaveRenderCache writes as the entry's Location header. Without it a
+			// precached 3xx reports its status with no destination, and the crawl aggregator
+			// picks that empty target over an earlier live event's.
+			RedirectTo:      orchestrator.RedirectTarget(renderResult.StatusCode, renderResult.RedirectLocation),
 			PageSEO:         pageSEO,
 			RuleIDs:         ruleIDs,
 			OriginalPageSEO: originalPageSEO,
@@ -509,6 +513,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 			Duration:    totalDuration,
 			BytesServed: int64(len(bypassResp.Body)),
 			StatusCode:  bypassResp.StatusCode,
+			RedirectTo:  orchestrator.RedirectTarget(bypassResp.StatusCode, orchestrator.LocationHeaderValue(bypassResp.Headers)),
 			PageSEO:     pageSEO,
 		}
 		if processed != nil {

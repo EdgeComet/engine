@@ -67,3 +67,17 @@ func TestRedirectLocationFromMetadata(t *testing.T) {
 		assert.Equal(t, "https://example.com/permanent", redirectLocationFromMetadata(meta))
 	})
 }
+
+// One rule for redirect_to across live, cache-hit and precache rows: a 3xx keeps its Location,
+// every other status reports nothing. A render stamps its final URL on every status code, so an
+// ungated value would file a 200's client-navigated URL as a redirect target.
+func TestRedirectTarget(t *testing.T) {
+	assert.Equal(t, "https://example.com/new", RedirectTarget(301, "https://example.com/new"))
+	assert.Equal(t, "/relative", RedirectTarget(302, "/relative"))
+	assert.Equal(t, "https://example.com/new", RedirectTarget(308, "https://example.com/new"))
+	assert.Empty(t, RedirectTarget(200, "https://example.com/final-url"))
+	assert.Empty(t, RedirectTarget(404, "https://example.com/final-url"))
+	assert.Empty(t, RedirectTarget(303, "https://example.com/see-other"),
+		"303 is outside the cacheable redirect set the rest of the code recognises")
+	assert.Empty(t, RedirectTarget(301, ""))
+}

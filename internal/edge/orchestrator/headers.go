@@ -44,6 +44,18 @@ func isRedirectStatusCode(statusCode int) bool {
 	return statusCode == 301 || statusCode == 302 || statusCode == 307 || statusCode == 308
 }
 
+// RedirectTarget returns where a response sends the client, for the event row's redirect_to: the
+// Location value on a 3xx, empty on every other status. The gate is the point - a render stamps
+// its final URL for every status code, so an ungated value would file a 200's final URL as a
+// redirect target. Every path that reports an outcome (live, cache hit, precache) resolves
+// redirect_to through here so the rule cannot drift between them.
+func RedirectTarget(statusCode int, location string) string {
+	if !isRedirectStatusCode(statusCode) {
+		return ""
+	}
+	return location
+}
+
 // firstHeaderValueSorted returns the first value of the header matching name
 // case-insensitively, resolving ties on the lexicographically smallest matching name.
 //

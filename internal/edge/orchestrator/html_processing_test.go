@@ -2,10 +2,12 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/edgecomet/engine/internal/common/htmlprocessor"
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -451,4 +453,122 @@ func TestProcessContent_JSONLDDatesFollowedByHeader(t *testing.T) {
 		{Source: types.DateSourceJSONLD, Field: types.DateFieldModified, Raw: "2024-04-01", Context: "BlogPosting"},
 		lastModifiedCandidate(testLastModified),
 	}, result.PageSEO.Dates)
+}
+
+// schemaOrgPage is a page whose only JSON-LD block names the given type, so the capture
+// of either snapshot identifies which HTML it was taken from.
+func schemaOrgPage(nodeType string) []byte {
+	return sampleHTML(nodeType+" page",
+		`<script type="application/ld+json">{"@context":"https://schema.org","@type":"`+nodeType+`"}</script>`)
+}
+
+func schemaOrgTypes(t *testing.T, capture *types.SchemaOrgCapture) []string {
+	t.Helper()
+	require.NotNil(t, capture)
+	out := make([]string, 0, len(capture.Nodes))
+	for _, node := range capture.Nodes {
+		var decoded map[string]interface{}
+		require.NoError(t, json.Unmarshal(node, &decoded))
+		text, _ := decoded["@type"].(string)
+		out = append(out, text)
+	}
+	return out
+}
+
+// TestProcessContent_SchemaOrgFollowsTheReExtract pins which HTML each capture describes
+// once an Edge SEO rule has run. The served page is what bots receive, so PageSEO must
+// carry the markup as modified; OriginalPageSEO is the before picture a rule's effect is
+// judged against. Swapping them would report every rule as having changed nothing.
+func TestProcessContent_SchemaOrgFollowsTheReExtract(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	const pageURL = "https://example.com/page"
+	replacement := `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article"}</script>`
+
+	tests := []struct {
+		name string
+		cp   ContentProcessor
+	}{
+		{
+			name: "processor returns replacement HTML",
+			cp:   &mockContentProcessor{output: &ContentOutput{HTML: schemaOrgPage("Article")}},
+		},
+		{
+			name: "processor edits the document in place",
+			cp: &mockContentProcessorFn{fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+				doc := input.Doc.GoQueryDoc()
+				doc.Find(`script[type="application/ld+json"]`).Remove()
+				doc.Find("body").AppendHtml(replacement)
+				return &ContentOutput{Modified: true}, nil
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ProcessContent(context.Background(), schemaOrgPage("Product"), 200, nil,
+				pageURL, false, 1, tt.cp, logger)
+
+			require.NotNil(t, result.PageSEO)
+			require.NotNil(t, result.OriginalPageSEO)
+			assert.Equal(t, []string{"Article"}, schemaOrgTypes(t, result.PageSEO.SchemaOrg),
+				"the served page's capture must come from the re-extract")
+			assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.OriginalPageSEO.SchemaOrg))
+		})
+	}
+}
+
+// TestProcessContent_SchemaOrgKeepsThePreModificationSnapshot covers the fallback the
+// re-extract rests on: when a replacement yields no snapshot of its own the result keeps
+// the one taken before the rules ran, capture included, rather than reporting a page
+// with no structured data at all.
+//
+// The re-parse failure the fallback was written for cannot be reached: ParseWithDOM
+// reads from a byte slice, so goquery has no reader to fail on and accepts anything,
+// including nothing. The first subtest asserts that premise on the bytes most likely to
+// break it and pins what happens instead - the replacement is re-extracted, so its
+// capture wins even when it is junk. The second covers the reachable path with the same
+// shape, an override, where the result does keep the pre-modification snapshot.
+func TestProcessContent_SchemaOrgKeepsThePreModificationSnapshot(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	const pageURL = "https://example.com/page"
+
+	t.Run("a replacement the parser cannot reject is re-extracted anyway", func(t *testing.T) {
+		// Every entry is non-nil: a nil HTML means the processor changed nothing, so it
+		// never reaches the re-extract at all.
+		replacements := map[string][]byte{
+			"empty":           {},
+			"binary":          []byte("\x00\xff\xfe\x01"),
+			"unclosed tags":   []byte(`<html><head><title>x`),
+			"not html at all": []byte(`}{ not markup`),
+		}
+
+		for name, replacement := range replacements {
+			t.Run(name, func(t *testing.T) {
+				_, err := htmlprocessor.ParseWithDOM(replacement)
+				require.NoError(t, err, "the re-parse failure branch is unreachable, not merely untested")
+
+				cp := &mockContentProcessor{output: &ContentOutput{HTML: replacement}}
+				result := ProcessContent(context.Background(), schemaOrgPage("Product"), 200, nil,
+					pageURL, false, 1, cp, logger)
+
+				require.NotNil(t, result.PageSEO.SchemaOrg)
+				assert.Equal(t, 0, result.PageSEO.SchemaOrg.Blocks,
+					"the replacement carries no JSON-LD, and that is what was served")
+				assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.OriginalPageSEO.SchemaOrg))
+			})
+		}
+	})
+
+	t.Run("an override keeps the pre-modification snapshot", func(t *testing.T) {
+		cp := &mockContentProcessor{output: &ContentOutput{
+			Override: &ResponseOverride{StatusCode: 301, Location: "https://example.com/new"},
+		}}
+
+		result := ProcessContent(context.Background(), schemaOrgPage("Product"), 200, nil,
+			pageURL, false, 1, cp, logger)
+
+		require.NotNil(t, result.Override)
+		assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.PageSEO.SchemaOrg))
+		assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.OriginalPageSEO.SchemaOrg))
+	})
 }

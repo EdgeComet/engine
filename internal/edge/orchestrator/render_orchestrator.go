@@ -302,8 +302,11 @@ func (ro *RenderOrchestrator) ProcessRenderRequest(renderCtx *edgectx.RenderCont
 
 	// 5. DOUBLE-CHECK CACHE (another request might have rendered while we waited for lock)
 	if cached, exists := ro.cacheCoord.LookupCache(renderCtx); exists && cached.IsFresh() {
-		// Only attempt to serve locally if current EG owns the file
-		if ro.cacheCoord.IsFileLocal(cached) {
+		// Metadata-only entries (redirects, status overrides) carry no file and no eg_ids, so
+		// they are readable from Redis on every EG - the same exemption the pre-lock lookup
+		// applies. Without it a redirect written while this request waited for the lock fails
+		// the ownership check and gets rendered again, only to write the identical entry.
+		if cached.DiskSize == 0 || ro.cacheCoord.IsFileLocal(cached) {
 			result, err := ro.serveFromCache(renderCtx, cached)
 			if err == nil {
 				renderCtx.Logger.Info("Cache appeared while waiting for lock, served without rendering")
@@ -614,10 +617,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 
 	duration := time.Since(startTime)
 
-	redirectTo := ""
-	if isRedirectStatusCode(renderResult.StatusCode) {
-		redirectTo = renderResult.RedirectLocation
-	}
+	redirectTo := RedirectTarget(renderResult.StatusCode, renderResult.RedirectLocation)
 
 	var ruleIDs []uint32
 	var originalPageSEO *types.PageSEO
@@ -1280,10 +1280,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	duration := time.Since(startTime)
-	redirectTo := ""
-	if isRedirectStatusCode(bypassResp.StatusCode) {
-		redirectTo = LocationHeaderValue(bypassResp.Headers)
-	}
+	redirectTo := RedirectTarget(bypassResp.StatusCode, LocationHeaderValue(bypassResp.Headers))
 
 	return &RenderResult{
 		Source:          ServedFromBypass,

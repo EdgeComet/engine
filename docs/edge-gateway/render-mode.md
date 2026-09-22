@@ -366,6 +366,8 @@ Preserves:
 - Any other non-executable script type
 - `<noscript>` elements (not targeted by script cleaning)
 
+Preserved structured data is also observable downstream. Every `<script type="application/ld+json">` block on a content-processed page is captured on the request event as `schema_org`: the count of blocks, the nodes each one contributed in document order, and, for a block that did not parse or that exceeded the per-block size limit, the reason and an excerpt of the offending markup. Node content is stored exactly as served, so the capture shows what a bot received rather than a normalized rewrite of it.
+
 ### When to disable
 
 Set `strip_scripts: false` when you need to:

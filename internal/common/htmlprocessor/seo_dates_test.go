@@ -15,7 +15,7 @@ import (
 func extractDatesFromHTML(t *testing.T, htmlStr string) []types.DateCandidate {
 	t.Helper()
 	doc := parseGoQueryDoc(t, htmlStr)
-	return extractDates(doc, collectJSONLDBlocks(doc))
+	return extractDates(doc, jsonLDRoots(doc))
 }
 
 func jsonLDPage(blocks ...string) string {
@@ -654,7 +654,7 @@ func TestBreadcrumbPositionAcceptsJSONNumber(t *testing.T) {
 		{"position":2.0,"name":"Second","item":"https://e.com/b"}]}</script></head></html>`
 
 	doc := parseGoQueryDoc(t, htmlStr)
-	got := extractBreadcrumbs(collectJSONLDBlocks(doc), "https://e.com/")
+	got := extractBreadcrumbs(jsonLDRoots(doc), "https://e.com/")
 
 	require.Len(t, got, 3)
 	assert.Equal(t, "First", got[0].Name)

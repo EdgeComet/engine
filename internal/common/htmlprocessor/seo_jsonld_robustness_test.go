@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +24,18 @@ import (
 //  1. no panic, on any input;
 //  2. a broken block does not poison the page - valid siblings still extract;
 //  3. output stays deterministic, so a retry of the same page cannot disagree;
-//  4. no unbounded work - pathological nesting and width terminate.
+//  4. no unbounded work - pathological nesting and width terminate;
+//  5. nothing is dropped in silence - a block the derived consumers never see still
+//     leaves an errors[] entry in the capture saying why, since a missing node is
+//     otherwise indistinguishable from markup the page never carried.
+
+// jsonLDRoots is collectJSONLDBlocks' first return value, the parsed roots the derived
+// consumers see. The second return value, the per-block capture outcomes, is asserted
+// on its own in seo_schemaorg_test.go.
+func jsonLDRoots(doc *goquery.Document) []interface{} {
+	roots, _ := collectJSONLDBlocks(doc)
+	return roots
+}
 
 const (
 	// robustnessTitle is the marker every fixture carries. Extraction returning it
@@ -51,17 +64,21 @@ func probePage(blocks ...string) string {
 }
 
 // extractProbe runs the full extractor and fails the test on a panic rather than
-// letting it take the suite down.
-func extractProbe(t *testing.T, htmlStr string) {
+// letting it take the suite down. It returns the snapshot so a caller can go on to
+// assert what the page's own markup produced.
+func extractProbe(t *testing.T, htmlStr string) *types.PageSEO {
 	t.Helper()
+	var seo *types.PageSEO
 	require.NotPanics(t, func() {
 		doc, err := ParseWithDOM([]byte(htmlStr))
 		require.NoError(t, err)
-		seo := doc.ExtractPageSEO(200, "https://example.com/probe")
+		seo = doc.ExtractPageSEO(200, "https://example.com/probe")
 		require.NotNil(t, seo)
 		assert.Equal(t, robustnessTitle, seo.Title, "processor must complete and still read the rest of the page")
 		assert.NotNil(t, seo.Dates, "dates must stay initialized on hostile input")
+		assert.NotNil(t, seo.SchemaOrg, "a parsed document always yields a capture, however hostile its markup")
 	})
+	return seo
 }
 
 // brokenJSONLDBlocks are blocks that must never parse. Each is a real-world shape:
@@ -116,7 +133,7 @@ var brokenJSONLDBlocks = map[string]string{
 func TestJSONLD_BrokenSyntaxIsSkippedNotFatal(t *testing.T) {
 	for name, block := range brokenJSONLDBlocks {
 		t.Run(name, func(t *testing.T) {
-			extractProbe(t, probePage(block))
+			seo := extractProbe(t, probePage(block))
 
 			// Assert the bucket's premise instead of assuming it. Without this, a block
 			// that quietly parses still passes every no-panic check while testing
@@ -124,7 +141,16 @@ func TestJSONLD_BrokenSyntaxIsSkippedNotFatal(t *testing.T) {
 			// that easy to get wrong, since it rewrites NUL and invalid UTF-8 to U+FFFD
 			// before the decoder ever runs.
 			doc := parseGoQueryDoc(t, probePage(block))
-			assert.Empty(t, collectJSONLDBlocks(doc), "block must not survive parsing")
+			assert.Empty(t, jsonLDRoots(doc), "block must not survive parsing")
+
+			// The block still happened, so the capture has to say so: one block, no
+			// node, and the reason the decoder refused it.
+			capture := seo.SchemaOrg
+			assert.Equal(t, 1, capture.Blocks)
+			assert.Empty(t, capture.Nodes)
+			require.Len(t, capture.Errors, 1, "a skipped block must leave evidence")
+			assert.Equal(t, 0, capture.Errors[0].Block)
+			assert.Equal(t, types.SchemaOrgErrorParse, capture.Errors[0].Reason)
 		})
 	}
 }
@@ -372,13 +398,13 @@ func TestJSONLD_NestingLimitsAreLoadBearing(t *testing.T) {
 	arrayNest := func(d int) string { return strings.Repeat(`[`, d) + `1` + strings.Repeat(`]`, d) }
 
 	t.Run("decoder accepts nesting at the cap", func(t *testing.T) {
-		_, ok := decodeJSONLD(arrayNest(goJSONMaxNestingDepth))
-		assert.True(t, ok, "encoding/json should still decode at exactly its cap")
+		_, err := decodeJSONLD(arrayNest(goJSONMaxNestingDepth))
+		assert.NoError(t, err, "encoding/json should still decode at exactly its cap")
 	})
 
 	t.Run("decoder refuses nesting past the cap", func(t *testing.T) {
-		_, ok := decodeJSONLD(arrayNest(goJSONMaxNestingDepth + 1))
-		assert.False(t, ok, "one level past the cap must fail to parse, not grow the stack")
+		_, err := decodeJSONLD(arrayNest(goJSONMaxNestingDepth + 1))
+		assert.Error(t, err, "one level past the cap must fail to parse, not grow the stack")
 	})
 
 	// The positive control matters: without it, "no dates from a deep tree" also passes
@@ -390,8 +416,8 @@ func TestJSONLD_NestingLimitsAreLoadBearing(t *testing.T) {
 
 	t.Run("control: a date within the walk limit is collected", func(t *testing.T) {
 		shallow := objectNest(types.MaxJSONLDRecursionDepth - 2)
-		parsed, ok := decodeJSONLD(shallow)
-		require.True(t, ok)
+		parsed, err := decodeJSONLD(shallow)
+		require.NoError(t, err)
 
 		doc := parseGoQueryDoc(t, probePage(shallow))
 		require.Len(t, extractDates(doc, []interface{}{parsed}), 1,
@@ -401,12 +427,18 @@ func TestJSONLD_NestingLimitsAreLoadBearing(t *testing.T) {
 	t.Run("walk stops long before a parsed tree bottoms out", func(t *testing.T) {
 		deep := objectNest(goJSONMaxNestingDepth - 2)
 
-		parsed, ok := decodeJSONLD(deep)
-		require.True(t, ok, "this depth must parse, or the test is not exercising the walk limit")
+		parsed, err := decodeJSONLD(deep)
+		require.NoError(t, err, "this depth must parse, or the test is not exercising the walk limit")
 
 		doc := parseGoQueryDoc(t, probePage(deep))
 		assert.Empty(t, extractDates(doc, []interface{}{parsed}),
 			"a date past MaxJSONLDRecursionDepth is not collected, so the walk never recurses that far")
+
+		// The walk limit is the walkers' own, not the capture's: the block parsed, so it
+		// is stored as a node and must not be reported as a failure.
+		capture := extractProbe(t, probePage(deep)).SchemaOrg
+		assert.Len(t, capture.Nodes, 1)
+		assert.Empty(t, capture.Errors)
 	})
 }
 
@@ -441,6 +473,14 @@ func TestJSONLD_ManyBrokenBlocks(t *testing.T) {
 	assert.Equal(t, []string{"BlogPosting"}, seo.StructuredDataTypes)
 	require.Len(t, seo.Dates, 1)
 	assert.Equal(t, "2024-03-05", seo.Dates[0].Raw)
+
+	// Evidence is capped, the block count is not: a reader still sees that the page
+	// carried 501 blocks and that only the last one produced anything.
+	capture := seo.SchemaOrg
+	require.NotNil(t, capture)
+	assert.Equal(t, len(blocks), capture.Blocks)
+	assert.Len(t, capture.Errors, types.MaxSchemaOrgErrors)
+	assert.Equal(t, []int{len(blocks) - 1}, capture.NodeBlock)
 }
 
 // TestJSONLD_OversizedBlockSkippedWithoutParsing pins the size guard: a block past
@@ -456,6 +496,14 @@ func TestJSONLD_OversizedBlockSkippedWithoutParsing(t *testing.T) {
 	assert.Equal(t, []string{"BlogPosting"}, seo.StructuredDataTypes, "oversized block contributes nothing")
 	require.Len(t, seo.Dates, 1)
 	assert.Equal(t, "kept", seo.Dates[0].Raw)
+
+	capture := seo.SchemaOrg
+	require.NotNil(t, capture)
+	assert.Equal(t, 2, capture.Blocks)
+	require.Len(t, capture.Errors, 1)
+	assert.Equal(t, 0, capture.Errors[0].Block)
+	assert.Equal(t, types.SchemaOrgErrorOversize, capture.Errors[0].Reason,
+		"the size guard must be distinguishable from a decode failure")
 }
 
 // TestJSONLD_ScriptTypeVariantsOnBrokenContent checks the type-attribute matcher itself
@@ -495,9 +543,12 @@ func TestJSONLD_ScriptTypeVariantsOnBrokenContent(t *testing.T) {
 
 			doc := parseGoQueryDoc(t, htmlStr)
 			if tc.isJSONLD {
-				assert.Len(t, collectJSONLDBlocks(doc), 1, "attribute names JSON-LD, block must be parsed")
+				assert.Len(t, jsonLDRoots(doc), 1, "attribute names JSON-LD, block must be parsed")
+				assert.Equal(t, 1, extractProbe(t, htmlStr).SchemaOrg.Blocks)
 			} else {
-				assert.Empty(t, collectJSONLDBlocks(doc), "attribute does not name JSON-LD, block must be ignored")
+				assert.Empty(t, jsonLDRoots(doc), "attribute does not name JSON-LD, block must be ignored")
+				assert.Equal(t, 0, extractProbe(t, htmlStr).SchemaOrg.Blocks,
+					"a script the matcher rejects is not a block, or every node_block index shifts")
 			}
 		})
 	}
