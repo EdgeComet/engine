@@ -434,11 +434,15 @@ func TestJSONLD_NestingLimitsAreLoadBearing(t *testing.T) {
 		assert.Empty(t, extractDates(doc, []interface{}{parsed}),
 			"a date past MaxJSONLDRecursionDepth is not collected, so the walk never recurses that far")
 
-		// The walk limit is the walkers' own, not the capture's: the block parsed, so it
-		// is stored as a node and must not be reported as a failure.
+		// Three separate bounds meet on this input and the test pins which one acts. The
+		// decoder accepts it, so it is not a parse failure. The walkers stop at
+		// MaxJSONLDRecursionDepth, so they collect nothing from it. The capture refuses to
+		// store it at MaxSchemaOrgNodeDepth, and says so rather than dropping it silently.
 		capture := extractProbe(t, probePage(deep)).SchemaOrg
-		assert.Len(t, capture.Nodes, 1)
-		assert.Empty(t, capture.Errors)
+		assert.Equal(t, 1, capture.Blocks, "the block still happened")
+		assert.Empty(t, capture.Nodes, "a node this deep is not storable")
+		require.Len(t, capture.Errors, 1)
+		assert.Equal(t, types.SchemaOrgErrorDepth, capture.Errors[0].Reason)
 	})
 }
 

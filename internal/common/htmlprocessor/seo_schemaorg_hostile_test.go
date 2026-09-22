@@ -55,8 +55,8 @@ func assertCaptureInvariants(t *testing.T, capture *types.SchemaOrgCapture) {
 		assert.GreaterOrEqual(t, e.Block, 0)
 		assert.Less(t, e.Block, capture.Blocks, "errors[%d] names a block the page had", i)
 		assert.Contains(t,
-			[]string{types.SchemaOrgErrorParse, types.SchemaOrgErrorOversize, types.SchemaOrgErrorShape},
-			e.Reason)
+			[]string{types.SchemaOrgErrorParse, types.SchemaOrgErrorOversize,
+				types.SchemaOrgErrorShape, types.SchemaOrgErrorDepth}, e.Reason)
 		assert.LessOrEqual(t, len(e.Excerpt), types.MaxSchemaOrgErrorExcerpt)
 		assert.True(t, utf8.ValidString(e.Excerpt), "errors[%d] excerpt must be valid UTF-8", i)
 	}
@@ -206,9 +206,9 @@ func TestSchemaOrgCapture_AdversarialScale(t *testing.T) {
 			nodes: false,
 		},
 		{
-			name:  "nesting just under the decoder's own cap is re-serialized whole",
+			name:  "nesting the decoder accepts but no JSON store would",
 			block: strings.Repeat(`{"a":`, 9000) + `1` + strings.Repeat(`}`, 9000),
-			nodes: true,
+			nodes: false,
 		},
 	}
 
@@ -369,27 +369,70 @@ func TestSchemaOrgCapture_BoundedValuesDoNotPinTheirSource(t *testing.T) {
 	})
 }
 
-// TestSchemaOrgCapture_RecursionIsBoundedByTheDecoder pins the other fatal path. The
-// capture re-serializes whole trees, and json.Marshal recurses per level, so the only
-// thing standing between a hostile page and a stack overflow is encoding/json's own
-// nesting cap on the way in. A stack overflow is fatal in Go: no recover, no deferred
-// anything, the process dies. If a future Go release lifts that cap, this fails.
-func TestSchemaOrgCapture_RecursionIsBoundedByTheDecoder(t *testing.T) {
-	const decoderMaxNesting = 10000
-
+// TestSchemaOrgCapture_NodeDepthIsBounded pins the bound that keeps a page from stopping an
+// events pipeline. A JSON store refuses a value past its own nesting limit, and a rejected row
+// costs the whole insert batch rather than itself, so "the decoder accepted it" is not enough of
+// a reason to store a node: the capture has to refuse first, and leave evidence that it did.
+//
+// The bound is deliberately far below any store's limit and far above real markup, which measures
+// 4 levels on a production page and across the corpus this column was sized with.
+func TestSchemaOrgCapture_NodeDepthIsBounded(t *testing.T) {
 	nest := func(depth int) string {
-		return strings.Repeat(`{"a":`, depth) + `1` + strings.Repeat(`}`, depth)
+		return strings.Repeat(`{"a":`, depth-1) + `{"@type":"Thing"}` + strings.Repeat(`}`, depth-1)
 	}
 
-	t.Run("the decoder refuses anything deeper than its cap", func(t *testing.T) {
-		_, err := decodeJSONLD(nest(decoderMaxNesting + 1))
-		require.Error(t, err, "nothing deeper than the cap can ever reach json.Marshal")
+	t.Run("a node at the bound is stored", func(t *testing.T) {
+		capture := captureFor(t, nest(types.MaxSchemaOrgNodeDepth))
+		assertCaptureInvariants(t, capture)
+		assert.Len(t, capture.Nodes, 1)
+		assert.Empty(t, capture.Errors)
 	})
 
-	t.Run("the deepest tree the decoder admits re-serializes", func(t *testing.T) {
-		capture := captureFor(t, nest(decoderMaxNesting-1))
+	t.Run("one level past the bound is refused with evidence", func(t *testing.T) {
+		capture := captureFor(t, nest(types.MaxSchemaOrgNodeDepth+1))
 		assertCaptureInvariants(t, capture)
-		require.Len(t, capture.Nodes, 1)
-		assert.Empty(t, capture.Errors)
+		assert.Equal(t, 1, capture.Blocks, "the block is still counted")
+		assert.Empty(t, capture.Nodes)
+		require.Len(t, capture.Errors, 1, "a refused node must not read as markup the page never carried")
+		assert.Equal(t, types.SchemaOrgErrorDepth, capture.Errors[0].Reason)
+		assert.Equal(t, 0, capture.Errors[0].Block)
+		assert.NotEmpty(t, capture.Errors[0].Excerpt, "the reason is only actionable with the markup")
+	})
+
+	t.Run("a deep node does not cost its siblings", func(t *testing.T) {
+		capture := captureFor(t,
+			`[{"@type":"Product","name":"Shallow"},`+nest(types.MaxSchemaOrgNodeDepth+1)+`]`,
+			`{"@type":"Organization","name":"Other block"}`)
+		assertCaptureInvariants(t, capture)
+		assert.Equal(t, []string{"Product", "Organization"}, nodeTypes(t, capture),
+			"every storable node survives a sibling that is not")
+		require.Len(t, capture.Errors, 1)
+		assert.Equal(t, types.SchemaOrgErrorDepth, capture.Errors[0].Reason)
+		assert.Equal(t, 0, capture.Errors[0].Block, "the error names the block the deep node came from")
+	})
+
+	t.Run("a deep node inside a graph wrapper is refused alone", func(t *testing.T) {
+		capture := captureFor(t,
+			`{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Keep"},`+
+				nest(types.MaxSchemaOrgNodeDepth+1)+`]}`)
+		assertCaptureInvariants(t, capture)
+		assert.Equal(t, []string{"WebSite"}, nodeTypes(t, capture))
+		require.Len(t, capture.Errors, 1)
+		assert.Equal(t, types.SchemaOrgErrorDepth, capture.Errors[0].Reason)
+	})
+
+	t.Run("a block can report both a scalar member and a deep one", func(t *testing.T) {
+		capture := captureFor(t, `[42,`+nest(types.MaxSchemaOrgNodeDepth+1)+`]`)
+		assertCaptureInvariants(t, capture)
+		assert.Empty(t, capture.Nodes)
+		require.Len(t, capture.Errors, 2, "the two refusals are different facts about the block")
+		assert.Equal(t, types.SchemaOrgErrorShape, capture.Errors[0].Reason)
+		assert.Equal(t, types.SchemaOrgErrorDepth, capture.Errors[1].Reason)
+	})
+
+	t.Run("the decoder's own cap still applies underneath", func(t *testing.T) {
+		const decoderMaxNesting = 10000
+		_, err := decodeJSONLD(strings.Repeat(`[`, decoderMaxNesting+1) + strings.Repeat(`]`, decoderMaxNesting+1))
+		require.Error(t, err, "anything deeper than the decoder's cap never reaches the capture at all")
 	})
 }

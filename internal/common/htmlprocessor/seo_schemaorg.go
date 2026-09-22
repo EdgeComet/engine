@@ -37,6 +37,13 @@ type schemaOrgCandidate struct {
 	node  interface{}
 }
 
+// schemaOrgBlockIssues records what a block's classification refused. A block can hit both:
+// a list holding a scalar next to an object that nests too deep.
+type schemaOrgBlockIssues struct {
+	malformed bool
+	tooDeep   bool
+}
+
 // buildSchemaOrgCapture assembles the page's JSON-LD envelope from one outcome per
 // script block. Metadata (block count, per-block @context, failure evidence) is
 // assembled and sized first, then nodes fill whatever of types.MaxSchemaOrgBytes is
@@ -66,10 +73,13 @@ func buildSchemaOrgCapture(outcomes []jsonLDOutcome) (capture *types.SchemaOrgCa
 			errs = appendSchemaOrgError(errs, i, outcome.reason, outcome.offset, outcome.excerpt)
 			continue
 		}
-		var malformed bool
-		candidates, malformed = appendSchemaOrgCandidates(candidates, i, outcome.root)
-		if malformed {
+		var issues schemaOrgBlockIssues
+		candidates, issues = appendSchemaOrgCandidates(candidates, i, outcome.root)
+		if issues.malformed {
 			errs = appendSchemaOrgError(errs, i, types.SchemaOrgErrorShape, 0, outcome.excerpt)
+		}
+		if issues.tooDeep {
+			errs = appendSchemaOrgError(errs, i, types.SchemaOrgErrorDepth, 0, outcome.excerpt)
 		}
 	}
 	capture.Contexts = contexts
@@ -112,10 +122,10 @@ func buildSchemaOrgCapture(outcomes []jsonLDOutcome) (capture *types.SchemaOrgCa
 
 // appendSchemaOrgCandidates classifies one parsed root into the nodes it contributes.
 // Only a bare list and a pure {@context, @graph} wrapper are unwrapped: a node that
-// carries an @graph alongside other keys stays one whole node. The bool reports that
-// the block held something that is not a node, which is one error per block however
-// many members were wrong.
-func appendSchemaOrgCandidates(candidates []schemaOrgCandidate, block int, root interface{}) ([]schemaOrgCandidate, bool) {
+// carries an @graph alongside other keys stays one whole node. The returned issues report what
+// the block held that could not be stored - a member that is not a node, or one nesting past
+// types.MaxSchemaOrgNodeDepth - each as one error per block however many members were wrong.
+func appendSchemaOrgCandidates(candidates []schemaOrgCandidate, block int, root interface{}) ([]schemaOrgCandidate, schemaOrgBlockIssues) {
 	switch value := root.(type) {
 	case []interface{}:
 		return appendSchemaOrgMembers(candidates, block, value)
@@ -123,25 +133,59 @@ func appendSchemaOrgCandidates(candidates []schemaOrgCandidate, block int, root 
 		if graph, ok := pureGraphWrapper(value); ok {
 			return appendSchemaOrgMembers(candidates, block, graph)
 		}
-		return append(candidates, schemaOrgCandidate{block: block, node: value}), false
+		if exceedsSchemaOrgDepth(value, types.MaxSchemaOrgNodeDepth) {
+			return candidates, schemaOrgBlockIssues{tooDeep: true}
+		}
+		return append(candidates, schemaOrgCandidate{block: block, node: value}), schemaOrgBlockIssues{}
 	default:
-		return candidates, true
+		return candidates, schemaOrgBlockIssues{malformed: true}
 	}
 }
 
 // appendSchemaOrgMembers takes the object elements of an unwrapped list. An empty list
 // contributes no node and no error: it is a block with nothing in it.
-func appendSchemaOrgMembers(candidates []schemaOrgCandidate, block int, members []interface{}) ([]schemaOrgCandidate, bool) {
-	malformed := false
+func appendSchemaOrgMembers(candidates []schemaOrgCandidate, block int, members []interface{}) ([]schemaOrgCandidate, schemaOrgBlockIssues) {
+	var issues schemaOrgBlockIssues
 	for _, member := range members {
 		object, ok := member.(map[string]interface{})
 		if !ok {
-			malformed = true
+			issues.malformed = true
+			continue
+		}
+		if exceedsSchemaOrgDepth(object, types.MaxSchemaOrgNodeDepth) {
+			issues.tooDeep = true
 			continue
 		}
 		candidates = append(candidates, schemaOrgCandidate{block: block, node: object})
 	}
-	return candidates, malformed
+	return candidates, issues
+}
+
+// exceedsSchemaOrgDepth reports whether v nests past allowed container levels, counting a scalar
+// as 0 and an object or list as one more than its deepest member. It returns at the first path
+// that passes the bound, so a pathologically deep tree costs the bound rather than its own size.
+func exceedsSchemaOrgDepth(v interface{}, allowed int) bool {
+	switch value := v.(type) {
+	case map[string]interface{}:
+		if allowed <= 0 {
+			return true
+		}
+		for _, child := range value {
+			if exceedsSchemaOrgDepth(child, allowed-1) {
+				return true
+			}
+		}
+	case []interface{}:
+		if allowed <= 0 {
+			return true
+		}
+		for _, item := range value {
+			if exceedsSchemaOrgDepth(item, allowed-1) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // pureGraphWrapper returns the @graph list of a root that carries nothing but @context

@@ -131,6 +131,13 @@ const (
 	MaxSchemaOrgErrorExcerpt = 200        // bytes of a block kept as evidence
 	MaxSchemaOrgErrors       = 20         // error entries kept per page
 	MaxSchemaOrgContextBytes = 256        // bytes kept of a block @context
+
+	// MaxSchemaOrgNodeDepth bounds how deeply a stored node may nest. Real markup sits far
+	// below it: the deepest node on a production Yoast page and across the synthetic corpus
+	// used to size this column both measure 4. The bound exists because a JSON store rejects
+	// a value past its own nesting limit, and one rejected row costs the whole insert batch,
+	// so an unbounded node is a way for a single page to stop an events pipeline.
+	MaxSchemaOrgNodeDepth = 16
 )
 
 // SchemaOrgError.Reason values, naming why a block yielded no node.
@@ -138,6 +145,7 @@ const (
 	SchemaOrgErrorParse    = "parse"    // decode failed, or content followed the first value; Offset set
 	SchemaOrgErrorOversize = "oversize" // block text over MaxJSONLDSize, never decoded
 	SchemaOrgErrorShape    = "shape"    // root decoded to a scalar, or list members were not objects
+	SchemaOrgErrorDepth    = "depth"    // node nested past MaxSchemaOrgNodeDepth, dropped rather than stored
 )
 
 // SchemaOrgError is the evidence kept for one JSON-LD block the capture could not turn
