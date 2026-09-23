@@ -460,7 +460,7 @@ headers:
 
   # Response headers returned to the client. Replaces the inherited list;
   # mutually exclusive with safe_response_add.
-  # Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag"]
+  # Default: ["Content-Type", "Cache-Control", "Expires", "Last-Modified", "ETag", "Location", "X-Robots-Tag", "Link"]
   safe_response:
     - "Content-Type"
     - "Cache-Control"
@@ -469,6 +469,7 @@ headers:
     - "ETag"
     - "Location"
     - "X-Robots-Tag"
+    - "Link"
 
   # Adds to the inherited response header list; mutually exclusive with safe_response,
   # so only one of the two may be uncommented at a level.

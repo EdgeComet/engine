@@ -307,10 +307,16 @@ Default safe headers:
 - `ETag`
 - `Location`
 - `X-Robots-Tag`
+- `Link`
+
+`X-Robots-Tag` and `Link` carry indexing signals: `noindex` and `rel="canonical"` for resources
+that have no `<head>` to hold a meta tag, such as feeds, PDFs and XML files.
 
 You can customize this list at global, host, or URL pattern level, under the `headers` block.
 `safe_response` **replaces** the inherited list; `safe_response_add` extends it. The two are
-mutually exclusive at the same level.
+mutually exclusive at the same level. To keep the defaults and add to them, use
+`safe_response_add`: a `safe_response` list that copies the defaults stops receiving headers
+added to the defaults in later releases.
 
 ::: code-group
 ```yaml [Global - edge-gateway.yaml]
