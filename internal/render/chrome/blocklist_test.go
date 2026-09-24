@@ -48,7 +48,7 @@ func TestNewBlocklist(t *testing.T) {
 }
 
 func TestBlocklist_GlobalDomains(t *testing.T) {
-	// Test all 30 global domains (each with *domain* pattern)
+	// Test all global domains (each with *domain* pattern)
 	tests := []struct {
 		domain string
 	}{
@@ -84,6 +84,21 @@ func TestBlocklist_GlobalDomains(t *testing.T) {
 		{"youtube.com"},
 		{"listrakbi.com"},
 		{"static.cloudflareinsights.com"},
+		{"360yield.com"},
+		{"3lift.com"},
+		{"adform.net"},
+		{"adnxs.com"},
+		{"adsrvr.org"},
+		{"amazon-adsystem.com"},
+		{"casalemedia.com"},
+		{"creativecdn.com"},
+		{"criteo.com"},
+		{"criteo.net"},
+		{"openx.net"},
+		{"pubmatic.com"},
+		{"rubiconproject.com"},
+		{"sharethrough.com"},
+		{"smartadserver.com"},
 	}
 
 	bl := NewBlocklist(nil)

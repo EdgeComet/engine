@@ -238,6 +238,9 @@ Default blocked patterns (always applied):
 - `*chatra.io*`, `*convertexperiments.com*`, `*affirm.com*`
 - `*adobestats.com*`, `*adsappier.com*`, `*estorecontent.com*`
 - `*lexx.me*`, `*pointandplace.com*`, `*listrakbi.com*`
+- Header-bidding exchanges: `*adnxs.com*`, `*rubiconproject.com*`, `*pubmatic.com*`, `*openx.net*`, `*casalemedia.com*`
+- `*criteo.com*`, `*criteo.net*`, `*adsrvr.org*`, `*amazon-adsystem.com*`, `*3lift.com*`
+- `*smartadserver.com*`, `*adform.net*`, `*sharethrough.com*`, `*360yield.com*`, `*creativecdn.com*`
 
 Custom patterns you configure are added to the default blocked patterns above. However, when you specify blocked patterns at the host or URL pattern level, they **replace** the previous level entirely (not merge). If you override at host level, include all patterns you need - the global config patterns are replaced.
 

@@ -42,6 +42,22 @@ var globalBlockedPatterns = []string{
 	"*youtube.com*",
 	"*listrakbi.com*",
 	"*static.cloudflareinsights.com*",
+	// Header-bidding exchanges: auction and cookie-sync calls keep the network busy past networkIdle
+	"*360yield.com*",
+	"*3lift.com*",
+	"*adform.net*",
+	"*adnxs.com*",
+	"*adsrvr.org*",
+	"*amazon-adsystem.com*",
+	"*casalemedia.com*",
+	"*creativecdn.com*",
+	"*criteo.com*",
+	"*criteo.net*",
+	"*openx.net*",
+	"*pubmatic.com*",
+	"*rubiconproject.com*",
+	"*sharethrough.com*",
+	"*smartadserver.com*",
 }
 
 // Blocklist holds compiled blocking rules for a render request
