@@ -1582,7 +1582,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(1, staleTTL)
+		result, err := cr.GetSummary(context.Background(), 1, staleTTL)
 		require.NoError(t, err)
 		assert.Equal(t, 100, result.TotalUrls)
 		assert.Equal(t, 60, result.ActiveCount)
@@ -1602,7 +1602,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, 600)
 		require.NoError(t, err)
 		assert.Equal(t, int64(10000), result.TotalSize)
 	})
@@ -1631,7 +1631,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, 600)
 		require.NoError(t, err)
 		assert.Equal(t, 40, result.ByDimension["mobile"])
 		assert.Equal(t, 60, result.ByDimension["desktop"])
@@ -1652,7 +1652,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(1, 0)
+		result, err := cr.GetSummary(context.Background(), 1, 0)
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.StaleCount)
 		assert.Equal(t, 5, result.ExpiredCount)
@@ -1661,7 +1661,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 	t.Run("empty host returns all zeros", func(t *testing.T) {
 		cr, _ := setupTestCacheReader(t)
 
-		result, err := cr.GetSummary(999, 600)
+		result, err := cr.GetSummary(context.Background(), 999, 600)
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.TotalUrls)
 		assert.Equal(t, 0, result.ActiveCount)
@@ -1670,5 +1670,99 @@ func TestCacheReader_GetSummary(t *testing.T) {
 		assert.Equal(t, int64(0), result.TotalSize)
 		assert.Empty(t, result.ByDimension)
 		assert.Empty(t, result.BySource)
+	})
+}
+
+// seedSummaryStates writes count entries for hostID cycling through active,
+// stale and expired, so every chunk of a multi-chunk walk sees all three.
+func seedSummaryStates(mr *miniredis.Miniredis, hostID, count int, now int64) {
+	for i := 0; i < count; i++ {
+		fields := map[string]string{"dimension": "mobile", "source": "render"}
+		switch i % 3 {
+		case 0:
+			fields["expires_at"] = fmt.Sprintf("%d", now+3600)
+			fields["size"] = "100"
+		case 1:
+			fields["expires_at"] = fmt.Sprintf("%d", now-300)
+			fields["size"] = "200"
+			fields["dimension"] = "desktop"
+			fields["source"] = "bypass"
+		case 2:
+			fields["expires_at"] = fmt.Sprintf("%d", now-3600)
+			fields["size"] = "300"
+		}
+		populateMetadataHash(mr, hostID, 1, hashLabel(fmt.Sprintf("h%d-e%d", hostID, i)), fields)
+	}
+}
+
+func TestCacheReader_GetSummary_Chunked(t *testing.T) {
+	// miniredis pages SCAN over the MATCH-filtered key list, so chunk
+	// boundaries here come from the matched-key cap: this many keys of one host
+	// span three Evals.
+	const hostKeys = 3 * scanChunkMaxMatchedKeys
+	const perState = hostKeys / 3
+
+	t.Run("totals across chunks equal a single pass", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+		base := time.Now()
+		seedSummaryStates(mr, 1, hostKeys, base.Unix())
+		seedSummaryStates(mr, 2, 1000, base.Unix())
+
+		nowCalls := 0
+		cr.nowFunc = func() time.Time {
+			nowCalls++
+			return base
+		}
+
+		result, err := cr.GetSummary(context.Background(), 1, 600)
+		require.NoError(t, err)
+		require.Greater(t, nowCalls, 1, "fixture must span more than one chunk")
+
+		assert.Equal(t, hostKeys, result.TotalUrls)
+		assert.Equal(t, perState, result.ActiveCount)
+		assert.Equal(t, perState, result.StaleCount)
+		assert.Equal(t, perState, result.ExpiredCount)
+		assert.Equal(t, int64(perState*(100+200+300)), result.TotalSize)
+		assert.Equal(t, map[string]int{"mobile": 2 * perState, "desktop": perState}, result.ByDimension)
+		assert.Equal(t, map[string]int{"render": 2 * perState, "bypass": perState}, result.BySource)
+	})
+
+	t.Run("budget expiry returns an error, not partial totals", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+		base := time.Now()
+		seedSummaryStates(mr, 1, hostKeys, base.Unix())
+
+		nowCalls := 0
+		cr.nowFunc = func() time.Time {
+			nowCalls++
+			if nowCalls == 1 {
+				return base
+			}
+			return base.Add(cacheSummaryTimeBudget + time.Second)
+		}
+
+		result, err := cr.GetSummary(context.Background(), 1, 600)
+		require.ErrorIs(t, err, errCacheSummaryBudgetExceeded)
+		assert.Nil(t, result)
+	})
+
+	t.Run("redis error mid-walk returns an error, not partial totals", func(t *testing.T) {
+		cr, mr := setupTestCacheReader(t)
+		base := time.Now()
+		seedSummaryStates(mr, 1, hostKeys, base.Unix())
+
+		nowCalls := 0
+		cr.nowFunc = func() time.Time {
+			nowCalls++
+			if nowCalls == 2 {
+				// Between the first and second chunk.
+				mr.SetError("ERR injected failure")
+			}
+			return base
+		}
+
+		result, err := cr.GetSummary(context.Background(), 1, 600)
+		require.Error(t, err)
+		assert.Nil(t, result)
 	})
 }

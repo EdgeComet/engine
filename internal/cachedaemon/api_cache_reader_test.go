@@ -3,6 +3,7 @@ package cachedaemon
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
@@ -42,12 +43,18 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 	require.NoError(t, err)
 	t.Cleanup(mr.Close)
 
-	logger := zap.NewNop()
 	redisClient, err := redis.NewClient(&configtypes.RedisConfig{
 		Addr: mr.Addr(),
-	}, logger)
+	}, zap.NewNop())
 	require.NoError(t, err)
 
+	return newTestDaemon(redisClient), mr
+}
+
+// newTestDaemon builds a daemon with two test hosts over the given Redis, so
+// the same fixture runs on miniredis and on real Redis.
+func newTestDaemon(redisClient *redis.Client) *CacheDaemon {
+	logger := zap.NewNop()
 	keyGen := redis.NewKeyGenerator()
 	iq := NewInternalQueue(100)
 
@@ -94,7 +101,7 @@ func setupTestDaemon(t *testing.T) (*CacheDaemon, *miniredis.Miniredis) {
 	daemon.rebuildHostByIDLocked()
 	daemon.reloadMu.Unlock()
 
-	return daemon, mr
+	return daemon
 }
 
 func makeTestRequest(daemon *CacheDaemon, method, path string) *fasthttp.RequestCtx {
@@ -251,6 +258,25 @@ func TestHandlerValidation(t *testing.T) {
 		assert.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
 		assert.Contains(t, string(ctx.Response.Body()), `"success":true`)
 		assert.Contains(t, string(ctx.Response.Body()), `"total_urls"`)
+	})
+
+	t.Run("summary over time budget returns 503, not 500", func(t *testing.T) {
+		daemon, mr := setupTestDaemon(t)
+		base := time.Now()
+		seedSummaryStates(mr, 1, 3*scanChunkMaxMatchedKeys, base.Unix())
+
+		nowCalls := 0
+		daemon.cacheReader.nowFunc = func() time.Time {
+			nowCalls++
+			if nowCalls == 1 {
+				return base
+			}
+			return base.Add(cacheSummaryTimeBudget + time.Second)
+		}
+
+		ctx := makeTestRequest(daemon, "GET", "/internal/cache/summary?host_id=1")
+		assert.Equal(t, fasthttp.StatusServiceUnavailable, ctx.Response.StatusCode())
+		assert.Contains(t, string(ctx.Response.Body()), errCacheSummaryBudgetExceeded.Error())
 	})
 
 	t.Run("queue returns 200", func(t *testing.T) {

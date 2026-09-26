@@ -3,6 +3,7 @@ package cachedaemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -353,19 +354,24 @@ func (d *CacheDaemon) handleInvalidateAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("entries_invalidated", entriesInvalidated))
 }
 
-// luaInvalidateAllBatch scans and deletes cache metadata keys in a single batch.
-// Returns {nextCursor, deletedCount}. Caller loops until nextCursor is "0".
-// ARGV: [1] hostID, [2] cursor, [3...] dimension IDs to filter (empty = all)
+// luaInvalidateAllBatch scans and deletes cache metadata keys in a single batch,
+// bounded by the scanChunk* limits. Returns {nextCursor, deletedCount}. Caller
+// loops until nextCursor is "0".
+// ARGV: [1] hostID, [2] cursor, [3] SCAN count, [4] max SCAN iterations,
+// [5] max matched keys, [6...] dimension IDs to filter (empty = all)
 const luaInvalidateAllBatch = `
 local prefix = "meta:cache:" .. ARGV[1] .. ":"
 local cursor = ARGV[2]
-local max_iterations = 200
+local scan_count = tonumber(ARGV[3])
+local max_iterations = tonumber(ARGV[4])
+local max_matched = tonumber(ARGV[5])
 local del_chunk_size = 1000
 local deleted = 0
+local matched = 0
 
 local dim_filter = {}
 local has_filter = false
-for i = 3, #ARGV do
+for i = 6, #ARGV do
     dim_filter[ARGV[i]] = true
     has_filter = true
 end
@@ -374,10 +380,14 @@ local iterations = 0
 local to_delete = {}
 
 repeat
-    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", 500)
+    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", scan_count)
     cursor = res[1]
     iterations = iterations + 1
 
+    -- Every returned key matched the host prefix and costs per-key work here,
+    -- so all of them count toward max_matched, whether or not the dimension
+    -- filter keeps them.
+    matched = matched + #res[2]
     for _, key in ipairs(res[2]) do
         if has_filter then
             local parts = {}
@@ -407,7 +417,7 @@ repeat
         end
         to_delete = remaining
     end
-until cursor == "0" or iterations >= max_iterations
+until cursor == "0" or iterations >= max_iterations or matched >= max_matched
 
 if #to_delete > 0 then
     deleted = deleted + redis.call("DEL", unpack(to_delete))
@@ -441,11 +451,15 @@ func (d *CacheDaemon) handleInvalidateAllAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Build Lua script args: hostID, cursor, dimension IDs...
+	// Build Lua script args: hostID, cursor, chunk limits, dimension IDs...
 	hasFilter := len(req.DimensionIDs) > 0
-	args := make([]interface{}, 0, len(dimensionIDs)+2)
+	args := make([]interface{}, 0, len(dimensionIDs)+5)
 	args = append(args, strconv.Itoa(req.HostID))
 	args = append(args, "0") // initial cursor
+	args = append(args,
+		strconv.Itoa(scanChunkCount),
+		strconv.Itoa(scanChunkMaxIterations),
+		strconv.Itoa(scanChunkMaxMatchedKeys))
 
 	if hasFilter {
 		for _, dimID := range dimensionIDs {
@@ -1112,7 +1126,11 @@ func (d *CacheDaemon) handleCacheSummaryAPI(ctx *fasthttp.RequestCtx) {
 
 	staleTTL := d.getStaleTTL(host)
 
-	result, err := d.cacheReader.GetSummary(hostID, staleTTL)
+	result, err := d.cacheReader.GetSummary(ctx, hostID, staleTTL)
+	if errors.Is(err, errCacheSummaryBudgetExceeded) {
+		httputil.JSONError(ctx, err.Error(), fasthttp.StatusServiceUnavailable)
+		return
+	}
 	if handleRedisError(ctx, err, d.logger) {
 		return
 	}

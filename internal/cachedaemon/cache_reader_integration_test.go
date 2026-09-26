@@ -9,17 +9,22 @@ package cachedaemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/configtypes"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/pkg/types"
 )
 
 const (
@@ -49,10 +54,14 @@ func setupIntegrationCacheReader(t *testing.T) *CacheReader {
 }
 
 func populateIntegrationHost(t *testing.T, cr *CacheReader, hostID, count int, now int64) {
+	populateIntegrationDimension(t, cr, hostID, 1, count, now)
+}
+
+func populateIntegrationDimension(t *testing.T, cr *CacheReader, hostID, dimID, count int, now int64) {
 	ctx := context.Background()
 	pipe := cr.redis.GetClient().Pipeline()
 	for i := 0; i < count; i++ {
-		key := fmt.Sprintf("meta:cache:%d:1:%d", hostID, i)
+		key := fmt.Sprintf("meta:cache:%d:%d:%d", hostID, dimID, i)
 		pipe.HSet(ctx, key,
 			"url", fmt.Sprintf("https://host%d.example.com/page%d", hostID, i),
 			"dimension", "mobile",
@@ -122,4 +131,140 @@ func TestCacheReaderIntegration_ScanScatter(t *testing.T) {
 			assert.Equal(t, 1, count, "URL %s returned more than once", url)
 		}
 	})
+}
+
+func TestCacheReaderIntegration_SummaryScanScatter(t *testing.T) {
+	cr := setupIntegrationCacheReader(t)
+	now := time.Now()
+
+	// The 2026-09-26 incident shape: host 1's 835 keys on a shard dominated by
+	// other hosts made one unbounded summary Eval walk the whole keyspace.
+	const neighborKeys = 100000
+	const smallHostKeys = 835
+	populateIntegrationHost(t, cr, 107, neighborKeys, now.Unix())
+	populateIntegrationHost(t, cr, 1, smallHostKeys, now.Unix())
+
+	cases := []struct {
+		name   string
+		hostID int
+		keys   int
+	}{
+		{"small host among large neighbor", 1, smallHostKeys},
+		{"large host", 107, neighborKeys},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			evals := 0
+			cr.nowFunc = func() time.Time {
+				evals++
+				return now
+			}
+
+			result, err := cr.GetSummary(context.Background(), tc.hostID, 600)
+			require.NoError(t, err)
+			require.Greater(t, evals, 1, "walk must span more than one bounded Eval")
+
+			assert.Equal(t, tc.keys, result.TotalUrls)
+			assert.Equal(t, tc.keys, result.ActiveCount)
+			assert.Zero(t, result.StaleCount)
+			assert.Zero(t, result.ExpiredCount)
+			assert.Equal(t, int64(tc.keys*500), result.TotalSize)
+			assert.Equal(t, map[string]int{"mobile": tc.keys}, result.ByDimension)
+			assert.Equal(t, map[string]int{"render": tc.keys}, result.BySource)
+		})
+	}
+}
+
+// Multi-chunk invalidation must run on real Redis: miniredis's SCAN cursor is
+// an offset into its sorted key list, so deleting during a walk skips keys.
+func TestInvalidateAllIntegration_Chunked(t *testing.T) {
+	const neighborKeys = 100000
+	const hostKeysPerDim = 2 * scanChunkMaxMatchedKeys
+
+	setup := func(t *testing.T) (*CacheDaemon, *CacheReader) {
+		cr := setupIntegrationCacheReader(t)
+		now := time.Now().Unix()
+		populateIntegrationHost(t, cr, 107, neighborKeys, now)
+		populateIntegrationDimension(t, cr, 1, 1, hostKeysPerDim, now)
+		populateIntegrationDimension(t, cr, 1, 2, hostKeysPerDim, now)
+		return newTestDaemon(cr.redis), cr
+	}
+	countKeys := func(t *testing.T, cr *CacheReader, pattern string) int {
+		keys, err := cr.redis.GetClient().Keys(context.Background(), pattern).Result()
+		require.NoError(t, err)
+		return len(keys)
+	}
+	// invalidate returns the entries deleted and the number of Evals the walk took.
+	invalidate := func(t *testing.T, daemon *CacheDaemon, cr *CacheReader, req types.InvalidateAllAPIRequest) (int, int) {
+		evalsBefore := evalCalls(t, cr)
+		body, err := json.Marshal(req)
+		require.NoError(t, err)
+		ctx := makePostRequest(daemon, "/internal/cache/invalidate-all", body)
+		require.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+
+		var resp struct {
+			Data types.InvalidateAllAPIData `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(ctx.Response.Body(), &resp))
+		return resp.Data.EntriesInvalidated, evalCalls(t, cr) - evalsBefore
+	}
+
+	t.Run("deletes every entry of the host and none of its neighbor", func(t *testing.T) {
+		daemon, cr := setup(t)
+
+		deleted, evals := invalidate(t, daemon, cr, types.InvalidateAllAPIRequest{HostID: 1})
+
+		assert.Greater(t, evals, 1, "walk must span more than one bounded Eval")
+		assert.Equal(t, 2*hostKeysPerDim, deleted)
+		assert.Zero(t, countKeys(t, cr, "meta:cache:1:*"))
+		assert.Equal(t, neighborKeys, countKeys(t, cr, "meta:cache:107:*"))
+	})
+
+	t.Run("dimension filter deletes only that dimension", func(t *testing.T) {
+		daemon, cr := setup(t)
+
+		deleted, evals := invalidate(t, daemon, cr, types.InvalidateAllAPIRequest{HostID: 1, DimensionIDs: []int{1}})
+
+		assert.Greater(t, evals, 1, "walk must span more than one bounded Eval")
+		assert.Equal(t, hostKeysPerDim, deleted)
+		assert.Zero(t, countKeys(t, cr, "meta:cache:1:1:*"))
+		assert.Equal(t, hostKeysPerDim, countKeys(t, cr, "meta:cache:1:2:*"))
+		assert.Equal(t, neighborKeys, countKeys(t, cr, "meta:cache:107:*"))
+	})
+	t.Run("filtered walk over a host that dominates the shard stays chunked", func(t *testing.T) {
+		// No neighbors and a filter that keeps few keys: the whole shard fits in
+		// one iteration-capped Eval, so only counting every host key toward the
+		// matched cap splits this walk.
+		const rejectedKeys = 6 * scanChunkMaxMatchedKeys
+		const keptKeys = 100
+		require.Less(t, rejectedKeys+keptKeys, scanChunkCount*scanChunkMaxIterations)
+
+		cr := setupIntegrationCacheReader(t)
+		now := time.Now().Unix()
+		populateIntegrationDimension(t, cr, 1, 2, rejectedKeys, now)
+		populateIntegrationDimension(t, cr, 1, 1, keptKeys, now)
+		daemon := newTestDaemon(cr.redis)
+
+		deleted, evals := invalidate(t, daemon, cr, types.InvalidateAllAPIRequest{HostID: 1, DimensionIDs: []int{1}})
+
+		assert.Greater(t, evals, 1, "rejected host keys must count toward the per-Eval cap")
+		assert.Equal(t, keptKeys, deleted)
+		assert.Equal(t, rejectedKeys, countKeys(t, cr, "meta:cache:1:2:*"))
+	})
+}
+
+// evalCalls reads the server-wide EVAL counter, so a test can prove a walk was
+// split into several bounded Evals.
+func evalCalls(t *testing.T, cr *CacheReader) int {
+	info, err := cr.redis.GetClient().Info(context.Background(), "commandstats").Result()
+	require.NoError(t, err)
+	for _, line := range strings.Split(info, "\r\n") {
+		if rest, ok := strings.CutPrefix(line, "cmdstat_eval:calls="); ok {
+			calls, _, _ := strings.Cut(rest, ",")
+			n, err := strconv.Atoi(calls)
+			require.NoError(t, err)
+			return n
+		}
+	}
+	return 0
 }

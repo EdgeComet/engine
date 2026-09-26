@@ -3,6 +3,7 @@ package cachedaemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -23,6 +24,30 @@ const (
 // stays bounded by max_scan_iterations. If shards outgrow what this budget
 // can walk (~10M+ keys), the fix is a per-host index, not a bigger budget.
 const cacheListTimeBudget = 2 * time.Second
+
+// Bounds for one Eval of a script that walks the shard keyspace with SCAN
+// (summary, invalidate-all). Redis serves no other client while a script runs,
+// so every Eval must stay short however large the shard or the host is.
+// Measured on a 5M-key production shard: ~0.6us per key SCAN passes over and
+// ~4us per matched key read, so the iteration cap bounds a small host among
+// large neighbors and the matched cap bounds a large host, each to ~10-15ms.
+// Both are checked only between SCAN calls: SCAN has already advanced the
+// cursor past every key of a returned batch.
+const (
+	scanChunkCount          = 1000
+	scanChunkMaxIterations  = 20
+	scanChunkMaxMatchedKeys = 2500
+)
+
+// cacheSummaryTimeBudget bounds a whole GetSummary walk, below the 10s timeout
+// callers put on daemon requests with room for the last chunk and the response.
+// It is checked between Evals, so a walk overruns it by at most one chunk. The
+// walk costs the whole shard plus the host's own keys, so both a very large
+// host and a very large shard can exhaust it. A summary has no partial form,
+// so running out of budget is an error rather than a truncated count.
+const cacheSummaryTimeBudget = 9 * time.Second
+
+var errCacheSummaryBudgetExceeded = errors.New("cache summary exceeded time budget")
 
 const luaCacheList = `
 local prefix = "meta:cache:" .. ARGV[1] .. ":"
@@ -266,17 +291,27 @@ local prefix = "meta:cache:" .. ARGV[1] .. ":"
 local stale_ttl = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local cursor = ARGV[4]
+local scan_count = tonumber(ARGV[5])
+local max_scan_iterations = tonumber(ARGV[6])
+local max_matched_keys = tonumber(ARGV[7])
 
-local max_keys = 50000
-local keys_scanned = 0
+local scan_iterations = 0
 local total, active, stale, expired = 0, 0, 0, 0
 local total_size = 0
 local dim_counts = {}
 local source_counts = {}
 
+-- cjson implementations disagree on an empty table (Redis: {}, miniredis: []),
+-- and most chunks of a small host match nothing.
+local function encode_counts(t)
+    if next(t) == nil then return "{}" end
+    return cjson.encode(t)
+end
+
 repeat
-    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", 1000)
+    local res = redis.call("SCAN", cursor, "MATCH", prefix .. "*", "COUNT", scan_count)
     cursor = res[1]
+    scan_iterations = scan_iterations + 1
 
     for _, key in ipairs(res[2]) do
         local vals = redis.call("HMGET", key, "expires_at", "size", "dimension", "source")
@@ -298,17 +333,15 @@ repeat
 
         dim_counts[dim] = (dim_counts[dim] or 0) + 1
         source_counts[src] = (source_counts[src] or 0) + 1
-
-        keys_scanned = keys_scanned + 1
     end
 
-    if keys_scanned >= max_keys then break end
+    if total >= max_matched_keys or scan_iterations >= max_scan_iterations then break end
 until cursor == "0"
 
 return {cursor, total, active, stale, expired,
         tostring(total_size),
-        cjson.encode(dim_counts),
-        cjson.encode(source_counts)}
+        encode_counts(dim_counts),
+        encode_counts(source_counts)}
 `
 
 type CacheReader struct {
@@ -504,9 +537,15 @@ func (cr *CacheReader) appendListItems(items []CacheURLItem, rawItems []interfac
 	return items
 }
 
-func (cr *CacheReader) GetSummary(hostID int, staleTTL int64) (*CacheSummaryResponse, error) {
+// GetSummary aggregates a host's cache metadata over one full SCAN pass, split
+// into bounded Evals. Every chunk classifies against the same "now". Any chunk
+// failure fails the whole summary: totals from part of the pass are wrong
+// numbers, not a smaller page.
+func (cr *CacheReader) GetSummary(ctx context.Context, hostID int, staleTTL int64) (*CacheSummaryResponse, error) {
+	start := cr.nowFunc()
+	deadline := start.Add(cacheSummaryTimeBudget)
 	cursor := "0"
-	now := strconv.FormatInt(cr.nowFunc().Unix(), 10)
+	now := strconv.FormatInt(start.Unix(), 10)
 	hostIDStr := strconv.Itoa(hostID)
 	staleTTLStr := strconv.FormatInt(staleTTL, 10)
 
@@ -517,13 +556,16 @@ func (cr *CacheReader) GetSummary(hostID int, staleTTL int64) (*CacheSummaryResp
 
 	for {
 		result, err := cr.redis.Eval(
-			context.Background(),
+			ctx,
 			luaCacheSummaryChunk,
 			[]string{},
 			hostIDStr,
 			staleTTLStr,
 			now,
 			cursor,
+			strconv.Itoa(scanChunkCount),
+			strconv.Itoa(scanChunkMaxIterations),
+			strconv.Itoa(scanChunkMaxMatchedKeys),
 		)
 		if err != nil {
 			return nil, err
@@ -531,59 +573,66 @@ func (cr *CacheReader) GetSummary(hostID int, staleTTL int64) (*CacheSummaryResp
 
 		arr, ok := result.([]interface{})
 		if !ok || len(arr) < 8 {
-			cr.logger.Error("Unexpected Lua summary chunk result format")
-			break
+			return nil, fmt.Errorf("unexpected cache summary chunk result: %T", result)
 		}
 
 		cursor = fmt.Sprintf("%v", arr[0])
-		resp.TotalUrls += intFromLuaResult(arr[1])
-		resp.ActiveCount += intFromLuaResult(arr[2])
-		resp.StaleCount += intFromLuaResult(arr[3])
-		resp.ExpiredCount += intFromLuaResult(arr[4])
+		counts := [4]*int{&resp.TotalUrls, &resp.ActiveCount, &resp.StaleCount, &resp.ExpiredCount}
+		for i, dst := range counts {
+			n, err := intFromLuaResult(arr[i+1])
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse count from cache summary chunk: %w", err)
+			}
+			*dst += n
+		}
 
-		sizeStr := fmt.Sprintf("%v", arr[5])
-		sizeVal, _ := strconv.ParseInt(sizeStr, 10, 64)
+		sizeVal, err := strconv.ParseInt(fmt.Sprintf("%v", arr[5]), 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse size from cache summary chunk: %w", err)
+		}
 		resp.TotalSize += sizeVal
 
 		dimJSON := fmt.Sprintf("%v", arr[6])
 		var dimCounts map[string]int
 		if err := json.Unmarshal([]byte(dimJSON), &dimCounts); err != nil {
-			cr.logger.Warn("Failed to parse dimension counts from Lua result", zap.Error(err))
-		} else {
-			for k, v := range dimCounts {
-				resp.ByDimension[k] += v
-			}
+			return nil, fmt.Errorf("failed to parse dimension counts from cache summary chunk: %w", err)
+		}
+		for k, v := range dimCounts {
+			resp.ByDimension[k] += v
 		}
 
 		srcJSON := fmt.Sprintf("%v", arr[7])
 		var srcCounts map[string]int
 		if err := json.Unmarshal([]byte(srcJSON), &srcCounts); err != nil {
-			cr.logger.Warn("Failed to parse source counts from Lua result", zap.Error(err))
-		} else {
-			for k, v := range srcCounts {
-				resp.BySource[k] += v
-			}
+			return nil, fmt.Errorf("failed to parse source counts from cache summary chunk: %w", err)
+		}
+		for k, v := range srcCounts {
+			resp.BySource[k] += v
 		}
 
 		if cursor == "0" {
 			break
+		}
+		if !cr.nowFunc().Before(deadline) {
+			cr.logger.Warn("Cache summary time budget expired",
+				zap.Int("host_id", hostID),
+				zap.Int("urls_counted", resp.TotalUrls),
+				zap.Float64("budget_seconds", cacheSummaryTimeBudget.Seconds()))
+			return nil, errCacheSummaryBudgetExceeded
 		}
 	}
 
 	return resp, nil
 }
 
-func intFromLuaResult(v interface{}) int {
+func intFromLuaResult(v interface{}) (int, error) {
 	switch val := v.(type) {
 	case int64:
-		return int(val)
+		return int(val), nil
 	case string:
-		n, _ := strconv.Atoi(val)
-		return n
+		return strconv.Atoi(val)
 	default:
-		s := fmt.Sprintf("%v", v)
-		n, _ := strconv.Atoi(s)
-		return n
+		return 0, fmt.Errorf("unexpected Lua integer type %T", v)
 	}
 }
 
