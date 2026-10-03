@@ -16,10 +16,13 @@ import (
 	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/httputil"
 	"github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
 const reloadTimeout = 10 * time.Second
+
+const skipIfFreshForNegativeMessage = "skip_if_fresh_for must be >= 0"
 
 // URLStatusResponse is the response for the url-status endpoint
 type URLStatusResponse struct {
@@ -189,6 +192,11 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if req.SkipIfFreshFor != nil && *req.SkipIfFreshFor < 0 {
+		httputil.JSONError(ctx, skipIfFreshForNegativeMessage, fasthttp.StatusBadRequest)
+		return
+	}
+
 	// Get host config
 	host := d.GetHost(req.HostID)
 	if host == nil {
@@ -202,17 +210,25 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	checkFresh := req.SkipIfFreshFor != nil
+	var skipDims []*types.Dimension
+	if checkFresh {
+		skipDims = dimensionsByID(host, dimensionIDs)
+	}
+
 	// Enqueue entries to ZSET
 	queueKey := d.keyGenerator.RecacheQueueKey(req.HostID, req.Priority)
-	score := float64(time.Now().UTC().Unix())
+	now := time.Now().UTC().Unix()
+	score := float64(now)
 	entriesEnqueued := 0
+	entriesSkipped := 0
 	reqCtx := context.Background()
 	normalize := d.hostURLNormalizer(host)
 
 	for _, url := range req.URLs {
 		// Canonicalize the URL (strip tracking params) before ZADD so the queue is keyed
 		// the same way the cache is written and read.
-		normalizedURL, _, err := normalize(url)
+		normalizedURL, urlHash, err := normalize(url)
 		if err != nil {
 			d.logger.Error("Invalid URL, skipping",
 				zap.String("url", url),
@@ -220,7 +236,12 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 			continue
 		}
 
-		for _, dimensionID := range dimensionIDs {
+		for i, dimensionID := range dimensionIDs {
+			if checkFresh && d.isFreshEnough(reqCtx, req.HostID, skipDims[i], urlHash, req.Mode, *req.SkipIfFreshFor, now) {
+				entriesSkipped++
+				continue
+			}
+
 			member := types.RecacheMember{
 				URL:         normalizedURL,
 				DimensionID: dimensionID,
@@ -253,6 +274,8 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		EntriesEnqueued:   entriesEnqueued,
 		Priority:          req.Priority,
 		Paused:            paused,
+		EntriesSkipped:    entriesSkipped,
+		SkipApplied:       checkFresh,
 	}
 	httputil.JSONData(ctx, data, fasthttp.StatusOK)
 
@@ -261,6 +284,7 @@ func (d *CacheDaemon) handleRecacheAPI(ctx *fasthttp.RequestCtx) {
 		zap.Int("urls_count", len(req.URLs)),
 		zap.Int("dimensions_count", len(dimensionIDs)),
 		zap.Int("entries_enqueued", entriesEnqueued),
+		zap.Int("entries_skipped", entriesSkipped),
 		zap.String("priority", req.Priority),
 		zap.Bool("paused", paused))
 }
@@ -1398,6 +1422,7 @@ type dimCacheMeta struct {
 	Size       int64
 	StatusCode int
 	Status     string // active | stale | expired
+	Source     string // render | bypass
 }
 
 // readDimCacheMeta loads cache metadata for a single dimension. Returns false when no
@@ -1440,7 +1465,39 @@ func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, u
 		Size:       size,
 		StatusCode: statusCode,
 		Status:     status,
+		Source:     data["source"],
 	}, true
+}
+
+// isFreshEnough reports whether the cached copy outlives threshold seconds and is the kind
+// the recache entry would write: a render needs a render-sourced copy, any other action
+// accepts either source. A nil dim, a missing entry or a failed read counts as not cached.
+func (d *CacheDaemon) isFreshEnough(ctx context.Context, hostID int, dim *types.Dimension, urlHash uint64, mode string, threshold, now int64) bool {
+	if dim == nil {
+		return false
+	}
+	meta, ok := d.readDimCacheMeta(ctx, hostID, dim.ID, urlHash, 0, now)
+	if !ok {
+		return false
+	}
+	// Subtract before comparing: now+threshold overflows for a huge threshold.
+	if meta.ExpiresAt-now <= threshold {
+		return false
+	}
+	return recacheAction(*dim, mode) != types.ActionRender || meta.Source == cache.SourceRender
+}
+
+// recacheAction resolves the action a recache entry runs: the request mode overrides the
+// dimension's action. The scheduler budget and the skip check must both use it.
+func recacheAction(dim types.Dimension, mode string) types.URLRuleAction {
+	switch mode {
+	case types.RecacheModeRender:
+		return types.ActionRender
+	case types.RecacheModeBypass:
+		return types.ActionBypass
+	default:
+		return dim.EffectiveAction()
+	}
 }
 
 // hostURLNormalizer returns a per-host normalizer that strips tracking parameters exactly as
@@ -1488,6 +1545,20 @@ func dimensionIDToName(host *types.Host) map[int]string {
 		names[dim.ID] = name
 	}
 	return names
+}
+
+// dimensionsByID returns the host's dimensions in ids order, nil where an id is not configured.
+func dimensionsByID(host *types.Host, ids []int) []*types.Dimension {
+	dims := make([]*types.Dimension, len(ids))
+	for i, id := range ids {
+		for _, dim := range host.Dimensions {
+			if dim.ID == id {
+				dims[i] = &dim
+				break
+			}
+		}
+	}
+	return dims
 }
 
 func queryParamInt(ctx *fasthttp.RequestCtx, name string, defaultValue int) (int, error) {

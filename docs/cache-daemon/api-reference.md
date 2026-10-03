@@ -46,12 +46,30 @@ Queue URLs for rendering. Use this to manually trigger cache refresh for specifi
 | `dimension_ids` | array of integers | No | Dimension IDs to recache (empty = all dimensions) |
 | `priority` | string | Yes | Queue priority: `"high"` or `"normal"` |
 | `mode` | string | No | Action override: `"render"` forces a Chrome render (stored as render cache), `"bypass"` forces an origin fetch (stored as bypass cache). Omit to respect the configured dimension/url-rule action. |
+| `skip_if_fresh_for` | integer | No | Seconds, `0` or greater. Leaves out every URL and dimension whose cached copy stays fresh for more than this many seconds. `0` skips copies that are fresh now. Omit to queue every entry. |
 
 The `mode` override lets you precache against the configured action. For example, a bypass-mode
 host can render selected URLs with `"mode": "render"` so bots are served the rendered HTML, while
 a render-mode host can warm already-server-rendered URLs cheaply with `"mode": "bypass"`. A
 `"bypass"` precache never overwrites a fresh render record for the same URL (render-wins
 precedence).
+
+Use `skip_if_fresh_for` to resend a large URL set on a schedule and queue only the entries
+whose cache needs a refresh. The daemon checks each URL and dimension against the cache
+before queueing it:
+
+- An entry whose action is render (the dimension action, or `"mode": "render"`) is skipped
+  only when a fresh render copy exists. A fresh bypass copy does not count, so
+  `"mode": "render"` still replaces bypass copies.
+- An entry with any other action (bypass, status) is skipped when any fresh copy exists. A
+  fresh render copy wins over a bypass write anyway.
+- A copy is fresh for the check when it expires more than `skip_if_fresh_for` seconds from
+  now. A stale copy (served within the stale TTL) counts as missing.
+- URL rules are not consulted. The check uses the dimension action and `mode` only.
+- If the cache metadata cannot be read, the entry is queued.
+
+Set the window to the interval between your checks, plus a margin. A copy that expires
+before your next check is then queued on the last check before it expires.
 
 #### Response
 
@@ -66,7 +84,9 @@ precedence).
     "dimension_ids_count": 2,
     "entries_enqueued": 4,
     "priority": "high",
-    "paused": false
+    "paused": false,
+    "entries_skipped": 0,
+    "skip_applied": false
   }
 }
 ```
@@ -76,8 +96,17 @@ while a host is paused - the URLs are accepted and stored, and the daemon starts
 through them when the pause is lifted or expires. Treat `entries_enqueued` together with
 `paused`: entries were queued, but nothing is about to be fetched.
 
+`entries_skipped` counts the entries left out because their cached copy was fresh enough.
+It is `0` when the request has no `skip_if_fresh_for`. Both counts are entries (URL x
+dimension), not URLs; `urls_count` and `dimension_ids_count` still describe the request.
+
+`skip_applied` is `true` when the request carried `skip_if_fresh_for` and the daemon
+applied it. A daemon version without this feature ignores the field and queues every entry;
+its response has no `skip_applied`. When you send the field, treat a missing or `false`
+`skip_applied` as "the field was ignored and every entry was queued".
+
 **Error responses:**
-- `400` - Invalid JSON, missing required fields, invalid priority, invalid mode, host not found, dimension not configured
+- `400` - Invalid JSON, missing required fields, invalid priority, invalid mode, negative `skip_if_fresh_for`, host not found, dimension not configured
 - `401` - Unauthorized (invalid X-Internal-Auth)
 
 #### Example

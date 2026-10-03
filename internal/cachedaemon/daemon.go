@@ -363,14 +363,7 @@ func (d *CacheDaemon) actionForEntry(entry InternalQueueEntry) types.URLRuleActi
 	}
 	for _, dim := range host.Dimensions {
 		if dim.ID == entry.DimensionID {
-			switch entry.Mode {
-			case types.RecacheModeRender:
-				return types.ActionRender
-			case types.RecacheModeBypass:
-				return types.ActionBypass
-			default:
-				return dim.EffectiveAction()
-			}
+			return recacheAction(dim, entry.Mode)
 		}
 	}
 	return ""

@@ -42,6 +42,9 @@ type RecacheAPIRequest struct {
 	DimensionIDs []int    `json:"dimension_ids"`  // Dimension IDs (optional, empty = all)
 	Priority     string   `json:"priority"`       // "high" or "normal"
 	Mode         string   `json:"mode,omitempty"` // Optional action override: render | bypass (empty = respect config)
+	// SkipIfFreshFor leaves out an entry whose cached copy stays fresh for more than this many
+	// seconds. Nil = no check; 0 = skip if fresh now.
+	SkipIfFreshFor *int64 `json:"skip_if_fresh_for,omitempty"`
 }
 
 // RecacheAPIData is the data payload for POST /internal/cache/recache response
@@ -55,6 +58,10 @@ type RecacheAPIData struct {
 	// paused, so nothing is about to happen. Always serialized: a caller that reads the
 	// enqueue count as "work started" needs to see the flag that contradicts it.
 	Paused bool `json:"paused"`
+	// EntriesSkipped and SkipApplied are always serialized: a daemon that predates
+	// SkipIfFreshFor omits skip_applied, so a caller reading false knows the field was ignored.
+	EntriesSkipped int  `json:"entries_skipped"`
+	SkipApplied    bool `json:"skip_applied"`
 }
 
 // InvalidateAPIRequest is the request body for POST /internal/cache/invalidate
