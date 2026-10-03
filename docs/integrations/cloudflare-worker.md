@@ -88,6 +88,7 @@ function isCrawler(userAgent) {
     /Claude-User/i,
     /Perplexity-User/i,
     /ChatGPT-User/i,
+    /Google-InspectionTool/i,
   ];
 
   return patterns.some(pattern => pattern.test(userAgent));

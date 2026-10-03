@@ -39,6 +39,7 @@ function isCrawler(userAgent) {
     /Claude-User/i,
     /Perplexity-User/i,
     /ChatGPT-User/i,
+    /Google-InspectionTool/i,
   ];
 
   return patterns.some(pattern => pattern.test(userAgent));
@@ -58,6 +59,7 @@ function isCrawler(userAgent) {
   const patterns = [
     // Search engines
     /Googlebot/i,
+    /Google-InspectionTool/i,
     /bingbot/i,
 
     // AI crawlers

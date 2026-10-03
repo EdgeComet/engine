@@ -21,7 +21,7 @@ Both approaches route only crawler traffic to Edge Gateway. Regular users always
 Catches crawlers using generic keywords plus explicit patterns for crawlers without these keywords in their name. Uses a single compiled regex for fast matching in Lambda@Edge.
 
 ```javascript
-const CRAWLER_PATTERN = /bot|crawl|spider|slurp|WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User/i;
+const CRAWLER_PATTERN = /bot|crawl|spider|slurp|WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User|Google-InspectionTool/i;
 
 function isCrawler(userAgent) {
   if (!userAgent) return false;
@@ -40,6 +40,7 @@ const CRAWLER_PATTERN = new RegExp(
   [
     // Search engines
     "Googlebot",
+    "Google-InspectionTool",
     "bingbot",
 
     // AI crawlers

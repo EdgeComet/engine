@@ -47,6 +47,7 @@ frontend http-in
 
     # Search engines ($SearchBots alias)
     acl is_crawler hdr_sub(user-agent) -i Googlebot
+    acl is_crawler hdr_sub(user-agent) -i Google-InspectionTool
     acl is_crawler hdr_sub(user-agent) -i bingbot
 
     # AI crawlers ($AIBots alias)
@@ -130,6 +131,8 @@ frontend http-in
     acl is_crawler hdr_sub(user-agent) -i Claude-User
     acl is_crawler hdr_sub(user-agent) -i Perplexity-User
     acl is_crawler hdr_sub(user-agent) -i ChatGPT-User
+    acl is_crawler hdr_sub(user-agent) -i Google-Agent
+    acl is_crawler hdr_sub(user-agent) -i Google-InspectionTool
 
     # Static files - skip rendering
     acl is_static path_end .avif .css .eot .gif .gz .ico .jpeg .jpg .js .json .map .mp3 .mp4 .ogg .otf .pdf .png .svg .ttf .txt .wasm .wav .webm .webp .woff .woff2 .xml .zip

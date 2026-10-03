@@ -184,22 +184,24 @@ func TestGetAvailableAliases_SingleAlias(t *testing.T) {
 func TestGetBotAlias_GooglebotSearchDesktop(t *testing.T) {
 	patterns, exists := GetBotAlias("GooglebotSearchDesktop")
 	assert.True(t, exists)
-	assert.Len(t, patterns, 5)
+	assert.Len(t, patterns, 6)
 	assert.Contains(t, patterns, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, patterns, "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Safari/537.36")
 	assert.Contains(t, patterns, "Googlebot/2.1 (+http://www.google.com/bot.html)")
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\; compatible\\; Googlebot\\/2\\.1\\; \\+http:\\/\\/www\\.google\\.com\\/bot\\.html\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Safari\\/537\\.36")
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 AppleWebKit\\/537\\.36 \\(KHTML like Gecko\\; compatible\\; Googlebot\\/2\\.1\\; \\+http:\\/\\/www\\.google\\.com\\/bot\\.html\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Safari\\/537\\.36")
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(compatible\\; Google-InspectionTool\\/\\d+\\.\\d+\\)")
 }
 
 func TestGetBotAlias_GooglebotSearchMobile(t *testing.T) {
 	patterns, exists := GetBotAlias("GooglebotSearchMobile")
 	assert.True(t, exists)
-	assert.Len(t, patterns, 4)
+	assert.Len(t, patterns, 5)
 	assert.Contains(t, patterns, "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.96 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Googlebot\\/2\\.1\\; \\+http:\\/\\/www\\.google\\.com\\/bot\\.html\\)")
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Googlebot\\/2\\.1\\; \\+http:\\/\\/www\\.google\\.com\\/bot\\.html\\)")
 	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML\\; like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Googlebot\\/2\\.1\\; \\+http:\\/\\/www\\.google\\.com\\/bot\\.html\\)")
+	assert.Contains(t, patterns, "~^Mozilla\\/5\\.0 \\(Linux\\; Android 6\\.0\\.1\\; Nexus 5X Build\\/MMB29P\\) AppleWebKit\\/537\\.36 \\(KHTML\\, like Gecko\\) Chrome\\/\\d+\\.\\d+\\.\\d+\\.\\d+ Mobile Safari\\/537\\.36 \\(compatible\\; Google-InspectionTool\\/\\d+\\.\\d+\\)")
 }
 
 func TestGetBotAlias_GoogleBotAds(t *testing.T) {

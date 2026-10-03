@@ -112,7 +112,7 @@ if (req.http.User-Agent ~ "(?i)(bot|crawl|spider|slurp)") {
 }
 
 # Crawlers without generic keywords in name
-if (req.http.User-Agent ~ "(?i)(WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User)") {
+if (req.http.User-Agent ~ "(?i)(WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User|Google-InspectionTool)") {
     set var.is_crawler = true;
 }
 

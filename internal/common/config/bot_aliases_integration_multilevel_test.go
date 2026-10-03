@@ -92,7 +92,7 @@ hosts:
 	require.Len(t, hosts, 1)
 	host := hosts[0]
 	require.NotNil(t, host.BothitRecache)
-	assert.Len(t, host.BothitRecache.MatchUA, 5, "Host should have 5 Googlebot patterns")
+	assert.Len(t, host.BothitRecache.MatchUA, 6, "Host should have 6 Googlebot patterns")
 	assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.NotContains(t, host.BothitRecache.MatchUA[0], "bingbot", "Host should not have Bingbot patterns")
 
@@ -178,10 +178,10 @@ hosts:
 	manager, err := NewEGConfigManager(globalConfigPath, logger)
 	require.NoError(t, err)
 
-	// Verify global: 5 Googlebot + 1 custom = 6
+	// Verify global: 6 Googlebot + 1 custom = 7
 	globalConfig := manager.GetConfig()
-	assert.Len(t, globalConfig.BothitRecache.MatchUA, 6)
-	assert.Equal(t, "*Slurp*", globalConfig.BothitRecache.MatchUA[5], "Custom pattern should be last")
+	assert.Len(t, globalConfig.BothitRecache.MatchUA, 7)
+	assert.Equal(t, "*Slurp*", globalConfig.BothitRecache.MatchUA[6], "Custom pattern should be last")
 
 	// Verify host: 3 Bingbot + 1 custom = 4
 	hosts := manager.GetHosts()
@@ -268,7 +268,7 @@ hosts:
 	// Verify global has multiple bot types
 	globalConfig := manager.GetConfig()
 	require.NotNil(t, globalConfig.BothitRecache)
-	assert.Len(t, globalConfig.BothitRecache.MatchUA, 5+4+3) // 5 GoogleDesktop + 4 GoogleMobile + 3 Bing = 12
+	assert.Len(t, globalConfig.BothitRecache.MatchUA, 6+5+3) // 6 GoogleDesktop + 5 GoogleMobile + 3 Bing = 14
 
 	// Count bot types in global
 	googlebotCount := 0
@@ -383,7 +383,7 @@ hosts:
 
 	// Verify global
 	globalConfig := manager.GetConfig()
-	assert.Len(t, globalConfig.BothitRecache.MatchUA, 5)
+	assert.Len(t, globalConfig.BothitRecache.MatchUA, 6)
 
 	hosts := manager.GetHosts()
 	require.Len(t, hosts, 2)
@@ -513,7 +513,7 @@ hosts:
 
 	// Verify global
 	globalConfig := manager.GetConfig()
-	assert.Len(t, globalConfig.BothitRecache.MatchUA, 5, "Global should have 5 Googlebot patterns")
+	assert.Len(t, globalConfig.BothitRecache.MatchUA, 6, "Global should have 6 Googlebot patterns")
 
 	hosts := manager.GetHosts()
 	require.Len(t, hosts, 2)
@@ -549,7 +549,7 @@ hosts:
 	// Host2 Pattern 1: /products/* with GooglebotSearchDesktop
 	productsRule := host2.URLRules[0]
 	require.NotNil(t, productsRule.BothitRecache)
-	assert.Len(t, productsRule.BothitRecache.MatchUA, 5, "Products pattern should have 5 Googlebot patterns")
+	assert.Len(t, productsRule.BothitRecache.MatchUA, 6, "Products pattern should have 6 Googlebot patterns")
 
 	// Host2 Pattern 2: /checkout/* inherits from host
 	checkoutRule := host2.URLRules[1]
@@ -760,7 +760,7 @@ hosts:
 	// Verify host has search engine patterns
 	hosts := manager.GetHosts()
 	host := hosts[0]
-	assert.Len(t, host.BothitRecache.MatchUA, 5+4+3+4) // 5 Google Desktop + 4 Google Mobile + 3 Bing Desktop + 4 Bing Mobile = 16
+	assert.Len(t, host.BothitRecache.MatchUA, 6+5+3+4) // 6 Google Desktop + 5 Google Mobile + 3 Bing Desktop + 4 Bing Mobile = 18
 
 	// Verify pattern has Perplexity and OpenAI patterns
 	guidesRule := host.URLRules[0]

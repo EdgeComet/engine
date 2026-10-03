@@ -200,8 +200,8 @@ match_ua:
 
 | Alias | Description |
 |-------|-------------|
-| `$GooglebotSearchDesktop` | Googlebot desktop search crawler |
-| `$GooglebotSearchMobile` | Googlebot mobile search crawler |
+| `$GooglebotSearchDesktop` | Googlebot desktop search crawler and Google-InspectionTool desktop |
+| `$GooglebotSearchMobile` | Googlebot mobile search crawler and Google-InspectionTool mobile |
 | `$GoogleBotAds` | Google Ads bot |
 | `$GoogleBotAdsMobileWeb` | Google Ads mobile bot |
 

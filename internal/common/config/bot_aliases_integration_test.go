@@ -85,11 +85,11 @@ func TestBotAliasIntegration_FullConfigLoad(t *testing.T) {
 		mobile := host.Dimensions["mobile"]
 		tablet := host.Dimensions["tablet"]
 
-		assert.Equal(t, 5+3+1, len(desktop.MatchUA),
-			"Desktop should have 5 Googlebot + 3 Bingbot + 1 custom = 9 patterns")
+		assert.Equal(t, 6+3+1, len(desktop.MatchUA),
+			"Desktop should have 6 Googlebot + 3 Bingbot + 1 custom = 10 patterns")
 
-		assert.Equal(t, 4+4+1, len(mobile.MatchUA),
-			"Mobile should have 4 Googlebot + 4 Bingbot + 1 custom = 9 patterns")
+		assert.Equal(t, 5+4+1, len(mobile.MatchUA),
+			"Mobile should have 5 Googlebot + 4 Bingbot + 1 custom = 10 patterns")
 
 		assert.Equal(t, 1+1, len(tablet.MatchUA),
 			"Tablet should have 1 AnthropicBot + 1 ChatGPTUserBot = 2 patterns")
@@ -207,7 +207,7 @@ func TestBotAliasIntegration_MixedPatternsPreserved(t *testing.T) {
 		}
 
 		assert.Equal(t, 1, customPatternCount, "Should have exactly 1 custom pattern")
-		assert.Equal(t, 8, aliasPatternCount, "Should have 8 expanded alias patterns (4 Googlebot + 4 Bingbot)")
+		assert.Equal(t, 9, aliasPatternCount, "Should have 9 expanded alias patterns (5 Googlebot + 4 Bingbot)")
 	})
 
 	t.Run("order maintains aliases then custom", func(t *testing.T) {
@@ -253,9 +253,9 @@ func TestBothitRecache_GlobalAlias_SingleValid(t *testing.T) {
 	})
 
 	t.Run("pattern count is correct", func(t *testing.T) {
-		expectedCount := 5 + 3 + 1
+		expectedCount := 6 + 3 + 1
 		assert.Equal(t, expectedCount, len(config.BothitRecache.MatchUA),
-			"Should have 5 Googlebot + 3 Bingbot + 1 custom = 9 patterns")
+			"Should have 6 Googlebot + 3 Bingbot + 1 custom = 10 patterns")
 	})
 
 	t.Run("patterns are compiled", func(t *testing.T) {
@@ -284,21 +284,21 @@ func TestBothitRecache_GlobalAlias_Multiple(t *testing.T) {
 		for _, pattern := range config.BothitRecache.MatchUA {
 			if pattern == "*CustomRecacheBot*" {
 				customCount++
-			} else if contains(pattern, "Googlebot") || contains(pattern, "googlebot") {
+			} else if contains(pattern, "Googlebot") || contains(pattern, "googlebot") || contains(pattern, "Google-InspectionTool") {
 				googlebotCount++
 			} else if contains(pattern, "bingbot") {
 				bingbotCount++
 			}
 		}
 
-		assert.Equal(t, 5, googlebotCount, "Should have 5 Googlebot patterns")
+		assert.Equal(t, 6, googlebotCount, "Should have 6 Googlebot patterns")
 		assert.Equal(t, 3, bingbotCount, "Should have 3 Bingbot patterns")
 		assert.Equal(t, 1, customCount, "Should have 1 custom pattern")
 	})
 
 	t.Run("total pattern count validates all expansions", func(t *testing.T) {
-		assert.Equal(t, 9, len(config.BothitRecache.MatchUA),
-			"Total should be 5 + 3 + 1 = 9 patterns")
+		assert.Equal(t, 10, len(config.BothitRecache.MatchUA),
+			"Total should be 6 + 3 + 1 = 10 patterns")
 	})
 }
 
@@ -505,9 +505,9 @@ func TestBothitRecache_HostAlias_SingleValid(t *testing.T) {
 	})
 
 	t.Run("pattern count is correct", func(t *testing.T) {
-		expectedCount := 4 + 4 + 1
+		expectedCount := 5 + 4 + 1
 		assert.Equal(t, expectedCount, len(host.BothitRecache.MatchUA),
-			"Should have 4 Googlebot + 4 Bingbot + 1 custom = 9 patterns")
+			"Should have 5 Googlebot + 4 Bingbot + 1 custom = 10 patterns")
 	})
 
 	t.Run("patterns are compiled", func(t *testing.T) {
@@ -537,21 +537,21 @@ func TestBothitRecache_HostAlias_Multiple(t *testing.T) {
 		for _, pattern := range host.BothitRecache.MatchUA {
 			if pattern == "*ShopBot*" {
 				customCount++
-			} else if contains(pattern, "Googlebot") || contains(pattern, "googlebot") {
+			} else if contains(pattern, "Googlebot") || contains(pattern, "googlebot") || contains(pattern, "Google-InspectionTool") {
 				googlebotCount++
 			} else if contains(pattern, "bingbot") {
 				bingbotCount++
 			}
 		}
 
-		assert.Equal(t, 4, googlebotCount, "Should have 4 Googlebot patterns")
+		assert.Equal(t, 5, googlebotCount, "Should have 5 Googlebot patterns")
 		assert.Equal(t, 4, bingbotCount, "Should have 4 Bingbot patterns")
 		assert.Equal(t, 1, customCount, "Should have 1 custom pattern")
 	})
 
 	t.Run("total pattern count validates all expansions", func(t *testing.T) {
-		assert.Equal(t, 9, len(host.BothitRecache.MatchUA),
-			"Total should be 4 + 4 + 1 = 9 patterns")
+		assert.Equal(t, 10, len(host.BothitRecache.MatchUA),
+			"Total should be 5 + 4 + 1 = 10 patterns")
 	})
 }
 

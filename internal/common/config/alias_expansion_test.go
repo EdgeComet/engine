@@ -22,7 +22,7 @@ func TestExpandDimensionAliases_SingleAlias(t *testing.T) {
 	err := ExpandDimensionAliases(dimensions, "/path/to/config.yaml", zap.NewNop())
 	require.NoError(t, err)
 
-	assert.Len(t, dimensions["desktop"].MatchUA, 5)
+	assert.Len(t, dimensions["desktop"].MatchUA, 6)
 	assert.Contains(t, dimensions["desktop"].MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, dimensions["desktop"].MatchUA, "Googlebot/2.1 (+http://www.google.com/bot.html)")
 }
@@ -38,7 +38,7 @@ func TestExpandDimensionAliases_MultipleAliases(t *testing.T) {
 	err := ExpandDimensionAliases(dimensions, "/path/to/config.yaml", zap.NewNop())
 	require.NoError(t, err)
 
-	assert.Len(t, dimensions["bots"].MatchUA, 8)
+	assert.Len(t, dimensions["bots"].MatchUA, 9)
 
 	assert.Contains(t, dimensions["bots"].MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, dimensions["bots"].MatchUA, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
@@ -204,8 +204,8 @@ func TestExpandDimensionAliases_MultipleDimensions(t *testing.T) {
 	err := ExpandDimensionAliases(dimensions, "/path/to/config.yaml", zap.NewNop())
 	require.NoError(t, err)
 
-	assert.Len(t, dimensions["desktop"].MatchUA, 5)
-	assert.Len(t, dimensions["mobile"].MatchUA, 4)
+	assert.Len(t, dimensions["desktop"].MatchUA, 6)
+	assert.Len(t, dimensions["mobile"].MatchUA, 5)
 	assert.Len(t, dimensions["custom"].MatchUA, 1)
 	assert.Equal(t, "*CustomBot*", dimensions["custom"].MatchUA[0])
 }
@@ -362,7 +362,7 @@ func TestExpandBotAliases_SingleAlias(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	assert.Len(t, expanded, 5)
+	assert.Len(t, expanded, 6)
 	assert.Contains(t, expanded, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, expanded, "Googlebot/2.1 (+http://www.google.com/bot.html)")
 }
@@ -373,7 +373,7 @@ func TestExpandBotAliases_MultipleAliases(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	assert.Len(t, expanded, 8)
+	assert.Len(t, expanded, 9)
 	assert.Contains(t, expanded, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, expanded, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
 }
@@ -464,8 +464,8 @@ func TestExpandBotAliases_CompositeSearchBots(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	// SearchBots: GooglebotSearchDesktop(5) + GooglebotSearchMobile(4) + BingbotDesktop(3) + BingbotMobile(4) = 16
-	assert.Len(t, expanded, 16)
+	// SearchBots: GooglebotSearchDesktop(6) + GooglebotSearchMobile(5) + BingbotDesktop(3) + BingbotMobile(4) = 18
+	assert.Len(t, expanded, 18)
 
 	// Verify patterns from GooglebotSearchDesktop
 	assert.Contains(t, expanded, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
@@ -510,13 +510,13 @@ func TestExpandBotAliases_CompositeWithCustomPatterns(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	// 1 custom + 16 SearchBots + 1 custom = 18
-	assert.Len(t, expanded, 18)
+	// 1 custom + 18 SearchBots + 1 custom = 20
+	assert.Len(t, expanded, 20)
 
 	// Verify order: custom pattern first
 	assert.Equal(t, "*CustomBot*", expanded[0])
 	// Last pattern should be custom
-	assert.Equal(t, "Mozilla/5.0 (my bot)", expanded[17])
+	assert.Equal(t, "Mozilla/5.0 (my bot)", expanded[19])
 }
 
 func TestExpandBotAliases_MultipleCompositeAliases(t *testing.T) {
@@ -525,8 +525,8 @@ func TestExpandBotAliases_MultipleCompositeAliases(t *testing.T) {
 	expanded, err := ExpandBotAliases(patterns, "global config")
 	require.NoError(t, err)
 
-	// 16 SearchBots + 14 AIBots = 30
-	assert.Len(t, expanded, 30)
+	// 18 SearchBots + 14 AIBots = 32
+	assert.Len(t, expanded, 32)
 }
 
 func TestExpandBotAliases_CompositeUnknownNestedAlias(t *testing.T) {
@@ -577,8 +577,8 @@ func TestExpandDimensionAliases_CompositeSearchBots(t *testing.T) {
 	err := ExpandDimensionAliases(dimensions, "/path/to/config.yaml", zap.NewNop())
 	require.NoError(t, err)
 
-	// SearchBots expands to 16 patterns
-	assert.Len(t, dimensions["search_bots"].MatchUA, 16)
+	// SearchBots expands to 18 patterns
+	assert.Len(t, dimensions["search_bots"].MatchUA, 18)
 	assert.Contains(t, dimensions["search_bots"].MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, dimensions["search_bots"].MatchUA, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
 }

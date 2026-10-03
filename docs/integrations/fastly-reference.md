@@ -27,7 +27,7 @@ if (req.http.User-Agent ~ "(?i)(bot|crawl|spider|slurp)") {
 }
 
 # Crawlers without generic keywords in name
-if (req.http.User-Agent ~ "(?i)(WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User)") {
+if (req.http.User-Agent ~ "(?i)(WhatsApp|Snapchat|facebookexternalhit|AMZN-User|Claude-User|Perplexity-User|ChatGPT-User|Google-InspectionTool)") {
     set var.is_crawler = true;
 }
 ```
@@ -44,6 +44,7 @@ set var.is_crawler = false;
 
 # Search engines ($SearchBots alias)
 if (req.http.User-Agent ~ "(?i)Googlebot") { set var.is_crawler = true; }
+if (req.http.User-Agent ~ "(?i)Google-InspectionTool") { set var.is_crawler = true; }
 if (req.http.User-Agent ~ "(?i)bingbot") { set var.is_crawler = true; }
 
 # AI crawlers ($AIBots alias)

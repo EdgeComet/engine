@@ -95,6 +95,7 @@ Some crawlers do not include these keywords in their User-Agent string. Add expl
 - `Claude-User`
 - `Perplexity-User`
 - `ChatGPT-User`
+- `Google-InspectionTool`
 
 A request matches if the User-Agent contains any one of these strings. This broad approach catches the majority of crawlers while keeping the detection logic simple.
 

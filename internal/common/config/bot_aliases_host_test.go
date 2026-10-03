@@ -61,7 +61,7 @@ hosts:
 				host := manager.hosts.Hosts[0]
 
 				require.NotNil(t, host.BothitRecache)
-				assert.Len(t, host.BothitRecache.MatchUA, 5)
+				assert.Len(t, host.BothitRecache.MatchUA, 6)
 				assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 				assert.Contains(t, host.BothitRecache.MatchUA, "Googlebot/2.1 (+http://www.google.com/bot.html)")
 			},
@@ -115,7 +115,7 @@ hosts:
 				host := manager.hosts.Hosts[0]
 
 				require.NotNil(t, host.BothitRecache)
-				assert.Len(t, host.BothitRecache.MatchUA, 5)
+				assert.Len(t, host.BothitRecache.MatchUA, 6)
 				assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 				assert.NotContains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
 			},
@@ -168,7 +168,7 @@ hosts:
 				// Verify host 1 has Google patterns
 				host1 := manager.hosts.Hosts[0]
 				require.NotNil(t, host1.BothitRecache)
-				assert.Len(t, host1.BothitRecache.MatchUA, 5)
+				assert.Len(t, host1.BothitRecache.MatchUA, 6)
 				assert.Contains(t, host1.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 				assert.NotContains(t, host1.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
 
@@ -256,7 +256,7 @@ hosts:
 			validateFunc: func(t *testing.T, manager *EGConfigManager) {
 				// Verify global has expanded patterns
 				require.NotNil(t, manager.config.BothitRecache)
-				assert.Len(t, manager.config.BothitRecache.MatchUA, 5)
+				assert.Len(t, manager.config.BothitRecache.MatchUA, 6)
 
 				// Verify host has NO bothit_recache (will inherit at runtime)
 				require.Len(t, manager.hosts.Hosts, 1)
@@ -392,7 +392,7 @@ hosts:
 				host := manager.hosts.Hosts[0]
 
 				require.NotNil(t, host.BothitRecache)
-				assert.Len(t, host.BothitRecache.MatchUA, 8)
+				assert.Len(t, host.BothitRecache.MatchUA, 9)
 				assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 				assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)")
 			},
@@ -584,7 +584,7 @@ hosts:
 	host1 := manager.hosts.Hosts[0]
 	assert.Equal(t, "site1.example.com", host1.Domain)
 	require.NotNil(t, host1.BothitRecache)
-	assert.Len(t, host1.BothitRecache.MatchUA, 5)
+	assert.Len(t, host1.BothitRecache.MatchUA, 6)
 	assert.Contains(t, host1.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 
 	// Verify host 2

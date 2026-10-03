@@ -81,14 +81,14 @@ hosts:
 	rule := host.URLRules[0]
 	require.NotNil(t, rule.BothitRecache)
 
-	// Verify aliases were expanded (should have 5 patterns for GooglebotSearchDesktop)
-	assert.Len(t, rule.BothitRecache.MatchUA, 5)
+	// Verify aliases were expanded (should have 6 patterns for GooglebotSearchDesktop)
+	assert.Len(t, rule.BothitRecache.MatchUA, 6)
 	assert.Contains(t, rule.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, rule.BothitRecache.MatchUA, "Googlebot/2.1 (+http://www.google.com/bot.html)")
 
 	// Verify patterns were compiled
 	assert.NotNil(t, rule.BothitRecache.CompiledPatterns)
-	assert.Len(t, rule.BothitRecache.CompiledPatterns, 5)
+	assert.Len(t, rule.BothitRecache.CompiledPatterns, 6)
 }
 
 // TestBothitRecache_PatternLevel_MultipleRules tests multiple URL rules with different aliases
@@ -167,10 +167,10 @@ hosts:
 	host := hosts[0]
 	require.Len(t, host.URLRules, 3)
 
-	// Verify first rule (/blog/*) has GooglebotSearchDesktop (5 patterns)
+	// Verify first rule (/blog/*) has GooglebotSearchDesktop (6 patterns)
 	rule1 := host.URLRules[0]
 	require.NotNil(t, rule1.BothitRecache)
-	assert.Len(t, rule1.BothitRecache.MatchUA, 5)
+	assert.Len(t, rule1.BothitRecache.MatchUA, 6)
 	assert.Contains(t, rule1.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 
 	// Verify second rule (/api/*) has BingbotDesktop (3 patterns)
@@ -334,7 +334,7 @@ hosts:
 	// Rule 1: Has alias, should be expanded
 	rule1 := host.URLRules[0]
 	require.NotNil(t, rule1.BothitRecache)
-	assert.Len(t, rule1.BothitRecache.MatchUA, 5)
+	assert.Len(t, rule1.BothitRecache.MatchUA, 6)
 
 	// Rule 2: No bothit_recache (inherits from host/global at runtime)
 	rule2 := host.URLRules[1]
@@ -425,12 +425,12 @@ hosts:
 	assert.NotContains(t, globalConfig.BothitRecache.MatchUA, "Googlebot")
 	assert.NotContains(t, globalConfig.BothitRecache.MatchUA, "ChatGPT")
 
-	// Verify host has GooglebotSearchDesktop (5 patterns)
+	// Verify host has GooglebotSearchDesktop (6 patterns)
 	hosts := manager.GetHosts()
 	require.Len(t, hosts, 1)
 	host := hosts[0]
 	require.NotNil(t, host.BothitRecache)
-	assert.Len(t, host.BothitRecache.MatchUA, 5)
+	assert.Len(t, host.BothitRecache.MatchUA, 6)
 	assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.NotContains(t, host.BothitRecache.MatchUA, "bingbot")
 	assert.NotContains(t, host.BothitRecache.MatchUA, "ChatGPT")
@@ -519,7 +519,7 @@ hosts:
 	require.Len(t, hosts, 1)
 	host := hosts[0]
 	require.NotNil(t, host.BothitRecache)
-	assert.Len(t, host.BothitRecache.MatchUA, 6) // 5 Googlebot + 1 custom
+	assert.Len(t, host.BothitRecache.MatchUA, 7) // 6 Googlebot + 1 custom
 	assert.Contains(t, host.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.Contains(t, host.BothitRecache.MatchUA, "*ShopBot*")
 
@@ -639,7 +639,7 @@ hosts:
 	require.Len(t, host1.URLRules, 1)
 	blog1Rule := host1.URLRules[0]
 	require.NotNil(t, blog1Rule.BothitRecache)
-	assert.Len(t, blog1Rule.BothitRecache.MatchUA, 5)
+	assert.Len(t, blog1Rule.BothitRecache.MatchUA, 6)
 	assert.Contains(t, blog1Rule.BothitRecache.MatchUA, "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
 	assert.NotContains(t, blog1Rule.BothitRecache.MatchUA[0], "bingbot")
 	assert.NotContains(t, blog1Rule.BothitRecache.MatchUA[0], "ChatGPT")

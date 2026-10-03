@@ -72,6 +72,7 @@ map $http_user_agent $ec_crawler {
     "~*Claude-User"               1;
     "~*Perplexity-User"           1;
     "~*ChatGPT-User"              1;
+    "~*Google-InspectionTool"     1;
 }
 
 # 2. Skip static assets (inherits $ec_crawler, disables for static files)

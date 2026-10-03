@@ -625,6 +625,24 @@ func TestGoogleBotUserAgentMatching(t *testing.T) {
 			shouldMatch: true,
 			description: "Googlebot desktop - Chrome without comma after KHTML (regexp pattern)",
 		},
+		{
+			aliasName:   "GooglebotSearchDesktop",
+			userAgent:   "Mozilla/5.0 (compatible; Google-InspectionTool/1.0)",
+			shouldMatch: true,
+			description: "Google-InspectionTool desktop (regexp pattern)",
+		},
+		{
+			aliasName:   "GooglebotSearchDesktop",
+			userAgent:   "Mozilla/5.0 (compatible; Google-InspectionTool/2.15)",
+			shouldMatch: true,
+			description: "Google-InspectionTool desktop - updated version (regexp pattern)",
+		},
+		{
+			aliasName:   "GooglebotSearchDesktop",
+			userAgent:   "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Google-InspectionTool/1.0)",
+			shouldMatch: false,
+			description: "Google-InspectionTool mobile - should NOT match desktop patterns",
+		},
 
 		// GooglebotSearchMobile - mobile patterns
 		{
@@ -644,6 +662,18 @@ func TestGoogleBotUserAgentMatching(t *testing.T) {
 			userAgent:   "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.96 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
 			shouldMatch: true,
 			description: "Googlebot mobile - exact match pattern",
+		},
+		{
+			aliasName:   "GooglebotSearchMobile",
+			userAgent:   "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.52 Mobile Safari/537.36 (compatible; Google-InspectionTool/1.0)",
+			shouldMatch: true,
+			description: "Google-InspectionTool mobile (regexp pattern)",
+		},
+		{
+			aliasName:   "GooglebotSearchMobile",
+			userAgent:   "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/160.0.8500.0 Mobile Safari/537.36 (compatible; Google-InspectionTool/1.1)",
+			shouldMatch: true,
+			description: "Google-InspectionTool mobile - updated Chrome and tool versions (regexp pattern)",
 		},
 
 		// GoogleBotAds - desktop ads bot
