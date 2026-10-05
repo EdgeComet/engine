@@ -128,3 +128,20 @@ func TestInjectBypassDimension_MatchUAPatternsCompiled(t *testing.T) {
 	assert.True(t, dim.CompiledPatterns[0].Match("Mozilla/5.0 Googlebot/2.1"))
 	assert.False(t, dim.CompiledPatterns[0].Match("Mozilla/5.0 Bingbot/2.0"))
 }
+
+// PrepareHost is the one check a store-loaded host passes through, so a zero timeout override must
+// fail here. The rule index refers to configuration order: specificity sorting would move the exact
+// "/api" rule ahead of the wildcard.
+func TestPrepareHost_RejectsNonPositiveTimeoutOverride(t *testing.T) {
+	zero := types.Duration(0)
+	host := &types.Host{
+		URLRules: []types.URLRule{
+			{Match: "/*", Action: types.ActionRender},
+			{Match: "/api", Action: types.ActionBypass, Bypass: &types.BypassRuleConfig{Timeout: &zero}},
+		},
+	}
+
+	err := PrepareHost(host, nil, "test", testLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "url_rules[1].bypass.timeout must be positive")
+}

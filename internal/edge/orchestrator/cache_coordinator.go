@@ -27,17 +27,6 @@ func isStatusCodeCacheable(statusCode int, cacheableStatusCodes []int) bool {
 	return false
 }
 
-// getStaleTTL extracts stale TTL from resolved config, returns 0 if not configured or strategy is delete
-func getStaleTTL(expired types.CacheExpiredConfig) time.Duration {
-	if expired.Strategy != types.ExpirationStrategyServeStale {
-		return 0
-	}
-	if expired.StaleTTL == nil {
-		return 0
-	}
-	return time.Duration(*expired.StaleTTL)
-}
-
 // ShardingManager interface for optional sharding operations
 type ShardingManager interface {
 	IsEnabled() bool
@@ -303,7 +292,7 @@ func (cc *CacheCoordinator) SaveRenderCache(
 		indexStatus = pageSEO.IndexStatus
 	}
 
-	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+	staleTTL := renderCtx.ResolvedConfig.Cache.Expired.ServableStaleTTL()
 
 	return cc.SaveCache(
 		renderCtx,
@@ -350,9 +339,9 @@ func (cc *CacheCoordinator) pushCacheToCluster(renderCtx *edgectx.RenderContext,
 
 	var staleTTL time.Duration
 	if metadata.Source == cache.SourceBypass {
-		staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+		staleTTL = renderCtx.ResolvedConfig.Bypass.Cache.Expired.ServableStaleTTL()
 	} else {
-		staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+		staleTTL = renderCtx.ResolvedConfig.Cache.Expired.ServableStaleTTL()
 	}
 
 	if err := cc.metadata.StoreMetadata(metaCtx, metadata, renderCtx.CacheKey, staleTTL); err != nil {
@@ -406,7 +395,7 @@ func (cc *CacheCoordinator) SaveBypassCache(renderCtx *edgectx.RenderContext, by
 		indexStatus = pageSEO.IndexStatus
 	}
 
-	staleTTL := getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+	staleTTL := renderCtx.ResolvedConfig.Bypass.Cache.Expired.ServableStaleTTL()
 
 	return cc.SaveCache(
 		renderCtx,
@@ -434,7 +423,7 @@ func (cc *CacheCoordinator) SaveOverrideCache(
 	if override.Location != "" {
 		headers = map[string][]string{"Location": {override.Location}}
 	}
-	staleTTL := getStaleTTL(expired)
+	staleTTL := expired.ServableStaleTTL()
 	indexStatus := types.IndexStatusIndexable
 	if override.StatusCode != 200 {
 		indexStatus = types.IndexStatusNon200
@@ -613,9 +602,9 @@ func (cc *CacheCoordinator) TryPullFromRemote(renderCtx *edgectx.RenderContext, 
 
 		var staleTTL time.Duration
 		if metadata.Source == cache.SourceBypass {
-			staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired)
+			staleTTL = renderCtx.ResolvedConfig.Bypass.Cache.Expired.ServableStaleTTL()
 		} else {
-			staleTTL = getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired)
+			staleTTL = renderCtx.ResolvedConfig.Cache.Expired.ServableStaleTTL()
 		}
 
 		if err := cc.metadata.StoreMetadata(metaCtx, metadata, renderCtx.CacheKey, staleTTL); err != nil {

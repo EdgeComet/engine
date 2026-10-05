@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,10 @@ import (
 	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/pkg/types"
 )
+
+// testBypassConfig is the resolved bypass configuration the tests fetch with. The User-Agent and
+// timeout are per request, so they come from here and never from the GlobalBypassConfig.
+var testBypassConfig = config.ResolvedBypassConfig{UserAgent: "EdgeCometTest/1.0", Timeout: 5 * time.Second}
 
 // TestFetchContentSetsLoopPreventionHeaders verifies that bypass fetches carry
 // X-Edge-Render (so the integration routes them straight to origin instead of
@@ -29,7 +34,6 @@ func TestFetchContentSetsLoopPreventionHeaders(t *testing.T) {
 
 	ssrfOff := false
 	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
@@ -37,7 +41,7 @@ func TestFetchContentSetsLoopPreventionHeaders(t *testing.T) {
 		types.HeaderEdgeRender: {"spoofed"}, // must be overridden by engine value
 	}
 
-	resp, err := svc.FetchContent(origin.URL, clientHeaders, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -65,11 +69,10 @@ func TestFetchContentLargeResponseHeaders(t *testing.T) {
 
 	ssrfOff := false
 	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, testBypassConfig, nil, "", zap.NewNop())
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "rendered body", string(resp.Body))
@@ -81,13 +84,11 @@ func TestFetchContentLargeResponseHeaders(t *testing.T) {
 // marker is what lets a caller tell that apart from an origin that genuinely said 502; the
 // served status, body and content type must not change.
 func TestFetchContentMarksTransportFailure(t *testing.T) {
-	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent: "EdgeCometTest/1.0",
-	}, zap.NewNop())
+	svc := NewBypassService(&config.GlobalBypassConfig{}, zap.NewNop())
 
 	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
 	// without depending on network reachability.
-	resp, err := svc.FetchContent("http://127.0.0.1:1/page", nil, "", zap.NewNop())
+	resp, err := svc.FetchContent("http://127.0.0.1:1/page", testBypassConfig, nil, "", zap.NewNop())
 
 	require.NoError(t, err, "FetchContent reports transport failures through the response, not an error")
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
@@ -108,7 +109,6 @@ func TestFetchContentCapturesSentHeaders(t *testing.T) {
 
 	ssrfOff := false
 	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
@@ -117,7 +117,7 @@ func TestFetchContentCapturesSentHeaders(t *testing.T) {
 		"Authorization": {"Bearer token"},
 	}
 
-	resp, err := svc.FetchContent(origin.URL, clientHeaders, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -132,13 +132,11 @@ func TestFetchContentCapturesSentHeaders(t *testing.T) {
 // The capture happens before the dial, so the row for an origin that was never reached still
 // says what the EG had prepared.
 func TestFetchContentTransportFailureCapturesSentHeaders(t *testing.T) {
-	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent: "EdgeCometTest/1.0",
-	}, zap.NewNop())
+	svc := NewBypassService(&config.GlobalBypassConfig{}, zap.NewNop())
 
 	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
 	// without depending on network reachability.
-	resp, err := svc.FetchContent("http://127.0.0.1:1/page", nil, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent("http://127.0.0.1:1/page", testBypassConfig, nil, "render-key-123", zap.NewNop())
 
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.TransportError)
@@ -164,11 +162,10 @@ func TestFetchContentSentHeadersOmitHostWrittenAtSendTime(t *testing.T) {
 
 	ssrfOff := false
 	svc := NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, testBypassConfig, nil, "", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -193,4 +190,68 @@ func TestFetchContentSentHeadersOmitHostWrittenAtSendTime(t *testing.T) {
 		}
 		assert.True(t, found, "header %q reached the wire but was not captured", name)
 	}
+}
+
+// The per-request deadline is the only one: the client carries no ReadTimeout/WriteTimeout, which
+// fasthttp would otherwise apply when it is the earlier of the two.
+func TestFetchContentAppliesRequestTimeout(t *testing.T) {
+	const originDelay = 600 * time.Millisecond
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(originDelay)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("slow"))
+	}))
+	defer origin.Close()
+
+	ssrfOff := false
+	svc := NewBypassService(&config.GlobalBypassConfig{SSRFProtection: &ssrfOff}, zap.NewNop())
+
+	t.Run("deadline shorter than the origin fails as a transport error", func(t *testing.T) {
+		start := time.Now()
+		resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 150 * time.Millisecond}, nil, "", zap.NewNop())
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
+		assert.NotEmpty(t, resp.TransportError)
+		assert.Less(t, time.Since(start), originDelay, "the fetch must give up at its own deadline")
+	})
+
+	t.Run("deadline longer than the origin succeeds", func(t *testing.T) {
+		resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 5 * time.Second}, nil, "", zap.NewNop())
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "slow", string(resp.Body))
+	})
+}
+
+// Regression: the service was built from the global config and sent its User-Agent and timeout on
+// every fetch, so host and URL-rule overrides resolved correctly but never reached the origin.
+func TestFetchContentUsesResolvedHostOverrides(t *testing.T) {
+	gotUA := make(chan string, 1)
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUA <- r.UserAgent()
+		time.Sleep(500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer origin.Close()
+
+	ssrfOff := false
+	globalTimeout := types.Duration(30 * time.Second)
+	global := &config.GlobalBypassConfig{Timeout: &globalTimeout, UserAgent: "GlobalUA/1.0", SSRFProtection: &ssrfOff}
+	hostTimeout := types.Duration(100 * time.Millisecond)
+	host := &types.Host{
+		ID:     1,
+		Domain: "example.com",
+		Render: types.RenderConfig{Timeout: types.Duration(15 * time.Second)},
+		Bypass: &types.BypassConfig{UserAgent: "HostUA/1.0", Timeout: &hostTimeout},
+	}
+	resolved := config.NewConfigResolver(&config.GlobalRenderConfig{}, global, nil, nil, nil, nil, "", host).
+		ResolveForURL(origin.URL + "/page")
+
+	svc := NewBypassService(global, zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL+"/page", resolved.Bypass, nil, "", zap.NewNop())
+	require.NoError(t, err)
+
+	assert.Equal(t, "HostUA/1.0", <-gotUA, "the host's User-Agent reaches the origin, not the global one")
+	assert.Equal(t, http.StatusBadGateway, resp.StatusCode, "the host's 100ms timeout applies, not the global 30s")
+	assert.NotEmpty(t, resp.TransportError)
 }

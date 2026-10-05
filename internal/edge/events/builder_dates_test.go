@@ -175,7 +175,7 @@ func TestBuildRequestEvent_BypassPathCapturesOriginDates(t *testing.T) {
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 5 * time.Second}, nil, "", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -229,7 +229,7 @@ func TestBuildRequestEvent_BypassPathWithoutOriginDates(t *testing.T) {
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 5 * time.Second}, nil, "", zap.NewNop())
 	require.NoError(t, err)
 
 	// Go's httptest server sends Date but never Last-Modified for a handler-written body.

@@ -78,7 +78,6 @@ func newStampHarness(t *testing.T) *stampHarness {
 
 	ssrfOff := false
 	bypassSvc := bypass.NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, logger)
 
@@ -175,6 +174,7 @@ func stampRenderContext(t *testing.T, targetURL string) *edgectx.RenderContext {
 	renderCtx.ResolvedConfig = &config.ResolvedConfig{
 		Compression: "none",
 		Render:      config.ResolvedRenderConfig{Timeout: stampRequestTTL},
+		Bypass:      config.ResolvedBypassConfig{UserAgent: "EdgeCometTest/1.0", Timeout: stampRequestTTL},
 	}
 
 	return renderCtx

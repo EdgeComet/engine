@@ -84,10 +84,8 @@ func TestClassifyStatus_UncacheableStatusIsNotSkipped(t *testing.T) {
 // retryable network_error carrying no status code - the 502 was never sent by the origin.
 func TestProcessBypassRecache_UnreachableOriginIsNetworkError(t *testing.T) {
 	rs := &RecacheService{
-		logger: zap.NewNop(),
-		bypassSvc: bypass.NewBypassService(&config.GlobalBypassConfig{
-			UserAgent: "EdgeCometTest/1.0",
-		}, zap.NewNop()),
+		logger:    zap.NewNop(),
+		bypassSvc: bypass.NewBypassService(&config.GlobalBypassConfig{}, zap.NewNop()),
 	}
 
 	renderCtx := bypassRecacheContext(true, time.Minute)

@@ -20,8 +20,9 @@ edge_gateway:
     base_path: "./tests/temp/cache"
 
   # Render configuration is automatically calculated per-host at runtime:
-  # - Lock TTL: host.render.timeout + 3s (min: 30s)
-  # - Concurrent wait: host.render.timeout * 80% (min: 5s, max: 60s)
+  # - Lock TTL: render timeout + 3s (min: 30s)
+  # - Concurrent wait: render timeout * 80% (min: 5s, max: 60s)
+  #   (render timeout = the host's, or the matched URL rule's when it overrides it)
   # - Poll interval: 200ms (constant)
 
   bypass:

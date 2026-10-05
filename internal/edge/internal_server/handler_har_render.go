@@ -106,10 +106,11 @@ func (h *HARRenderHandler) handleHARRender(ctx *fasthttp.RequestCtx) {
 	// Get dimension config
 	dimConfig := host.Dimensions[dimension]
 
-	// Resolve timeout
+	// Resolve timeout: an explicit one wins, otherwise the URL's own, which a URL rule can raise
+	// above the host's
 	timeout := params.Timeout
 	if timeout == 0 {
-		timeout = time.Duration(host.Render.Timeout)
+		timeout = h.resolveRenderTimeout(host, params.URL.String())
 	}
 
 	// Build render request with basic fields
@@ -193,6 +194,14 @@ func (h *HARRenderHandler) waitForAvailableTab(ctx *fasthttp.RequestCtx) error {
 }
 
 // checkURLRules checks if the URL matches any non-render rules
+// resolveRenderTimeout returns the render timeout the URL would get on a live render.
+func (h *HARRenderHandler) resolveRenderTimeout(host *types.Host, targetURL string) time.Duration {
+	cfg := h.configManager.GetConfig()
+	resolver := config.NewConfigResolver(&cfg.Render, &cfg.Bypass, cfg.TrackingParams, cfg.CacheSharding,
+		cfg.BothitRecache, cfg.Headers, cfg.Storage.Compression, host)
+	return resolver.ResolveRenderForURL(targetURL).Render.Timeout
+}
+
 func (h *HARRenderHandler) checkURLRules(ctx *fasthttp.RequestCtx, host *types.Host, targetURL string) error {
 	if len(host.URLRules) == 0 {
 		return nil

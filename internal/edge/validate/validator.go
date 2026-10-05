@@ -290,6 +290,32 @@ func ValidateHostHeaders(host *types.Host) error {
 	return nil
 }
 
+// ValidateHostTimeouts rejects a non-positive timeout override at host or URL-rule level. Like
+// ValidateHostHeaders it also covers hosts loaded from a store, which never pass file validation.
+// A zero bypass timeout reaches the origin fetch as "no deadline", so an origin that never answers
+// would hold the request indefinitely.
+func ValidateHostTimeouts(host *types.Host) error {
+	if host == nil {
+		return nil
+	}
+
+	if host.Bypass != nil && host.Bypass.Timeout != nil && *host.Bypass.Timeout <= 0 {
+		return fmt.Errorf("bypass.timeout must be positive, got %s", *host.Bypass.Timeout)
+	}
+
+	for i := range host.URLRules {
+		rule := &host.URLRules[i]
+		if rule.Bypass != nil && rule.Bypass.Timeout != nil && *rule.Bypass.Timeout <= 0 {
+			return fmt.Errorf("url_rules[%d].bypass.timeout must be positive, got %s", i, *rule.Bypass.Timeout)
+		}
+		if rule.Render != nil && rule.Render.Timeout != nil && *rule.Render.Timeout <= 0 {
+			return fmt.Errorf("url_rules[%d].render.timeout must be positive, got %s", i, *rule.Render.Timeout)
+		}
+	}
+
+	return nil
+}
+
 // validateRequestHeader checks if a header is valid for request forwarding.
 func validateRequestHeader(header string) error {
 	if err := ValidateHTTPHeaderName(header); err != nil {
@@ -2265,6 +2291,10 @@ func validateHostTimeoutRanges(hostIndex int, host *types.Host, filename string,
 			hostIndex, host.Domain, host.Render.Timeout)
 	}
 
+	if err := ValidateHostTimeouts(host); err != nil {
+		collector.Add(filename, 0, "host[%d] (%s): %v", hostIndex, host.Domain, err)
+	}
+
 	// Host-level bypass timeout (if overridden)
 	if host.Bypass != nil && host.Bypass.Timeout != nil {
 		bypassTimeout := time.Duration(*host.Bypass.Timeout)
@@ -2291,18 +2321,24 @@ func validateCrossConfig(egConfig *configtypes.EgConfig, hostsConfig *configtype
 	validateServerTimeout(egConfig, hostsConfig, collector)
 
 	// Validate bypass timeout against server timeout
-	validateBypassTimeout(egConfig, collector)
+	validateBypassTimeout(egConfig, hostsConfig, collector)
 
 	// Validate storage configuration (with cross-host validation)
 	validateStorageConfig(egConfig, hostsConfig, "edge-gateway.yaml", collector)
 }
 
-// getMaxHostRenderTimeout finds the maximum render timeout across all hosts
+// getMaxHostRenderTimeout finds the maximum render timeout across all hosts, including URL-rule
+// overrides: a rule can raise the timeout above its host's
 func getMaxHostRenderTimeout(hosts *configtypes.HostsConfig) time.Duration {
 	maxTimeout := time.Duration(0)
 	for _, host := range hosts.Hosts {
 		if time.Duration(host.Render.Timeout) > maxTimeout {
 			maxTimeout = time.Duration(host.Render.Timeout)
+		}
+		for _, rule := range host.URLRules {
+			if rule.Render != nil && rule.Render.Timeout != nil && time.Duration(*rule.Render.Timeout) > maxTimeout {
+				maxTimeout = time.Duration(*rule.Render.Timeout)
+			}
 		}
 	}
 	return maxTimeout
@@ -2362,8 +2398,8 @@ func validateServerTimeout(egConfig *configtypes.EgConfig, hostsConfig *configty
 	}
 }
 
-// validateBypassTimeout ensures bypass timeout doesn't exceed server timeout
-func validateBypassTimeout(egConfig *configtypes.EgConfig, collector *ErrorCollector) {
+// validateBypassTimeout ensures no bypass timeout, global, host or URL rule, exceeds server timeout
+func validateBypassTimeout(egConfig *configtypes.EgConfig, hostsConfig *configtypes.HostsConfig, collector *ErrorCollector) {
 	if egConfig.Bypass.Timeout != nil && *egConfig.Bypass.Timeout > egConfig.Server.Timeout {
 		collector.Add("edge-gateway.yaml", 0,
 			"bypass.timeout (%s) exceeds server.timeout (%s). "+
@@ -2371,6 +2407,25 @@ func validateBypassTimeout(egConfig *configtypes.EgConfig, collector *ErrorColle
 			*egConfig.Bypass.Timeout,
 			egConfig.Server.Timeout,
 		)
+	}
+
+	for i := range hostsConfig.Hosts {
+		host := &hostsConfig.Hosts[i]
+		if host.Bypass != nil && host.Bypass.Timeout != nil && *host.Bypass.Timeout > egConfig.Server.Timeout {
+			collector.Add("hosts.yaml", 0,
+				"host[%d] (%s): bypass.timeout (%s) exceeds server.timeout (%s). "+
+					"Bypass operations will never complete successfully",
+				i, host.Domain, *host.Bypass.Timeout, egConfig.Server.Timeout)
+		}
+		for j := range host.URLRules {
+			rule := &host.URLRules[j]
+			if rule.Bypass != nil && rule.Bypass.Timeout != nil && *rule.Bypass.Timeout > egConfig.Server.Timeout {
+				collector.Add("hosts.yaml", 0,
+					"host[%d] (%s): url_rules[%d]: bypass.timeout (%s) exceeds server.timeout (%s). "+
+						"Bypass operations will never complete successfully",
+					i, host.Domain, j, *rule.Bypass.Timeout, egConfig.Server.Timeout)
+			}
+		}
 	}
 }
 

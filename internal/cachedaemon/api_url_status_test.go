@@ -309,3 +309,68 @@ func TestHandleURLStatusAPI(t *testing.T) {
 		assert.Equal(t, createdAt, *result.Cache.CreatedAt)
 	})
 }
+
+// The single-URL view classifies with the URL's own resolved configuration: the entry's source
+// picks render or bypass expiry, a URL rule can override it, and only serve_stale has a stale window.
+// Before, every entry used the host's render stale TTL, whatever its source, rule or strategy.
+func TestHandleURLStatusAPI_StaleFollowsResolvedConfig(t *testing.T) {
+	now := time.Now().UTC().Unix()
+	staleTTL := types.Duration(10 * time.Minute)
+
+	daemon, mr := setupTestDaemon(t)
+	cfg := daemon.configManager.(*mockConfigManager)
+	host := &cfg.hosts[0]
+	host.Render.Cache = &types.RenderCacheConfig{
+		Expired: &types.CacheExpiredConfig{Strategy: types.ExpirationStrategyServeStale, StaleTTL: &staleTTL},
+	}
+	host.Bypass = &types.BypassConfig{Cache: &types.BypassCacheConfig{
+		// A stale TTL is set but the strategy never serves stale.
+		Expired: &types.CacheExpiredConfig{Strategy: types.ExpirationStrategyDelete, StaleTTL: &staleTTL},
+	}}
+	host.URLRules = []types.URLRule{{
+		Match:  "/strict/*",
+		Action: types.ActionRender,
+		Render: &types.RenderRuleConfig{Cache: &types.RenderCacheOverride{
+			Expired: &types.CacheExpiredConfig{Strategy: types.ExpirationStrategyDelete},
+		}},
+	}}
+	daemon.reloadMu.Lock()
+	daemon.rebuildHostByIDLocked()
+	daemon.reloadMu.Unlock()
+
+	tests := []struct {
+		name   string
+		path   string
+		source string
+		want   string
+	}{
+		{name: "render entry within the host's render window", path: "/page", source: "render", want: "stale"},
+		{name: "bypass entry under the delete strategy", path: "/fetched", source: "bypass", want: "expired"},
+		{name: "render entry under a rule's delete strategy", path: "/strict/page", source: "render", want: "expired"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rawURL := "https://example.com" + tt.path
+			normalized, err := daemon.normalizer.Normalize(rawURL, nil)
+			require.NoError(t, err)
+
+			// Expired five minutes ago: inside a 10-minute stale window.
+			populateMetadataHash(mr, 1, 1, daemon.normalizer.Hash(normalized.NormalizedURL), map[string]string{
+				"url":         normalized.NormalizedURL,
+				"created_at":  fmt.Sprintf("%d", now-3600),
+				"expires_at":  fmt.Sprintf("%d", now-300),
+				"status_code": "200",
+				"source":      tt.source,
+			})
+
+			ctx := makeTestRequest(daemon, "GET", "/internal/cache/url-status?host_id=1&url="+rawURL)
+			require.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+
+			result := parseURLStatusResponse(t, ctx)
+			require.True(t, result.Cache.Exists)
+			require.NotNil(t, result.Cache.Status)
+			assert.Equal(t, tt.want, *result.Cache.Status)
+		})
+	}
+}

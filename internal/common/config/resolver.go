@@ -99,11 +99,10 @@ type CompiledStripPattern struct {
 
 // ResolvedShardingConfig contains resolved cache sharding configuration
 type ResolvedShardingConfig struct {
-	Enabled              bool
-	ReplicationFactor    int
-	DistributionStrategy string
-	PushOnRender         bool
-	ReplicateOnPull      bool
+	Enabled           bool
+	ReplicationFactor int
+	PushOnRender      bool
+	ReplicateOnPull   bool
 }
 
 // ResolvedBothitRecache contains resolved bot hit automatic recache configuration
@@ -147,7 +146,16 @@ func NewConfigResolver(globalRender *GlobalRenderConfig, globalBypass *GlobalByp
 func (r *ConfigResolver) ResolveForURL(targetURL string) *ResolvedConfig {
 	// Find matching URL rule (returns nil, -1 if no match)
 	matchedRule, ruleIndex := r.matcher.FindMatchingRule(targetURL)
+	return r.resolve(matchedRule, ruleIndex)
+}
 
+// ResolveHostLevel resolves the configuration a URL matching no URL rule receives: global and
+// host levels only. For host-wide views that cannot evaluate rules per URL.
+func (r *ConfigResolver) ResolveHostLevel() *ResolvedConfig {
+	return r.resolve(nil, -1)
+}
+
+func (r *ConfigResolver) resolve(matchedRule *types.URLRule, ruleIndex int) *ResolvedConfig {
 	var ruleID string
 	var matchedPattern string
 	if matchedRule != nil {
@@ -487,12 +495,6 @@ func (r *ConfigResolver) resolveShardingConfig(resolved *ResolvedConfig, matched
 		resolved.Sharding.ReplicationFactor = 2 // Default: 2
 	}
 
-	if r.globalSharding != nil && r.globalSharding.DistributionStrategy != "" {
-		resolved.Sharding.DistributionStrategy = r.globalSharding.DistributionStrategy
-	} else {
-		resolved.Sharding.DistributionStrategy = "hash_modulo" // Default
-	}
-
 	if r.globalSharding != nil && r.globalSharding.PushOnRender != nil {
 		resolved.Sharding.PushOnRender = *r.globalSharding.PushOnRender
 	} else {
@@ -512,9 +514,6 @@ func (r *ConfigResolver) resolveShardingConfig(resolved *ResolvedConfig, matched
 		}
 		if r.host.CacheSharding.ReplicationFactor != nil {
 			resolved.Sharding.ReplicationFactor = *r.host.CacheSharding.ReplicationFactor
-		}
-		if r.host.CacheSharding.DistributionStrategy != "" {
-			resolved.Sharding.DistributionStrategy = r.host.CacheSharding.DistributionStrategy
 		}
 		if r.host.CacheSharding.PushOnRender != nil {
 			resolved.Sharding.PushOnRender = *r.host.CacheSharding.PushOnRender
@@ -537,9 +536,6 @@ func (r *ConfigResolver) resolveShardingConfig(resolved *ResolvedConfig, matched
 		}
 		if matchedRule.CacheSharding.ReplicationFactor != nil {
 			resolved.Sharding.ReplicationFactor = *matchedRule.CacheSharding.ReplicationFactor
-		}
-		if matchedRule.CacheSharding.DistributionStrategy != "" {
-			resolved.Sharding.DistributionStrategy = matchedRule.CacheSharding.DistributionStrategy
 		}
 	}
 }

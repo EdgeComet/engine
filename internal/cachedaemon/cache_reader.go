@@ -51,7 +51,7 @@ var errCacheSummaryBudgetExceeded = errors.New("cache summary exceeded time budg
 
 const luaCacheList = `
 local prefix = "meta:cache:" .. ARGV[1] .. ":"
-local stale_ttl = tonumber(ARGV[2])
+local render_stale_ttl = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local cursor = ARGV[4]
 local stop_threshold = tonumber(ARGV[5])
@@ -86,6 +86,7 @@ local title_neq = string.lower(ARGV[31])
 local title_not_contains = string.lower(ARGV[32])
 local last_bot_hit_exists = ARGV[33]
 local scan_count = tonumber(ARGV[34])
+local bypass_stale_ttl = tonumber(ARGV[35])
 
 local max_scan_iterations = 200
 local scan_iterations = 0
@@ -111,6 +112,8 @@ repeat
         end
 
         local expires_at = tonumber(hash["expires_at"] or "0")
+        local stale_ttl = render_stale_ttl
+        if hash["source"] == "bypass" then stale_ttl = bypass_stale_ttl end
         local status
         if now < expires_at then
             status = "active"
@@ -288,12 +291,13 @@ return output
 
 const luaCacheSummaryChunk = `
 local prefix = "meta:cache:" .. ARGV[1] .. ":"
-local stale_ttl = tonumber(ARGV[2])
+local render_stale_ttl = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local cursor = ARGV[4]
 local scan_count = tonumber(ARGV[5])
 local max_scan_iterations = tonumber(ARGV[6])
 local max_matched_keys = tonumber(ARGV[7])
+local bypass_stale_ttl = tonumber(ARGV[8])
 
 local scan_iterations = 0
 local total, active, stale, expired = 0, 0, 0, 0
@@ -319,6 +323,8 @@ repeat
         local size = tonumber(vals[2] or "0")
         local dim = vals[3] or "unknown"
         local src = vals[4] or "unknown"
+        local stale_ttl = render_stale_ttl
+        if src == "bypass" then stale_ttl = bypass_stale_ttl end
 
         if now < expires_at then
             active = active + 1
@@ -411,7 +417,7 @@ type CacheListParams struct {
 	TitleNeq          string
 	TitleNotContains  string
 	LastBotHitExists  string
-	StaleTTL          int64
+	Stale             StaleWindows
 }
 
 // ListURLs walks the shard keyspace with bounded Lua chunks (same pattern as
@@ -432,7 +438,7 @@ func (cr *CacheReader) ListURLs(ctx context.Context, params CacheListParams) (*C
 			luaCacheList,
 			[]string{},
 			strconv.Itoa(params.HostID),
-			strconv.FormatInt(params.StaleTTL, 10),
+			strconv.FormatInt(params.Stale.Render, 10),
 			now,
 			cursor,
 			strconv.Itoa(params.Limit-len(items)),
@@ -465,6 +471,7 @@ func (cr *CacheReader) ListURLs(ctx context.Context, params CacheListParams) (*C
 			params.TitleNotContains,
 			params.LastBotHitExists,
 			strconv.Itoa(params.Limit),
+			strconv.FormatInt(params.Stale.Bypass, 10),
 		)
 		if err != nil {
 			return nil, err
@@ -541,13 +548,14 @@ func (cr *CacheReader) appendListItems(items []CacheURLItem, rawItems []interfac
 // into bounded Evals. Every chunk classifies against the same "now". Any chunk
 // failure fails the whole summary: totals from part of the pass are wrong
 // numbers, not a smaller page.
-func (cr *CacheReader) GetSummary(ctx context.Context, hostID int, staleTTL int64) (*CacheSummaryResponse, error) {
+func (cr *CacheReader) GetSummary(ctx context.Context, hostID int, stale StaleWindows) (*CacheSummaryResponse, error) {
 	start := cr.nowFunc()
 	deadline := start.Add(cacheSummaryTimeBudget)
 	cursor := "0"
 	now := strconv.FormatInt(start.Unix(), 10)
 	hostIDStr := strconv.Itoa(hostID)
-	staleTTLStr := strconv.FormatInt(staleTTL, 10)
+	renderStaleStr := strconv.FormatInt(stale.Render, 10)
+	bypassStaleStr := strconv.FormatInt(stale.Bypass, 10)
 
 	resp := &CacheSummaryResponse{
 		ByDimension: make(map[string]int),
@@ -560,12 +568,13 @@ func (cr *CacheReader) GetSummary(ctx context.Context, hostID int, staleTTL int6
 			luaCacheSummaryChunk,
 			[]string{},
 			hostIDStr,
-			staleTTLStr,
+			renderStaleStr,
 			now,
 			cursor,
 			strconv.Itoa(scanChunkCount),
 			strconv.Itoa(scanChunkMaxIterations),
 			strconv.Itoa(scanChunkMaxMatchedKeys),
+			bypassStaleStr,
 		)
 		if err != nil {
 			return nil, err

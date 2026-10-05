@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
@@ -20,7 +22,7 @@ type mockConfigManager struct {
 }
 
 func (m *mockConfigManager) GetConfig() *configtypes.EgConfig {
-	return nil
+	return &configtypes.EgConfig{}
 }
 
 func (m *mockConfigManager) GetHosts() []types.Host {
@@ -52,6 +54,7 @@ type mockOrchestrator struct {
 	renderErr     error
 	renderSuccess bool
 	renderHAR     []byte
+	lastRequest   *types.RenderRequest
 }
 
 func (m *mockOrchestrator) HasAvailableCapacity(ctx context.Context) bool {
@@ -63,6 +66,7 @@ func (m *mockOrchestrator) HasAvailableCapacity(ctx context.Context) bool {
 }
 
 func (m *mockOrchestrator) RenderWithHAR(ctx context.Context, req *types.RenderRequest, host *types.Host, dimensionConfig *types.Dimension) (*types.RenderResponse, error) {
+	m.lastRequest = req
 	if m.renderErr != nil {
 		return nil, m.renderErr
 	}
@@ -706,4 +710,43 @@ func TestHandleHARRender_RenderFails(t *testing.T) {
 
 	assert.Equal(t, fasthttp.StatusBadGateway, ctx.Response.StatusCode())
 	assert.Contains(t, string(ctx.Response.Body()), "render_failed")
+}
+
+// Without an explicit timeout the debug render uses the URL's own render timeout, as a live render
+// would: a URL rule raises it above the host's. Before, it always took the host's.
+func TestHandleHARRender_DefaultTimeoutFollowsURLRule(t *testing.T) {
+	ruleTimeout := types.Duration(45 * time.Second)
+	configMgr := createTestConfigManager()
+	configMgr.hosts[0].Render.Timeout = types.Duration(15 * time.Second)
+	configMgr.hosts[0].URLRules = []types.URLRule{{
+		Match:  "/slow/*",
+		Action: types.ActionRender,
+		Render: &types.RenderRuleConfig{Timeout: &ruleTimeout},
+	}}
+
+	tests := []struct {
+		name  string
+		query string
+		want  time.Duration
+	}{
+		{name: "rule override", query: "url=https://example.com/slow/page", want: 45 * time.Second},
+		{name: "host timeout", query: "url=https://example.com/other", want: 15 * time.Second},
+		{name: "explicit timeout wins", query: "url=https://example.com/slow/page&timeout=20s", want: 20 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			orch := &mockOrchestrator{available: true, renderSuccess: true}
+			handler := NewHARRenderHandler(configMgr, orch, zap.NewNop())
+
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.SetRequestURI("/debug/har/render?" + tt.query)
+			ctx.Request.Header.SetMethod("GET")
+			handler.handleHARRender(ctx)
+
+			require.Equal(t, fasthttp.StatusOK, ctx.Response.StatusCode())
+			require.NotNil(t, orch.lastRequest)
+			assert.Equal(t, tt.want, orch.lastRequest.Timeout)
+		})
+	}
 }

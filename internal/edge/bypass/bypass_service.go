@@ -43,22 +43,16 @@ type BypassResponse struct {
 
 // BypassService handles direct HTTP proxying when render services are unavailable
 type BypassService struct {
-	config *config.GlobalBypassConfig
 	client *fasthttp.Client
 	logger *zap.Logger
 }
 
-// NewBypassService creates a new BypassService instance
+// NewBypassService creates a new BypassService instance. Only process-wide settings come from the
+// global config; the timeout and User-Agent are per request (see FetchContent), so the client
+// carries no ReadTimeout/WriteTimeout: fasthttp applies the earlier of a client timeout and the
+// request deadline, which would cap a host-level timeout at the global one.
 func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *BypassService {
-	// Get timeout value (used for both read and write operations)
-	var timeout time.Duration
-	if cfg.Timeout != nil {
-		timeout = time.Duration(*cfg.Timeout)
-	}
-
 	client := &fasthttp.Client{
-		ReadTimeout:    timeout,
-		WriteTimeout:   timeout,
 		ReadBufferSize: bypassReadBufferSize,
 	}
 
@@ -68,16 +62,19 @@ func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *Bypas
 	}
 
 	return &BypassService{
-		config: cfg,
 		client: client,
 		logger: logger,
 	}
 }
 
 // FetchContent fetches content directly from the target URL without rendering.
+// bypassCfg is the request's resolved bypass configuration (global -> host -> URL rule); its
+// UserAgent is sent to the origin and its Timeout is one deadline for writing the request and
+// reading the response. Connecting is bounded by the dialer, not by Timeout: fasthttp hands the
+// request deadline only to its built-in dialer, never to a custom Dial such as ssrfSafeDial.
 // clientHeaders contains safe request headers to forward to the origin.
 // renderKey, when non-empty, is sent as X-Render-Key so the origin can verify the request originated from EdgeComet.
-func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string][]string, renderKey string, logger *zap.Logger) (*BypassResponse, error) {
+func (bs *BypassService) FetchContent(targetURL string, bypassCfg config.ResolvedBypassConfig, clientHeaders map[string][]string, renderKey string, logger *zap.Logger) (*BypassResponse, error) {
 	logger.Info("Using bypass mode", zap.String("url", targetURL))
 
 	req := fasthttp.AcquireRequest()
@@ -87,7 +84,8 @@ func (bs *BypassService) FetchContent(targetURL string, clientHeaders map[string
 
 	req.SetRequestURI(targetURL)
 	req.Header.SetMethod("GET")
-	req.Header.Set("User-Agent", bs.config.UserAgent)
+	req.Header.Set("User-Agent", bypassCfg.UserAgent)
+	req.SetTimeout(bypassCfg.Timeout)
 
 	// Add client request headers (skip User-Agent - always use config value)
 	for name, values := range clientHeaders {

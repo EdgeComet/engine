@@ -93,10 +93,10 @@ func TestCacheReaderIntegration_ScanScatter(t *testing.T) {
 
 	t.Run("two keys among 100k plus neighbors returned on page 1", func(t *testing.T) {
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   110,
-			Cursor:   "0",
-			Limit:    25,
-			StaleTTL: 600,
+			HostID: 110,
+			Cursor: "0",
+			Limit:  25,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Items, 2)
@@ -111,10 +111,10 @@ func TestCacheReaderIntegration_ScanScatter(t *testing.T) {
 			require.Less(t, pages, 100, "pagination did not terminate")
 
 			result, err := cr.ListURLs(context.Background(), CacheListParams{
-				HostID:   111,
-				Cursor:   cursor,
-				Limit:    25,
-				StaleTTL: 600,
+				HostID: 111,
+				Cursor: cursor,
+				Limit:  25,
+				Stale:  StaleWindows{Render: 600, Bypass: 600},
 			})
 			require.NoError(t, err)
 			for _, item := range result.Items {
@@ -160,7 +160,7 @@ func TestCacheReaderIntegration_SummaryScanScatter(t *testing.T) {
 				return now
 			}
 
-			result, err := cr.GetSummary(context.Background(), tc.hostID, 600)
+			result, err := cr.GetSummary(context.Background(), tc.hostID, StaleWindows{Render: 600, Bypass: 600})
 			require.NoError(t, err)
 			require.Greater(t, evals, 1, "walk must span more than one bounded Eval")
 

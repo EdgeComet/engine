@@ -505,7 +505,7 @@ func Test_isCacheStaleServable(t *testing.T) {
 	})
 }
 
-func Test_getStaleTTL(t *testing.T) {
+func TestServableStaleTTL(t *testing.T) {
 	ptrDuration := func(d time.Duration) *types.Duration {
 		td := types.Duration(d)
 		return &td
@@ -560,7 +560,7 @@ func Test_getStaleTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getStaleTTL(tt.expired)
+			result := tt.expired.ServableStaleTTL()
 			assert.Equal(t, tt.expected, result)
 		})
 	}

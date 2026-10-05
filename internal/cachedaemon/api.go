@@ -1090,8 +1090,6 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	staleTTL := d.getStaleTTL(host)
-
 	params := CacheListParams{
 		HostID:            hostID,
 		Cursor:            cursor,
@@ -1124,7 +1122,7 @@ func (d *CacheDaemon) handleCacheURLsAPI(ctx *fasthttp.RequestCtx) {
 		TitleNeq:          titleNeq,
 		TitleNotContains:  titleNotContains,
 		LastBotHitExists:  lastBotHitExists,
-		StaleTTL:          staleTTL,
+		Stale:             d.hostStaleWindows(host),
 	}
 
 	result, err := d.cacheReader.ListURLs(ctx, params)
@@ -1148,9 +1146,7 @@ func (d *CacheDaemon) handleCacheSummaryAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	staleTTL := d.getStaleTTL(host)
-
-	result, err := d.cacheReader.GetSummary(ctx, hostID, staleTTL)
+	result, err := d.cacheReader.GetSummary(ctx, hostID, d.hostStaleWindows(host))
 	if errors.Is(err, errCacheSummaryBudgetExceeded) {
 		httputil.JSONError(ctx, err.Error(), fasthttp.StatusServiceUnavailable)
 		return
@@ -1264,14 +1260,14 @@ func (d *CacheDaemon) handleURLStatusAPI(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
-	staleTTL := d.getStaleTTL(host)
+	stale := staleWindowsFor(d.hostResolver(host).ResolveForURL(rawURL))
 	now := time.Now().UTC().Unix()
 	reqCtx := context.Background()
 
 	// Cache lookup: keep the most recently created entry across all dimensions.
 	var best *dimCacheMeta
 	for _, dimID := range dimensionIDs {
-		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, staleTTL, now)
+		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, stale, now)
 		if !ok {
 			continue
 		}
@@ -1384,13 +1380,13 @@ func (d *CacheDaemon) handleURLEntriesAPI(ctx *fasthttp.RequestCtx) {
 	}
 
 	dimNames := dimensionIDToName(host)
-	staleTTL := d.getStaleTTL(host)
+	stale := staleWindowsFor(d.hostResolver(host).ResolveForURL(rawURL))
 	now := time.Now().UTC().Unix()
 	reqCtx := context.Background()
 
 	entries := make([]URLEntryItem, 0, len(dimensionIDs))
 	for _, dimID := range dimensionIDs {
-		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, staleTTL, now)
+		meta, ok := d.readDimCacheMeta(reqCtx, hostID, dimID, urlHash, stale, now)
 		if !ok {
 			continue
 		}
@@ -1427,8 +1423,8 @@ type dimCacheMeta struct {
 
 // readDimCacheMeta loads cache metadata for a single dimension. Returns false when no
 // entry exists for that dimension. Status (active/stale/expired) is computed from the
-// expiry and the host's stale TTL.
-func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, urlHash uint64, staleTTL, now int64) (*dimCacheMeta, bool) {
+// expiry and the stale window for the entry's source.
+func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, urlHash uint64, stale StaleWindows, now int64) (*dimCacheMeta, bool) {
 	cacheKey := d.keyGenerator.GenerateCacheKey(hostID, dimID, urlHash)
 	metadataKey := d.keyGenerator.GenerateMetadataKey(cacheKey)
 
@@ -1448,6 +1444,7 @@ func (d *CacheDaemon) readDimCacheMeta(ctx context.Context, hostID, dimID int, u
 	expiresAt, _ := strconv.ParseInt(data["expires_at"], 10, 64)
 	size, _ := strconv.ParseInt(data["size"], 10, 64)
 	statusCode, _ := strconv.Atoi(data["status_code"])
+	staleTTL := stale.forSource(data["source"])
 
 	var status string
 	switch {
@@ -1476,7 +1473,7 @@ func (d *CacheDaemon) isFreshEnough(ctx context.Context, hostID int, dim *types.
 	if dim == nil {
 		return false
 	}
-	meta, ok := d.readDimCacheMeta(ctx, hostID, dim.ID, urlHash, 0, now)
+	meta, ok := d.readDimCacheMeta(ctx, hostID, dim.ID, urlHash, StaleWindows{}, now)
 	if !ok {
 		return false
 	}
@@ -1505,17 +1502,7 @@ func recacheAction(dim types.Dimension, mode string) types.URLRuleAction {
 // resolver is per-host, so callers that normalize many URLs (recache, invalidate) build it once
 // and reuse the returned closure across the batch.
 func (d *CacheDaemon) hostURLNormalizer(host *types.Host) func(rawURL string) (string, uint64, error) {
-	egConfig := d.configManager.GetConfig()
-	resolver := config.NewConfigResolver(
-		&egConfig.Render,
-		&egConfig.Bypass,
-		egConfig.TrackingParams,
-		egConfig.CacheSharding,
-		egConfig.BothitRecache,
-		egConfig.Headers,
-		egConfig.Storage.Compression,
-		host,
-	)
+	resolver := d.hostResolver(host)
 
 	return func(rawURL string) (string, uint64, error) {
 		resolved := resolver.ResolveForURL(rawURL)
@@ -1531,6 +1518,54 @@ func (d *CacheDaemon) hostURLNormalizer(host *types.Host) func(rawURL string) (s
 		}
 		return result.NormalizedURL, d.normalizer.Hash(result.NormalizedURL), nil
 	}
+}
+
+// StaleWindows holds, in seconds, how long past expiry the edge serves a render-sourced and a
+// bypass-sourced entry as stale under the current configuration. Zero means never: the strategy is
+// not serve_stale or no stale TTL is set.
+type StaleWindows struct {
+	Render int64
+	Bypass int64
+}
+
+// staleWindowsFor reads both windows from a resolved configuration, the same way the edge decides
+// whether an expired entry is still servable.
+func staleWindowsFor(resolved *config.ResolvedConfig) StaleWindows {
+	return StaleWindows{
+		Render: int64(resolved.Cache.Expired.ServableStaleTTL().Seconds()),
+		Bypass: int64(resolved.Bypass.Cache.Expired.ServableStaleTTL().Seconds()),
+	}
+}
+
+// forSource returns the window for an entry of the given source. An entry without a recognised
+// source is treated as render, the source of every entry written before bypass caching existed.
+func (w StaleWindows) forSource(source string) int64 {
+	if source == cache.SourceBypass {
+		return w.Bypass
+	}
+	return w.Render
+}
+
+// hostResolver builds the host's config resolver against the current edge configuration.
+func (d *CacheDaemon) hostResolver(host *types.Host) *config.ConfigResolver {
+	egConfig := d.configManager.GetConfig()
+	return config.NewConfigResolver(
+		&egConfig.Render,
+		&egConfig.Bypass,
+		egConfig.TrackingParams,
+		egConfig.CacheSharding,
+		egConfig.BothitRecache,
+		egConfig.Headers,
+		egConfig.Storage.Compression,
+		host,
+	)
+}
+
+// hostStaleWindows returns the host-level stale windows. Host-wide views (cache list, summary)
+// classify entries inside a Redis script that cannot match URL rules, so a URL rule's own stale
+// override is not reflected there; the single-URL views resolve per URL instead.
+func (d *CacheDaemon) hostStaleWindows(host *types.Host) StaleWindows {
+	return staleWindowsFor(d.hostResolver(host).ResolveHostLevel())
 }
 
 // normalizeURLForHost normalizes a single rawURL for the host (see hostURLNormalizer).

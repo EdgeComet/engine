@@ -28,7 +28,7 @@ const (
 	minLockTTL    = 30 * time.Second
 
 	// Concurrent render wait timeout calculation
-	concurrentRenderWaitPercent = 0.8 // 80% of host render timeout
+	concurrentRenderWaitPercent = 0.8 // 80% of the resolved render timeout
 	minConcurrentWait           = 5 * time.Second
 	maxConcurrentWait           = 60 * time.Second
 
@@ -418,7 +418,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 			source:       ServedFromRender,
 			cacheSource:  cache.SourceRender,
 			cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
-			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
+			staleTTL:     renderCtx.ResolvedConfig.Cache.Expired.ServableStaleTTL(),
 			cacheEnabled: true,
 			startTime:    hookStart,
 		})
@@ -552,7 +552,7 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 				source:       ServedFromRender,
 				cacheSource:  cache.SourceRender,
 				cacheTTL:     renderCtx.ResolvedConfig.Cache.TTL,
-				staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Cache.Expired),
+				staleTTL:     renderCtx.ResolvedConfig.Cache.Expired.ServableStaleTTL(),
 				cacheEnabled: true, // render cache has no separate Enabled flag
 				startTime:    renderStart,
 				serviceID:    reservation.ServiceID,
@@ -1200,7 +1200,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	// 2. FETCH FROM ORIGIN (cache miss or caching disabled)
-	bypassResp, err := ro.bypassSvc.FetchContent(renderCtx.TargetURL, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
+	bypassResp, err := ro.bypassSvc.FetchContent(renderCtx.TargetURL, renderCtx.ResolvedConfig.Bypass, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		if staleBypassCache != nil {
 			if result, staleErr := ro.serveStaleBypassCache(renderCtx, staleBypassCache, "origin_error"); staleErr == nil {
@@ -1257,7 +1257,7 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 			source:       ServedFromBypass,
 			cacheSource:  cache.SourceBypass,
 			cacheTTL:     renderCtx.ResolvedConfig.Bypass.Cache.TTL,
-			staleTTL:     getStaleTTL(renderCtx.ResolvedConfig.Bypass.Cache.Expired),
+			staleTTL:     renderCtx.ResolvedConfig.Bypass.Cache.Expired.ServableStaleTTL(),
 			cacheEnabled: renderCtx.ResolvedConfig.Bypass.Cache.Enabled,
 			startTime:    startTime,
 		})
@@ -1336,15 +1336,11 @@ func (ro *RenderOrchestrator) ServeUnmatchedBypass(renderCtx *edgectx.RenderCont
 }
 
 func isCacheStaleServable(cached *cache.CacheMetadata, expired types.CacheExpiredConfig, statusCodes []int) bool {
-	if expired.Strategy != types.ExpirationStrategyServeStale {
+	staleTTL := expired.ServableStaleTTL()
+	if staleTTL == 0 {
 		return false
 	}
 
-	if expired.StaleTTL == nil {
-		return false
-	}
-
-	staleTTL := time.Duration(*expired.StaleTTL)
 	if !cached.IsStale(staleTTL) {
 		return false
 	}

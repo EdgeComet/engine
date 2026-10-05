@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/edgecomet/engine/internal/common/configtypes"
+	"github.com/edgecomet/engine/internal/edge/validate"
 	"github.com/edgecomet/engine/pkg/types"
 	"go.uber.org/zap"
 )
@@ -24,6 +25,11 @@ func PrepareHost(host *types.Host, globalConfig *configtypes.EgConfig, contextPa
 	}
 	if logger == nil {
 		return fmt.Errorf("logger is required")
+	}
+
+	// Before Step 6 sorts url_rules, so an error's rule index matches the configuration order.
+	if err := validate.ValidateHostTimeouts(host); err != nil {
+		return err
 	}
 
 	// Track if dimensions were inherited (already expanded and compiled at global level)

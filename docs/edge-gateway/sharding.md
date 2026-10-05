@@ -21,7 +21,7 @@ Secure internal communication by:
 
 ## Distribution strategies
 
-EdgeComet supports three strategies for selecting which instances store each cache entry. Configure with `cache_sharding.distribution_strategy`.
+EdgeComet supports three strategies for selecting which instances store each cache entry. Configure with `cache_sharding.distribution_strategy` in `edge-gateway.yaml`. The strategy is global only: each Edge Gateway builds one distributor at startup, and a host or URL pattern cannot set it.
 
 ### hash_modulo (default)
 
@@ -129,7 +129,7 @@ internal:
 
 ## Configuration example
 
-All sharding settings can be overridden at three levels: global, host, and URL pattern.
+Every sharding setting except `distribution_strategy` can be overridden at three levels: global, host, and URL pattern. `distribution_strategy` is global only, and a host or URL pattern that sets it fails validation.
 
 ::: code-group
 

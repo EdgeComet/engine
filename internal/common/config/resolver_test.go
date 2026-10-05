@@ -1357,3 +1357,32 @@ func TestResolver_BypassCacheExpiredMerge(t *testing.T) {
 		assert.Nil(t, resolved.Bypass.Cache.Expired.StaleTTL)
 	})
 }
+
+// ResolveHostLevel is what a URL matching no rule gets; ResolveForURL still applies the rule.
+func TestResolver_ResolveHostLevelIgnoresURLRules(t *testing.T) {
+	host := buildTestHost()
+	host.Bypass = &types.BypassConfig{UserAgent: "HostUA/1.0", Timeout: ptrDuration(10 * time.Second)}
+	host.URLRules = []types.URLRule{{
+		Match:  "/slow/*",
+		Action: types.ActionRender,
+		Render: &types.RenderRuleConfig{Timeout: ptrDuration(60 * time.Second)},
+		Bypass: &types.BypassRuleConfig{UserAgent: "RuleUA/1.0", Timeout: ptrDuration(20 * time.Second)},
+	}}
+	require.NoError(t, PrepareHost(host, nil, "test", testLogger()))
+
+	resolver := NewConfigResolver(buildTestGlobalRender(), buildTestGlobalBypass(), nil, nil, nil, nil, types.CompressionSnappy, host)
+
+	hostLevel := resolver.ResolveHostLevel()
+	assert.Equal(t, types.ActionRender, hostLevel.Action)
+	assert.Empty(t, hostLevel.MatchedRuleID)
+	assert.Equal(t, 30*time.Second, hostLevel.Render.Timeout)
+	assert.Equal(t, "HostUA/1.0", hostLevel.Bypass.UserAgent)
+	assert.Equal(t, 10*time.Second, hostLevel.Bypass.Timeout)
+	assert.Equal(t, time.Hour, hostLevel.Cache.Expired.ServableStaleTTL(), "global stale window, inherited by the host")
+
+	forURL := resolver.ResolveForURL("https://example.com/slow/page")
+	assert.NotEmpty(t, forURL.MatchedRuleID)
+	assert.Equal(t, 60*time.Second, forURL.Render.Timeout)
+	assert.Equal(t, "RuleUA/1.0", forURL.Bypass.UserAgent)
+	assert.Equal(t, 20*time.Second, forURL.Bypass.Timeout)
+}

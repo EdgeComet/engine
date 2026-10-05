@@ -54,6 +54,15 @@ const (
 	ExpirationStrategyDelete     = "delete"      // Delete expired cache and force fresh render
 )
 
+// ServableStaleTTL returns how long past expiry an entry may still be served: the stale TTL
+// under serve_stale, zero under any other strategy or when no stale TTL is set.
+func (c CacheExpiredConfig) ServableStaleTTL() time.Duration {
+	if c.Strategy != ExpirationStrategyServeStale || c.StaleTTL == nil {
+		return 0
+	}
+	return time.Duration(*c.StaleTTL)
+}
+
 // Cache TTL constants
 const (
 	NoCacheTTL = 0 // Disables caching - content always fetched fresh

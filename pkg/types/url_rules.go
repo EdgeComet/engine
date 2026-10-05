@@ -131,7 +131,6 @@ type BypassCacheConfig struct {
 
 // BypassConfig defines bypass behavior configuration (can be global, host-level, or pattern-level)
 type BypassConfig struct {
-	Enabled   *bool              `yaml:"enabled,omitempty" json:"enabled,omitempty"` // Enable/disable bypass mode (pointer for override detection)
 	Timeout   *Duration          `yaml:"timeout,omitempty" json:"timeout,omitempty"` // Timeout for bypass requests
 	UserAgent string             `yaml:"user_agent" json:"user_agent"`
 	Cache     *BypassCacheConfig `yaml:"cache,omitempty" json:"cache,omitempty"` // Bypass response caching configuration
@@ -219,13 +218,14 @@ type CacheShardingConfig struct {
 	ReplicateOnPull      *bool  `yaml:"replicate_on_pull,omitempty" json:"replicate_on_pull,omitempty"`         // Store pulled cache locally (pointer for override detection)
 }
 
-// CacheShardingBehaviorConfig contains behavioral sharding settings that can be overridden per host/pattern
+// CacheShardingBehaviorConfig contains behavioral sharding settings that can be overridden per host/pattern.
+// distribution_strategy is deliberately absent: the sharding manager builds one distributor from the
+// global setting at startup, so the strategy is global-only.
 type CacheShardingBehaviorConfig struct {
-	Enabled              *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`                             // Enable/disable sharding (pointer for override detection)
-	ReplicationFactor    *int   `yaml:"replication_factor,omitempty" json:"replication_factor,omitempty"`       // Number of EG instances to replicate cache to (pointer for override detection)
-	DistributionStrategy string `yaml:"distribution_strategy,omitempty" json:"distribution_strategy,omitempty"` // hash_modulo | random | primary_only
-	PushOnRender         *bool  `yaml:"push_on_render,omitempty" json:"push_on_render,omitempty"`               // Push to replicas after render (pointer for override detection)
-	ReplicateOnPull      *bool  `yaml:"replicate_on_pull,omitempty" json:"replicate_on_pull,omitempty"`         // Store pulled cache locally (pointer for override detection)
+	Enabled           *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`                       // Enable/disable sharding (pointer for override detection)
+	ReplicationFactor *int  `yaml:"replication_factor,omitempty" json:"replication_factor,omitempty"` // Number of EG instances to replicate cache to (pointer for override detection)
+	PushOnRender      *bool `yaml:"push_on_render,omitempty" json:"push_on_render,omitempty"`         // Push to replicas after render (pointer for override detection)
+	ReplicateOnPull   *bool `yaml:"replicate_on_pull,omitempty" json:"replicate_on_pull,omitempty"`   // Store pulled cache locally (pointer for override detection)
 }
 
 // GetMatchPatterns returns URL patterns as string slice (zero-allocation after unmarshaling)

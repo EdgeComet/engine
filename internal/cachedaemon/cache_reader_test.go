@@ -63,10 +63,10 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		}
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    3,
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  3,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 3)
@@ -104,7 +104,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:       "0",
 			Limit:        100,
 			StatusFilter: "active",
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 3)
@@ -138,7 +138,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:          "0",
 			Limit:           100,
 			DimensionFilter: "mobile",
-			StaleTTL:        600,
+			Stale:           StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -170,7 +170,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:      "0",
 			Limit:       100,
 			URLContains: "products",
-			StaleTTL:    600,
+			Stale:       StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -206,12 +206,12 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			SizeMin:  100,
-			SizeMax:  500,
-			StaleTTL: 600,
+			HostID:  1,
+			Cursor:  "0",
+			Limit:   100,
+			SizeMin: 100,
+			SizeMax: 500,
+			Stale:   StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -246,7 +246,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:       100,
 			CacheAgeMin: 3600,
 			CacheAgeMax: 10000,
-			StaleTTL:    600,
+			Stale:       StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -290,7 +290,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:       100,
 			CacheAgeMin: 1800,
 			CacheAgeMax: 7200,
-			StaleTTL:    600,
+			Stale:       StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -324,7 +324,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:           "0",
 			Limit:            100,
 			StatusCodeFilter: "200",
-			StaleTTL:         600,
+			Stale:            StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -356,7 +356,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:       "0",
 			Limit:        100,
 			SourceFilter: "render",
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -390,7 +390,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:            "0",
 			Limit:             100,
 			IndexStatusFilter: "1",
-			StaleTTL:          600,
+			Stale:             StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -435,7 +435,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			StatusFilter:    "active",
 			DimensionFilter: "mobile",
 			SourceFilter:    "render",
-			StaleTTL:        600,
+			Stale:           StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -458,20 +458,20 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		}
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    5,
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  5,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 5)
 
 		// Request all items with large limit
 		allResult, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, allResult.Items, 10)
@@ -502,10 +502,10 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		cursor := "0"
 		for pages := 0; pages < 100; pages++ {
 			result, err := cr.ListURLs(context.Background(), CacheListParams{
-				HostID:   1,
-				Cursor:   cursor,
-				Limit:    100,
-				StaleTTL: 600,
+				HostID: 1,
+				Cursor: cursor,
+				Limit:  100,
+				Stale:  StaleWindows{Render: 600, Bypass: 600},
 			})
 			require.NoError(t, err)
 			for _, item := range result.Items {
@@ -537,7 +537,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:       "0",
 			Limit:        100,
 			SourceFilter: "bypass",
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Empty(t, result.Items)
@@ -558,10 +558,10 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		require.Len(t, result.Items, 1)
@@ -602,11 +602,11 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			Title:    "product",
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			Title:  "product",
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -629,11 +629,11 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			Title:    "uppercase",
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			Title:  "uppercase",
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -674,7 +674,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:        100,
 			CreatedAtMin: now - 8000,
 			CreatedAtMax: now - 1000,
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -718,7 +718,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:        100,
 			ExpiresAtMin: now + 3600,
 			ExpiresAtMax: now + 50000,
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -753,7 +753,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:         100,
 			LastAccessMin: now - 600,
 			LastAccessMax: now,
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -795,7 +795,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:        "0",
 			Limit:         100,
 			LastBotHitMin: now - 3600,
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -828,7 +828,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:        "0",
 			Limit:         100,
 			LastBotHitMax: now + 9999,
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -873,7 +873,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Title:        "product",
 			CreatedAtMin: now - 5000,
 			CreatedAtMax: now - 1000,
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -903,10 +903,10 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			StaleTTL: 0,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			Stale:  StaleWindows{Render: 0, Bypass: 0},
 		})
 		require.NoError(t, err)
 
@@ -951,7 +951,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:        "0",
 			Limit:         100,
 			URLStartsWith: "https://example.com/prod",
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -983,7 +983,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:      "0",
 			Limit:       100,
 			URLEndsWith: ".pdf",
-			StaleTTL:    600,
+			Stale:       StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1019,11 +1019,11 @@ func TestCacheReader_ListURLs(t *testing.T) {
 		})
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    100,
-			URLNeq:   "https://example.com/page2",
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  100,
+			URLNeq: "https://example.com/page2",
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1065,7 +1065,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:         "0",
 			Limit:          100,
 			URLNotContains: "admin",
-			StaleTTL:       600,
+			Stale:          StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1108,7 +1108,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:          "0",
 			Limit:           100,
 			TitleStartsWith: "getting",
-			StaleTTL:        600,
+			Stale:           StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1153,7 +1153,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:        "0",
 			Limit:         100,
 			TitleEndsWith: "guide",
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1198,7 +1198,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:   "0",
 			Limit:    100,
 			TitleNeq: "about",
-			StaleTTL: 600,
+			Stale:    StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1243,7 +1243,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:           "0",
 			Limit:            100,
 			TitleNotContains: "product",
-			StaleTTL:         600,
+			Stale:            StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1285,7 +1285,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:           "0",
 			Limit:            100,
 			LastBotHitExists: "true",
-			StaleTTL:         600,
+			Stale:            StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1329,7 +1329,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:           "0",
 			Limit:            100,
 			LastBotHitExists: "false",
-			StaleTTL:         600,
+			Stale:            StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1353,7 +1353,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Cursor:        "0",
 			Limit:         100,
 			URLStartsWith: "https://example.com/products",
-			StaleTTL:      600,
+			Stale:         StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1396,7 +1396,7 @@ func TestCacheReader_ListURLs(t *testing.T) {
 			Limit:            100,
 			URLStartsWith:    "https://example.com/products",
 			TitleNotContains: "running",
-			StaleTTL:         600,
+			Stale:            StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 1)
@@ -1434,10 +1434,10 @@ func TestCacheReader_ListURLs_ChunkedScan(t *testing.T) {
 		populateMetadataHash(mr, 2, 1, hashLabel("small2"), activeEntry("https://small.example.com/two"))
 
 		result, err := cr.ListURLs(context.Background(), CacheListParams{
-			HostID:   2,
-			Cursor:   "0",
-			Limit:    25,
-			StaleTTL: 600,
+			HostID: 2,
+			Cursor: "0",
+			Limit:  25,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
@@ -1473,7 +1473,7 @@ func TestCacheReader_ListURLs_ChunkedScan(t *testing.T) {
 			Cursor:       "0",
 			Limit:        5,
 			SourceFilter: "bypass",
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Empty(t, result.Items)
@@ -1491,10 +1491,10 @@ func TestCacheReader_ListURLs_ChunkedScan(t *testing.T) {
 		cancel()
 
 		_, err := cr.ListURLs(ctx, CacheListParams{
-			HostID:   1,
-			Cursor:   "0",
-			Limit:    25,
-			StaleTTL: 600,
+			HostID: 1,
+			Cursor: "0",
+			Limit:  25,
+			Stale:  StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.ErrorIs(t, err, context.Canceled)
 	})
@@ -1528,7 +1528,7 @@ func TestCacheReader_ListURLs_ChunkedScan(t *testing.T) {
 			Cursor:       "0",
 			Limit:        limit,
 			SourceFilter: "bypass",
-			StaleTTL:     600,
+			Stale:        StaleWindows{Render: 600, Bypass: 600},
 		})
 		require.NoError(t, err)
 		assert.Greater(t, len(result.Items), limit, "page should overshoot the limit at a batch boundary")
@@ -1550,7 +1550,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 	t.Run("counts active stale expired correctly", func(t *testing.T) {
 		cr, mr := setupTestCacheReader(t)
 
-		staleTTL := int64(600)
+		stale := StaleWindows{Render: 600, Bypass: 600}
 
 		// 60 active entries
 		for i := 0; i < 60; i++ {
@@ -1582,7 +1582,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, staleTTL)
+		result, err := cr.GetSummary(context.Background(), 1, stale)
 		require.NoError(t, err)
 		assert.Equal(t, 100, result.TotalUrls)
 		assert.Equal(t, 60, result.ActiveCount)
@@ -1602,7 +1602,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 600, Bypass: 600})
 		require.NoError(t, err)
 		assert.Equal(t, int64(10000), result.TotalSize)
 	})
@@ -1631,7 +1631,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 600, Bypass: 600})
 		require.NoError(t, err)
 		assert.Equal(t, 40, result.ByDimension["mobile"])
 		assert.Equal(t, 60, result.ByDimension["desktop"])
@@ -1652,7 +1652,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 			})
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 0)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 0, Bypass: 0})
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.StaleCount)
 		assert.Equal(t, 5, result.ExpiredCount)
@@ -1661,7 +1661,7 @@ func TestCacheReader_GetSummary(t *testing.T) {
 	t.Run("empty host returns all zeros", func(t *testing.T) {
 		cr, _ := setupTestCacheReader(t)
 
-		result, err := cr.GetSummary(context.Background(), 999, 600)
+		result, err := cr.GetSummary(context.Background(), 999, StaleWindows{Render: 600, Bypass: 600})
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.TotalUrls)
 		assert.Equal(t, 0, result.ActiveCount)
@@ -1714,7 +1714,7 @@ func TestCacheReader_GetSummary_Chunked(t *testing.T) {
 			return base
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 600, Bypass: 600})
 		require.NoError(t, err)
 		require.Greater(t, nowCalls, 1, "fixture must span more than one chunk")
 
@@ -1741,7 +1741,7 @@ func TestCacheReader_GetSummary_Chunked(t *testing.T) {
 			return base.Add(cacheSummaryTimeBudget + time.Second)
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 600, Bypass: 600})
 		require.ErrorIs(t, err, errCacheSummaryBudgetExceeded)
 		assert.Nil(t, result)
 	})
@@ -1761,8 +1761,82 @@ func TestCacheReader_GetSummary_Chunked(t *testing.T) {
 			return base
 		}
 
-		result, err := cr.GetSummary(context.Background(), 1, 600)
+		result, err := cr.GetSummary(context.Background(), 1, StaleWindows{Render: 600, Bypass: 600})
 		require.Error(t, err)
 		assert.Nil(t, result)
 	})
+}
+
+// An expired entry is stale only within the window of its own source. Before, one render-derived
+// TTL classified every entry, so a bypass entry was labelled by the render configuration.
+func TestCacheReader_StaleWindowFollowsEntrySource(t *testing.T) {
+	now := time.Now().Unix()
+
+	populate := func(mr *miniredis.Miniredis) {
+		// All three expired 300s ago; the third predates the source field.
+		for label, source := range map[string]string{"render": "render", "bypass": "bypass", "nosource": ""} {
+			fields := map[string]string{
+				"url":         "https://example.com/" + label,
+				"dimension":   "desktop",
+				"size":        "100",
+				"created_at":  fmt.Sprintf("%d", now-4000),
+				"expires_at":  fmt.Sprintf("%d", now-300),
+				"status_code": "200",
+			}
+			if source != "" {
+				fields["source"] = source
+			}
+			populateMetadataHash(mr, 1, 1, hashLabel(label), fields)
+		}
+	}
+
+	tests := []struct {
+		name       string
+		stale      StaleWindows
+		wantStatus map[string]string // url suffix -> status
+	}{
+		{
+			name:       "only render entries serve stale",
+			stale:      StaleWindows{Render: 600, Bypass: 0},
+			wantStatus: map[string]string{"/render": "stale", "/bypass": "expired", "/nosource": "stale"},
+		},
+		{
+			name:       "only bypass entries serve stale",
+			stale:      StaleWindows{Render: 0, Bypass: 600},
+			wantStatus: map[string]string{"/render": "expired", "/bypass": "stale", "/nosource": "expired"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name+"/list", func(t *testing.T) {
+			cr, mr := setupTestCacheReader(t)
+			populate(mr)
+
+			result, err := cr.ListURLs(context.Background(), CacheListParams{HostID: 1, Cursor: "0", Limit: 10, Stale: tt.stale})
+			require.NoError(t, err)
+			require.Len(t, result.Items, 3)
+			for _, item := range result.Items {
+				suffix := strings.TrimPrefix(item.URL, "https://example.com")
+				assert.Equal(t, tt.wantStatus[suffix], item.Status, "status of %s", suffix)
+			}
+		})
+
+		t.Run(tt.name+"/summary", func(t *testing.T) {
+			cr, mr := setupTestCacheReader(t)
+			populate(mr)
+
+			wantStale := 0
+			for _, status := range tt.wantStatus {
+				if status == "stale" {
+					wantStale++
+				}
+			}
+
+			result, err := cr.GetSummary(context.Background(), 1, tt.stale)
+			require.NoError(t, err)
+			assert.Equal(t, 3, result.TotalUrls)
+			assert.Equal(t, wantStale, result.StaleCount)
+			assert.Equal(t, 3-wantStale, result.ExpiredCount)
+		})
+	}
 }

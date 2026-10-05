@@ -672,15 +672,3 @@ func (d *CacheDaemon) emitPrecacheDrop(entry InternalQueueEntry, errorType, erro
 		ErrorMessage: errorMessage,
 	})
 }
-
-// getStaleTTL resolves the stale TTL in seconds from host config -> global config -> 0
-func (d *CacheDaemon) getStaleTTL(host *types.Host) int64 {
-	if host.Render.Cache != nil && host.Render.Cache.Expired != nil && host.Render.Cache.Expired.StaleTTL != nil {
-		return int64(host.Render.Cache.Expired.StaleTTL.ToDuration().Seconds())
-	}
-	egConfig := d.configManager.GetConfig()
-	if egConfig.Render.Cache.Expired != nil && egConfig.Render.Cache.Expired.StaleTTL != nil {
-		return int64(egConfig.Render.Cache.Expired.StaleTTL.ToDuration().Seconds())
-	}
-	return 0
-}

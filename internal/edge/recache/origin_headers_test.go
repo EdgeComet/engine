@@ -57,7 +57,6 @@ func stampBypassService() *bypass.BypassService {
 	// httptest listens on loopback, which the SSRF-safe dialer refuses by design.
 	ssrfOff := false
 	return bypass.NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 }

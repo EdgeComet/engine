@@ -293,7 +293,6 @@ func localOriginBypassService() *RecacheService {
 		logger:     zap.NewNop(),
 		cacheCoord: &orchestrator.CacheCoordinator{},
 		bypassSvc: bypass.NewBypassService(&config.GlobalBypassConfig{
-			UserAgent:      "EdgeCometTest/1.0",
 			SSRFProtection: &ssrfDisabled,
 		}, zap.NewNop()),
 	}

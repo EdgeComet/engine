@@ -432,7 +432,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("%w: bypass cache TTL is 0", ErrRecacheSkipped)
 	}
 
-	bypassResp, err := rs.bypassSvc.FetchContent(url, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
+	bypassResp, err := rs.bypassSvc.FetchContent(url, renderCtx.ResolvedConfig.Bypass, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
 			fmt.Sprintf("bypass fetch failed: %v", err)).withCause(err)

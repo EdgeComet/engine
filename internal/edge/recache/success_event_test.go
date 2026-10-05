@@ -167,7 +167,6 @@ func TestProcessBypassRecache_CacheableNon200EmitsSuccessRow(t *testing.T) {
 	// httptest listens on loopback, which the SSRF-safe dialer refuses by design.
 	ssrfProtection := false
 	rs.bypassSvc = bypass.NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfProtection,
 	}, zap.NewNop())
 
@@ -234,7 +233,6 @@ func TestProcessBypassRecache_RedirectEmitsTargetAndStoresLocation(t *testing.T)
 
 	ssrfProtection := false
 	rs.bypassSvc = bypass.NewBypassService(&config.GlobalBypassConfig{
-		UserAgent:      "EdgeCometTest/1.0",
 		SSRFProtection: &ssrfProtection,
 	}, zap.NewNop())
 

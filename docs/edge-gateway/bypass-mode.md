@@ -57,7 +57,7 @@ url_rules:
 
 Bypass mode has three configuration options:
 
-- `timeout` - Request timeout for fetching from origin (read and write operations)
+- `timeout` - One deadline covering sending the request to the origin and reading its full response. Establishing the connection is bounded separately (10s with SSRF protection on). Must be positive and must not exceed `server.timeout`
 - `user_agent` - User-Agent string sent to origin servers
 - `cache` - Bypass response caching configuration (enabled, ttl, status_codes)
 

@@ -36,12 +36,14 @@ func (lc *LockCoordinator) AcquireLock(renderCtx *edgectx.RenderContext) (bool, 
 	lockCtx, cancel := context.WithTimeout(context.Background(), redisLockOperationTimeout)
 	defer cancel()
 
-	// Calculate lock TTL based on this host's render timeout
-	lockTTL := lc.CalculateLockTTL(time.Duration(renderCtx.Host.Render.Timeout))
+	// Size the lock from the timeout this render actually runs with (a URL rule can override the
+	// host's), or the lock expires mid-render and a second request starts a duplicate render.
+	renderTimeout := renderCtx.ResolvedConfig.Render.Timeout
+	lockTTL := lc.CalculateLockTTL(renderTimeout)
 
 	renderCtx.Logger.Debug("Attempting to acquire render lock",
 		zap.Duration("lock_ttl", lockTTL),
-		zap.Duration("host_render_timeout", time.Duration(renderCtx.Host.Render.Timeout)))
+		zap.Duration("render_timeout", renderTimeout))
 
 	acquired, err := lc.metadata.AcquireLock(lockCtx, renderCtx.LockKey, lockTTL)
 	// Uses independent context prevents inconsistent lock state
@@ -71,8 +73,8 @@ func (lc *LockCoordinator) WaitForConcurrentRender(
 	cacheCoord *CacheCoordinator,
 	metricsCollector *metrics.MetricsCollector,
 ) (WaitResult, error) {
-	// Calculate wait timeout as 80% of host's render timeout
-	baseTimeout := time.Duration(renderCtx.Host.Render.Timeout)
+	// Calculate wait timeout as 80% of the resolved render timeout
+	baseTimeout := renderCtx.ResolvedConfig.Render.Timeout
 	waitTimeout := time.Duration(float64(baseTimeout) * concurrentRenderWaitPercent)
 
 	// Apply min/max constraints
@@ -85,7 +87,7 @@ func (lc *LockCoordinator) WaitForConcurrentRender(
 
 	renderCtx.Logger.Info("Lock not acquired, waiting for concurrent render to complete",
 		zap.Duration("wait_timeout", waitTimeout),
-		zap.Duration("host_render_timeout", baseTimeout),
+		zap.Duration("render_timeout", baseTimeout),
 		zap.Duration("poll_interval", concurrentRenderPollInterval))
 
 	// Poll for cache availability within timeout window

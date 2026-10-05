@@ -429,7 +429,7 @@ cache_sharding:
   # Default: 2
   replication_factor: 2
 
-  # Distribution strategy
+  # Distribution strategy (global only; hosts and URL patterns cannot override it)
   # Options: "hash_modulo", "random", "primary_only"
   # Default: "hash_modulo"
   distribution_strategy: "hash_modulo"
