@@ -299,7 +299,9 @@ var _ = Describe("Cache Reader", func() {
 				})
 			}
 
-			// 2 stale entries (expired but within stale TTL of 60s)
+			// 2 stale entries (expired but within the render stale TTL of 60s). Render-sourced:
+			// the suite gives only the render cache a stale window, so an expired bypass entry
+			// is not servable and counts as expired.
 			for i := 0; i < 2; i++ {
 				populateCacheEntry(testEnv.MiniRedis, testHostID, 1, hashLabel(fmt.Sprintf("sumstale%d", i)), map[string]string{
 					"url":         fmt.Sprintf("https://example.com/stale-%d", i),
@@ -308,7 +310,7 @@ var _ = Describe("Cache Reader", func() {
 					"expires_at":  strconv.FormatInt(now-10, 10),
 					"size":        "2000",
 					"status_code": "200",
-					"source":      "bypass",
+					"source":      "render",
 				})
 			}
 
