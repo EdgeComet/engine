@@ -1,6 +1,7 @@
 package recache_test
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -210,6 +211,65 @@ var _ = Describe("Scheduler Processing", func() {
 				size, _ := testEnv.GetZSETSize("recache:1:autorecache")
 				return size
 			}, 3*time.Second, 100*time.Millisecond).Should(Equal(int64(0)))
+		})
+	})
+
+	Context("Priority under render-service starvation", func() {
+		It("parks at most max_concurrent entries and dispatches a late high entry first", func() {
+			const (
+				maxConcurrent = 5
+				normalCount   = 20
+				highURL       = "https://example.com/starved-high"
+			)
+
+			// Remove the mock RS so the render budget is zero. Dimension 1 renders, so
+			// pulled entries park in the internal queue instead of dispatching.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			Expect(testEnv.RedisClient.Del(ctx, "service:render:rs-1").Err()).To(Succeed())
+			Expect(testEnv.RedisClient.HDel(ctx, "services:render:list", "rs-1").Err()).To(Succeed())
+			Eventually(func() int {
+				return testEnv.GetRSCapacityStatus().TotalFreeTabs
+			}, 3*time.Second, 100*time.Millisecond).Should(Equal(0))
+
+			score := float64(time.Now().Unix())
+			for i := 0; i < normalCount; i++ {
+				Expect(addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "normal",
+					fmt.Sprintf("https://example.com/starved-normal-%d", i), 1, score)).To(Succeed())
+			}
+
+			// Assert on the Redis backlog rather than the internal queue size: every gate
+			// pass empties the internal queue for a Redis round trip before re-enqueueing
+			// what it defers, so a size sample can briefly read low.
+			Eventually(testEnv.GetInternalQueueSize, 3*time.Second, 50*time.Millisecond).
+				Should(Equal(maxConcurrent))
+			Consistently(func() int64 {
+				size, _ := testEnv.GetZSETSize("recache:1:normal")
+				return size
+			}, time.Second, 100*time.Millisecond).Should(Equal(int64(normalCount-maxConcurrent)),
+				"a starved host must not keep pulling its backlog into the internal queue")
+
+			Expect(addToRecacheZSET(testEnv.RedisClient, testEnv.TestHostID, "high", highURL, 1, score)).To(Succeed())
+			Eventually(func() int64 {
+				size, _ := testEnv.GetZSETSize("recache:1:high")
+				return size
+			}, 3*time.Second, 50*time.Millisecond).Should(Equal(int64(0)),
+				"waiting normal entries must not keep the high entry in Redis")
+			Eventually(testEnv.GetInternalQueueSize, 3*time.Second, 50*time.Millisecond).
+				Should(Equal(maxConcurrent + 1))
+
+			// One free tab: the first entry through the render gate must be the high one,
+			// although every waiting normal entry was pulled before it.
+			Expect(testEnv.AddMockRSToRegistry("rs-1", 1, 0)).To(Succeed())
+			received, requests := testEnv.DrainChannelUntilCount(1, 5*time.Second)
+			Expect(received).To(Equal(1))
+			Expect(requests[0].URL).To(Equal(highURL))
+
+			// Open the budget so the normal backlog drains and nothing stays parked.
+			Expect(testEnv.AddMockRSToRegistry("rs-1", 100, 0)).To(Succeed())
+			received, _ = testEnv.DrainChannelUntilCount(normalCount, 10*time.Second)
+			Expect(received).To(Equal(normalCount))
+			Eventually(testEnv.GetInternalQueueSize, 3*time.Second, 50*time.Millisecond).Should(Equal(0))
 		})
 	})
 })

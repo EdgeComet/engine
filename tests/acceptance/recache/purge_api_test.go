@@ -129,15 +129,23 @@ var _ = Describe("Queue Purge API", func() {
 	Context("Permanence across a daemon restart", func() {
 		It("hands back only the internal-queue residue, never the purged bulk", func() {
 			const (
-				residueCount = 20
+				residueCount = 5 // the fixture's recache.max_concurrent
 				bulkPerQueue = 40
 			)
+
+			// Start from a daemon with an empty internal queue and no slot held. An entry
+			// an earlier spec left parked there, or a dispatch still in flight, shrinks the
+			// residue pull below and would come back through the shutdown flush.
+			Expect(testEnv.RestartDaemonWithCleanRedis()).To(Succeed())
+			Expect(testEnv.PauseScheduler()).To(Succeed())
 
 			// Manufacture residue the way an RS-starved render host does. No render
 			// service is registered, so these entries clear the pull gate, fail the
 			// render-budget gate, and sit in the internal queue indefinitely: that
 			// gate re-queues without incrementing a retry counter, so nothing ever
 			// discards them. This is exactly the state the shutdown flush writes back.
+			// The pull gate counts entries already waiting, so max_concurrent is the
+			// most residue one priority can build.
 			seedLabelled("normal", "residue", residueCount)
 
 			Expect(testEnv.ResumeScheduler()).To(Succeed())

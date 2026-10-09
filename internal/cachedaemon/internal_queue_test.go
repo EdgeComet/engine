@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/edgecomet/engine/internal/common/redis"
 )
 
 func TestInternalQueue_BasicOperations(t *testing.T) {
@@ -242,6 +244,27 @@ func TestInternalQueue_FIFO_Order(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		assert.Equal(t, i, result[i].HostID, "Expected FIFO order")
 	}
+}
+
+func TestInternalQueue_WaitingCountsByHostID(t *testing.T) {
+	now := time.Now().UTC()
+	queue := NewInternalQueue(10)
+	entries := []InternalQueueEntry{
+		{HostID: 1, Priority: redis.PriorityHigh},
+		{HostID: 1, Priority: redis.PriorityNormal},
+		{HostID: 1, Priority: ""},                                                               // ranks as normal
+		{HostID: 1, Priority: redis.PriorityAutorecache, NextRetryAfter: now.Add(-time.Second)}, // backoff over
+		{HostID: 1, Priority: redis.PriorityNormal, NextRetryAfter: now.Add(time.Minute)},       // still in backoff
+		{HostID: 2, Priority: redis.PriorityHigh, NextRetryAfter: now.Add(time.Minute)},
+	}
+	for _, e := range entries {
+		require.True(t, queue.Enqueue(e))
+	}
+
+	counts := queue.waitingCountsByHostID(now)
+	assert.Equal(t, waitingCounts{rankHigh: 1, rankNormal: 2, rankAutorecache: 1}, counts[1])
+	_, ok := counts[2]
+	assert.False(t, ok, "a host whose entries are all in backoff has nothing waiting")
 }
 
 func TestInternalQueue_CountByHostID(t *testing.T) {

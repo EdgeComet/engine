@@ -233,9 +233,9 @@ pause is not sufficient on its own - take the origin out of rotation.
 #### Known limitation: a render host starved of render-service capacity
 
 Pause does not stop origin requests from a render host that has no render-service capacity
-to dispatch into. Such a host accumulates entries that were already pulled but cannot be
-sent, and those entries neither dispatch nor age out. Pausing the host stops further pulls,
-but the accumulated entries remain. The moment render-service capacity returns they can
+to dispatch into. Such a host holds entries that were already pulled but cannot be sent, up
+to `recache.max_concurrent` per priority, and those entries neither dispatch nor age out.
+Pausing the host stops further pulls, but the held entries remain. The moment render-service capacity returns they can
 burst out to the origin - possibly while the host is still nominally paused.
 
 This matters because it correlates badly: a host whose renders are backing up is exactly

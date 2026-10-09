@@ -3,7 +3,42 @@ package cachedaemon
 import (
 	"sync"
 	"time"
+
+	"github.com/edgecomet/engine/internal/common/redis"
 )
+
+// Dispatch ranks of the recache priorities: a lower rank dispatches first.
+const (
+	rankHigh = iota
+	rankNormal
+	rankAutorecache
+	rankCount
+)
+
+// priorityRank maps an entry's source priority to its dispatch rank. An entry without a
+// priority ranks as normal, the same fallback flushInternalQueueToRedis applies.
+func priorityRank(priority string) int {
+	switch priority {
+	case redis.PriorityHigh:
+		return rankHigh
+	case redis.PriorityAutorecache:
+		return rankAutorecache
+	default:
+		return rankNormal
+	}
+}
+
+// waitingCounts holds one host's entries that are ready to dispatch, indexed by dispatch rank.
+type waitingCounts [rankCount]int
+
+// atOrAbove returns how many waiting entries rank the same as priority or ahead of it.
+func (w waitingCounts) atOrAbove(priority string) int {
+	n := 0
+	for rank := 0; rank <= priorityRank(priority); rank++ {
+		n += w[rank]
+	}
+	return n
+}
 
 // InternalQueueEntry represents a recache task in the daemon's internal queue
 type InternalQueueEntry struct {
@@ -23,6 +58,11 @@ type InternalQueueEntry struct {
 	// happened last rather than the diagnosis an EG actually made.
 	LastErrorType    string
 	LastErrorMessage string
+}
+
+// inBackoff reports whether the entry is still waiting out a retry delay at now.
+func (e InternalQueueEntry) inBackoff(now time.Time) bool {
+	return !e.NextRetryAfter.IsZero() && now.Before(e.NextRetryAfter)
 }
 
 // InternalQueue is a thread-safe in-memory queue for recache tasks
@@ -106,6 +146,25 @@ func (q *InternalQueue) CountsByHostID() map[int]int {
 	counts := make(map[int]int, 8)
 	for _, entry := range q.entries {
 		counts[entry.HostID]++
+	}
+	return counts
+}
+
+// waitingCountsByHostID returns, per host, the entries ready to dispatch at now, split by
+// dispatch rank. Entries still in a retry backoff are left out: they make no claim on a
+// slot until the backoff ends.
+func (q *InternalQueue) waitingCountsByHostID(now time.Time) map[int]waitingCounts {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	counts := make(map[int]waitingCounts, 8)
+	for _, entry := range q.entries {
+		if entry.inBackoff(now) {
+			continue
+		}
+		c := counts[entry.HostID]
+		c[priorityRank(entry.Priority)]++
+		counts[entry.HostID] = c
 	}
 	return counts
 }

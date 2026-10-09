@@ -33,10 +33,12 @@ Two operator controls act on these queues per host: purge drops what is queued, 
 
 CD runs a unified drain on every `scheduler.tick_interval`. On each tick the scheduler walks all configured hosts and, per host, pulls at most one priority's worth of work in strict order: `high` first, then `normal`, then due `autorecache` (entries scheduled at or before "now"). Strict priority within a host is preserved by stopping at the first non-empty priority — a host's `normal` items wait only for that host's `high` to drain, never for an unrelated host's backlog.
 
+Pulled entries dispatch in the same order. When a concurrency slot or render-service tab frees up, waiting `high` entries take it before `normal` and `autorecache` entries that were pulled earlier, on any host. A `high` URL therefore waits for one of its host's in-flight requests to finish, not for a pulled `normal` batch to drain.
+
 The drain has three guardrails:
 
 - **Rotating host cursor.** The host scan starts at a per-daemon cursor that advances by the number of hosts visited each iteration. When the internal queue fills before every host has been visited, the next iteration resumes at the host after the last one visited, so a heavy backlog at the front of the list can never starve later hosts.
-- **Durability pre-check.** Before popping from Redis, CD checks the host's free concurrency slots. If none are free, no items are pulled — the backlog stays in durable Redis instead of piling up in the volatile in-memory queue. As soon as slots release, the next iter pulls.
+- **Durability pre-check.** Before popping from Redis, CD caps the pull at the host's free concurrency slots, minus the entries the host already has waiting in the in-memory queue at the same or a higher priority. If nothing is left, no items are pulled — the backlog stays in durable Redis instead of piling up in the volatile in-memory queue. A render host that is short of render-service capacity therefore cannot fill the shared queue and stop other hosts' pulls, and waiting `normal` entries never keep a `high` entry in Redis. As soon as slots release, the next iter pulls.
 - **Empty-host-list panic guard.** When the host list is empty (startup before the host loader populates, or every host removed), the drain loop is skipped but the tick-end `ProcessInternalQueue` still runs so retry/backoff items continue to dispatch.
 
 Throughput is governed by the per-host `max_concurrent` cap and average render time: roughly `max_concurrent / avg_render_time` requests per second per host. `tick_interval` is an idle re-scan interval, not a throughput knob.

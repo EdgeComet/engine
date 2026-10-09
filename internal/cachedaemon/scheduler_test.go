@@ -281,7 +281,7 @@ func TestScheduler_AtMostOnePriorityPerHostPerIter(t *testing.T) {
 	// without ProcessInternalQueue's dispatch resetting iq.
 	ctx := context.Background()
 	nowUnix := time.Now().UTC().Unix()
-	n, prio := env.daemon.pullForHost(ctx, hostID, 200, nowUnix, nil)
+	n, prio := env.daemon.pullForHost(ctx, hostID, 200, nowUnix, waitingCounts{}, nil)
 	assert.Equal(t, 2, n, "iter 1 should pull the 2 high entries")
 	assert.Equal(t, redis.PriorityHigh, prio)
 	assert.Equal(t, int64(100), env.zcard(t, hostID, redis.PriorityNormal), "normal must remain untouched")
@@ -290,7 +290,7 @@ func TestScheduler_AtMostOnePriorityPerHostPerIter(t *testing.T) {
 	// Drain iq so the next pull can take fresh concurrency.
 	env.daemon.internalQueue.Dequeue(2)
 
-	n, prio = env.daemon.pullForHost(ctx, hostID, 200, nowUnix, nil)
+	n, prio = env.daemon.pullForHost(ctx, hostID, 200, nowUnix, waitingCounts{}, nil)
 	assert.Equal(t, 5, n, "iter 2 should pull normal up to max_concurrent")
 	assert.Equal(t, redis.PriorityNormal, prio)
 }
@@ -416,7 +416,7 @@ func TestScheduler_DurabilityPreCheck(t *testing.T) {
 	}
 
 	nowUnix := time.Now().UTC().Unix()
-	n, prio := env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, nil)
+	n, prio := env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, waitingCounts{}, nil)
 	assert.Equal(t, 0, n, "no slot free → 0 pulled (entries stay durable in Redis)")
 	assert.Equal(t, "", prio)
 	assert.Equal(t, int64(100), env.zcard(t, hostID, redis.PriorityHigh), "ZSET unchanged")
@@ -426,7 +426,7 @@ func TestScheduler_DurabilityPreCheck(t *testing.T) {
 	for _, s := range heldSlots {
 		env.daemon.concurrencyLimiter.Release(s)
 	}
-	n, prio = env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, nil)
+	n, prio = env.daemon.pullForHost(context.Background(), hostID, 200, nowUnix, waitingCounts{}, nil)
 	assert.Equal(t, maxC, n, "after release, next iter pulls one batch")
 	assert.Equal(t, redis.PriorityHigh, prio)
 }
@@ -562,6 +562,13 @@ func TestScheduler_RSBudgetStall_NoOverPull(t *testing.T) {
 	// Most of the Redis backlog must still be durable.
 	assert.GreaterOrEqual(t, env.zcard(t, hostID, redis.PriorityHigh), int64(seeded-maxC),
 		"durable Redis backlog should be largely intact under RS saturation")
+
+	// Later ticks must not add to it: the pull counts the entries already waiting.
+	for tick := 2; tick <= 20; tick++ {
+		env.daemon.runOneTick(context.Background(), tick)
+	}
+	assert.Equal(t, maxC, env.daemon.internalQueue.Size(), "iq must stay at one pull's worth across ticks")
+	assert.Equal(t, int64(seeded-maxC), env.zcard(t, hostID, redis.PriorityHigh))
 }
 
 // TestScheduler_MixedBatchRSBudgetStall (#14): regression for two related
@@ -653,6 +660,185 @@ func TestScheduler_CtxCancelSkipsTickEnd(t *testing.T) {
 
 	assert.Equal(t, 0, env.totalDispatched(), "cancelled tick must not dispatch anything")
 	assert.Equal(t, 1, env.daemon.internalQueue.Size(), "seeded entry must remain in iq, not be drained by tick-end ProcessInternalQueue")
+}
+
+// TestScheduler_HighOvertakesWaitingNormal (#16): a render host held back by
+// the RS budget has normal entries waiting in iq when a high entry arrives.
+// The waiting normal entries must not keep the high entry in Redis, and once
+// RS capacity returns the high entry takes the first tab.
+func TestScheduler_HighOvertakesWaitingNormal(t *testing.T) {
+	const hostID = 1
+	const dimID = 1
+	const maxC = 5
+	env := newSchedulerEnv(t, 1000, []schedulerTestHost{
+		{id: hostID, domain: "h.test", maxConcurrent: maxC, dimensionID: dimID, action: types.ActionRender},
+	})
+	normal := make([]string, 50)
+	for i := range normal {
+		normal[i] = fmt.Sprintf("https://h.test/n%d", i)
+	}
+	env.enqueueZSet(t, hostID, redis.PriorityNormal, dimID, normal, 0)
+
+	// rsRegistry is empty -> RS budget 0, so the tick parks maxC normal entries in iq.
+	env.daemon.runOneTick(context.Background(), 1)
+	require.Equal(t, maxC, env.daemon.internalQueue.Size())
+
+	const highURL = "https://h.test/high"
+	env.enqueueZSet(t, hostID, redis.PriorityHigh, dimID, []string{highURL}, 0)
+	env.daemon.runOneTick(context.Background(), 2)
+	assert.Equal(t, int64(0), env.zcard(t, hostID, redis.PriorityHigh),
+		"waiting normal entries must not keep the high entry in Redis")
+	assert.Equal(t, maxC+1, env.daemon.internalQueue.Size())
+
+	env.registerRS(t, "rs1", 1, 0) // one free tab -> RS budget 1 per gate pass
+	env.daemon.runOneTick(context.Background(), 3)
+	require.NotEmpty(t, env.dispatchOrder)
+	assert.Equal(t, highURL, env.dispatchOrder[0].URL, "high entry must take the first RS tab")
+}
+
+// TestScheduler_RSStarvedHostDoesNotFillIQ (#17): across many ticks a render
+// host with no RS budget keeps at most max_concurrent entries in the shared iq
+// and the rest of its backlog in Redis. If it kept re-pulling its free slots
+// every tick, iq would fill and stop pulls for every host, so the bypass
+// host's high entry would never dispatch.
+func TestScheduler_RSStarvedHostDoesNotFillIQ(t *testing.T) {
+	const hostA, hostB = 1, 2
+	const dimRender, dimBypass = 1, 2
+	const maxC = 10
+	const iqMax = 100
+	const seeded = 1000
+	const ticks = 50
+
+	env := newSchedulerEnv(t, iqMax, []schedulerTestHost{
+		{id: hostA, domain: "a.test", maxConcurrent: maxC, dimensionID: dimRender, action: types.ActionRender},
+		{id: hostB, domain: "b.test", maxConcurrent: 5, dimensionID: dimBypass, action: types.ActionBypass},
+	})
+	urls := make([]string, seeded)
+	for i := range urls {
+		urls[i] = fmt.Sprintf("https://a.test/p%d", i)
+	}
+	env.enqueueZSet(t, hostA, redis.PriorityNormal, dimRender, urls, 0)
+
+	for tick := 1; tick <= ticks; tick++ {
+		env.daemon.runOneTick(context.Background(), tick)
+	}
+	assert.Equal(t, maxC, env.daemon.internalQueue.Size(), "RS-starved host must not grow iq past max_concurrent")
+	assert.Equal(t, int64(seeded-maxC), env.zcard(t, hostA, redis.PriorityNormal), "the rest of the backlog must stay in Redis")
+
+	env.enqueueZSet(t, hostB, redis.PriorityHigh, dimBypass, []string{"https://b.test/high"}, 0)
+	env.daemon.runOneTick(context.Background(), ticks+1)
+	assert.Equal(t, 1, env.dispatchedFor(hostB), "another host's high entry must still be pulled and dispatched")
+}
+
+// TestScheduler_DispatchInPriorityOrder (#18): ProcessInternalQueue gates
+// entries high, then normal, then autorecache, across hosts, keeping arrival
+// order within a priority. An entry without a priority ranks as normal.
+func TestScheduler_DispatchInPriorityOrder(t *testing.T) {
+	const hostA, hostB = 1, 2
+	const dimID = 1
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: hostA, domain: "a.test", maxConcurrent: 10, dimensionID: dimID},
+		{id: hostB, domain: "b.test", maxConcurrent: 10, dimensionID: dimID},
+	})
+	seeded := []struct {
+		hostID   int
+		url      string
+		priority string
+	}{
+		{hostA, "A-auto", redis.PriorityAutorecache},
+		{hostA, "A-normal", redis.PriorityNormal},
+		{hostB, "B-high", redis.PriorityHigh},
+		{hostB, "B-unset", ""},
+		{hostA, "A-high", redis.PriorityHigh},
+		{hostB, "B-normal", redis.PriorityNormal},
+	}
+	for _, s := range seeded {
+		require.True(t, env.daemon.internalQueue.Enqueue(InternalQueueEntry{
+			HostID: s.hostID, URL: s.url, DimensionID: dimID, Priority: s.priority,
+		}))
+	}
+
+	require.Equal(t, len(seeded), env.daemon.ProcessInternalQueue())
+
+	got := make([]string, 0, len(env.dispatchOrder))
+	for _, e := range env.dispatchOrder {
+		got = append(got, e.URL)
+	}
+	assert.Equal(t, []string{"B-high", "A-high", "A-normal", "B-unset", "B-normal", "A-auto"}, got)
+}
+
+// TestScheduler_HighTakesScarceSlot (#19): with one concurrency slot and a
+// normal entry that has waited longer, the high entry gets the slot and the
+// normal entry is deferred.
+func TestScheduler_HighTakesScarceSlot(t *testing.T) {
+	const hostID = 1
+	const dimID = 1
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: hostID, domain: "h.test", maxConcurrent: 1, dimensionID: dimID},
+	})
+	require.True(t, env.daemon.internalQueue.Enqueue(InternalQueueEntry{
+		HostID: hostID, URL: "normal", DimensionID: dimID, Priority: redis.PriorityNormal,
+	}))
+	require.True(t, env.daemon.internalQueue.Enqueue(InternalQueueEntry{
+		HostID: hostID, URL: "high", DimensionID: dimID, Priority: redis.PriorityHigh,
+	}))
+
+	require.Equal(t, 1, env.daemon.ProcessInternalQueue())
+
+	require.Len(t, env.dispatchOrder, 1)
+	assert.Equal(t, "high", env.dispatchOrder[0].URL)
+	deferred := env.daemon.internalQueue.Dequeue(env.daemon.internalQueue.Size())
+	require.Len(t, deferred, 1)
+	assert.Equal(t, "normal", deferred[0].URL)
+}
+
+// TestScheduler_BackoffEntriesDoNotHoldBackPull (#20): entries waiting out a
+// retry delay make no claim on a slot, so a host with max_concurrent high
+// entries in backoff still pulls and dispatches new high entries.
+func TestScheduler_BackoffEntriesDoNotHoldBackPull(t *testing.T) {
+	const hostID = 1
+	const dimID = 1
+	const maxC = 2
+	env := newSchedulerEnv(t, 100, []schedulerTestHost{
+		{id: hostID, domain: "h.test", maxConcurrent: maxC, dimensionID: dimID},
+	})
+	retryAfter := time.Now().UTC().Add(time.Hour)
+	for i := 0; i < maxC; i++ {
+		require.True(t, env.daemon.internalQueue.Enqueue(InternalQueueEntry{
+			HostID: hostID, URL: fmt.Sprintf("retry-%d", i), DimensionID: dimID,
+			Priority: redis.PriorityHigh, RetryCount: 1, NextRetryAfter: retryAfter,
+		}))
+	}
+	env.enqueueZSet(t, hostID, redis.PriorityHigh, dimID, []string{"fresh-0", "fresh-1"}, 0)
+
+	env.daemon.runOneTick(context.Background(), 1)
+
+	assert.Equal(t, maxC, env.totalDispatched(), "both fresh high entries must dispatch")
+	assert.Equal(t, int64(0), env.zcard(t, hostID, redis.PriorityHigh))
+	assert.Equal(t, maxC, env.daemon.internalQueue.Size(), "backoff entries stay queued for their retry")
+}
+
+// TestPullCap (#21): waiting entries count against a pull at their own
+// priority and below, never above it.
+func TestPullCap(t *testing.T) {
+	waiting := waitingCounts{rankHigh: 1, rankNormal: 3, rankAutorecache: 2}
+	tests := []struct {
+		name     string
+		free     int
+		space    int
+		priority string
+		want     int
+	}{
+		{"high ignores waiting normal and autorecache", 5, 100, redis.PriorityHigh, 4},
+		{"normal counts waiting high and normal", 5, 100, redis.PriorityNormal, 1},
+		{"autorecache counts every waiting entry", 5, 100, redis.PriorityAutorecache, -1},
+		{"iq space bounds the cap", 5, 2, redis.PriorityHigh, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, pullCap(tt.free, tt.space, waiting, tt.priority))
+		})
+	}
 }
 
 // TestScheduler_RuntimeHostAdd_Resyncs: a host added to the config manager's host

@@ -1,9 +1,11 @@
 package cachedaemon
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -161,6 +163,7 @@ func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
 			// ProcessInternalQueue, any host whose count grew has new
 			// entries sitting deferred — that host gets added to skipForRest.
 			iqBefore := d.internalQueue.CountsByHostID()
+			waiting := d.internalQueue.waitingCountsByHostID(time.Now().UTC())
 
 			pulled, visited := 0, 0
 			pulledThisIter := make(map[int]int, n)
@@ -170,7 +173,7 @@ func (d *CacheDaemon) runOneTick(ctx context.Context, tickCount int) {
 				if skipForRest[h] {
 					continue
 				}
-				p, prio := d.pullForHost(ctx, h, spaceRemaining, nowUnix, pausedHosts)
+				p, prio := d.pullForHost(ctx, h, spaceRemaining, nowUnix, waiting[h], pausedHosts)
 				if p > 0 {
 					pulledThisIter[h] = p
 				}
@@ -298,6 +301,10 @@ func (d *CacheDaemon) CalculateAvailableCapacity() int {
 //  2. RS capacity gate (online traffic protection): only render entries
 //     decrement the per-tick RS budget; bypass entries skip this gate.
 //
+// Entries pass the gates in priority order (high, normal, autorecache), FIFO
+// within a priority, so a high entry takes a freed slot or RS tab ahead of
+// lower-priority entries that have been waiting longer, on any host.
+//
 // Entries that fail either gate are re-enqueued for the next tick. Slots
 // acquired in this function travel with the entry into DistributeToEGs and
 // are released by the path that finishes the entry's work.
@@ -322,6 +329,10 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 	if len(batch) == 0 {
 		return 0
 	}
+	// Stable, so deferred entries are re-enqueued in their arrival order within a priority.
+	slices.SortStableFunc(batch, func(a, b InternalQueueEntry) int {
+		return cmp.Compare(priorityRank(a.Priority), priorityRank(b.Priority))
+	})
 
 	// Subtract the daemon's own in-flight render dispatches from the per-tick
 	// budget. With async dispatch, prior-tick renders are still in flight when
@@ -346,7 +357,7 @@ func (d *CacheDaemon) ProcessInternalQueue() int {
 	// have captured channel refs and don't depend on the current limiter state.
 	d.reloadMu.RLock()
 	for _, entry := range batch {
-		if !entry.NextRetryAfter.IsZero() && now.Before(entry.NextRetryAfter) {
+		if entry.inBackoff(now) {
 			if !d.internalQueue.Enqueue(entry) {
 				d.recordQueueFullDrop(entry, queueFullReasonBackoff)
 				droppedQueueFull++
@@ -606,10 +617,13 @@ func (d *CacheDaemon) zpopAndEnqueue(ctx context.Context, hostID int, priority s
 // pushed into the internal queue along with the priority that was pulled
 // (empty string if nothing was pulled).
 //
-// Durability pre-check: if the host has no free concurrency slots, items
-// popped here would be re-enqueued onto the volatile internal queue (or
-// dropped on iq overflow) — keep them in durable Redis instead until slots
-// free up.
+// Durability pre-check: items popped here without a slot to take them would
+// sit in the volatile internal queue (or drop on iq overflow), so each pull
+// is capped by pullCap at the host's free concurrency slots less the entries
+// it already has waiting in iq. Slots alone are not enough: an entry the RS
+// budget defers releases its slot, so without the waiting term a render host
+// short of RS capacity re-pulls its free slots every tick until the shared
+// iq is full, which stops pulls for every host.
 //
 // The pre-check is best-effort: Stats is sampled without holding reloadMu,
 // so a concurrent Reload that shrinks max_concurrent can land between this
@@ -619,13 +633,13 @@ func (d *CacheDaemon) zpopAndEnqueue(ctx context.Context, hostID int, priority s
 // over-cap. The window is short (one tick) and operationally bounded.
 //
 // At most one priority is pulled per host per iter even if `high` returns
-// fewer than the cap, so iq never holds an iter-N normal entry ahead of an
-// iter-N+1 high entry (would invert priority on dispatch).
+// fewer than the cap; the next iter moves on to the lower priority.
 //
 // nowUnix is the shared "now" for autorecache due-time filtering, and
 // pausedHosts the operator pause set, both captured once per tick by
-// runOneTick.
-func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemaining int, nowUnix int64, pausedHosts map[int]int64) (int, string) {
+// runOneTick. waiting is the host's iq entries ready to dispatch, sampled
+// once per iter.
+func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemaining int, nowUnix int64, waiting waitingCounts, pausedHosts map[int]int64) (int, string) {
 	// The single enforcement point for an operator pause. This is the only path from
 	// the durable Redis queues into the internal queue, so refusing to pull here stops
 	// all new work for the host; whatever is already in the internal queue is left to
@@ -644,23 +658,20 @@ func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemainin
 		return 0, ""
 	}
 
-	pullCap := free
-	if spaceRemaining < pullCap {
-		pullCap = spaceRemaining
-	}
-	if pullCap <= 0 {
-		return 0, ""
-	}
-
-	if n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityHigh, pullCap); n > 0 {
+	if n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityHigh, pullCap(free, spaceRemaining, waiting, redis.PriorityHigh)); n > 0 {
 		return n, redis.PriorityHigh
 	}
-	if n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityNormal, pullCap); n > 0 {
+	if n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityNormal, pullCap(free, spaceRemaining, waiting, redis.PriorityNormal)); n > 0 {
 		return n, redis.PriorityNormal
 	}
 
+	autoCap := pullCap(free, spaceRemaining, waiting, redis.PriorityAutorecache)
+	if autoCap <= 0 {
+		return 0, ""
+	}
+
 	// Autorecache: only pop entries that are due (score <= now). ZPopMin
-	// returns the N lowest scores unconditionally, so we clamp pullCap to
+	// returns the N lowest scores unconditionally, so we clamp autoCap to
 	// dueCount or the contract breaks (URLs dispatched ahead of schedule).
 	zsetKey := d.keyGenerator.RecacheQueueKey(hostID, redis.PriorityAutorecache)
 	nowStr := strconv.FormatInt(nowUnix, 10)
@@ -675,12 +686,20 @@ func (d *CacheDaemon) pullForHost(ctx context.Context, hostID int, spaceRemainin
 	if dueCount == 0 {
 		return 0, ""
 	}
-	if int64(pullCap) > dueCount {
-		pullCap = int(dueCount)
+	if int64(autoCap) > dueCount {
+		autoCap = int(dueCount)
 	}
-	n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityAutorecache, pullCap)
+	n := d.zpopAndEnqueue(ctx, hostID, redis.PriorityAutorecache, autoCap)
 	if n == 0 {
 		return 0, ""
 	}
 	return n, redis.PriorityAutorecache
+}
+
+// pullCap bounds one pull at priority: the host's free slots less the entries
+// already waiting in iq at that priority or ahead of it, and no more than the
+// iq space left. Waiting entries of a lower priority are not subtracted, so a
+// waiting normal backlog never keeps a high entry in Redis.
+func pullCap(free, spaceRemaining int, waiting waitingCounts, priority string) int {
+	return min(free-waiting.atOrAbove(priority), spaceRemaining)
 }

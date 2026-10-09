@@ -23,9 +23,10 @@ import (
 // Any spec that seeds a recache queue and then asserts its exact contents must
 // call this. The daemon runs for the whole suite with a 100ms tick, and the
 // unified drain ZPopMins up to max_concurrent entries per host per tick. The
-// pull is gated only by concurrency slots and internal-queue space -- not by RS
-// capacity -- so a tick landing between the enqueue and the assertion silently
-// removes entries the spec is about to count.
+// pull is gated by concurrency slots, entries already waiting in the internal
+// queue, and internal-queue space -- not by RS capacity -- so a tick landing
+// between the enqueue and the assertion silently removes entries the spec is
+// about to count.
 //
 // Safe to call from an It or a BeforeEach; cleanup is registered per spec.
 func pauseSchedulerForSpec() {
