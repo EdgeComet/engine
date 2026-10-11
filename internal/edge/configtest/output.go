@@ -2,8 +2,10 @@ package configtest
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/pkg/types"
 )
 
@@ -35,6 +37,9 @@ func printHostTestResult(result *HostTestResult) {
 	fmt.Printf("URL: %s\n", result.OriginalURL)
 	fmt.Printf("Normalized URL: %s\n", result.NormalizedURL)
 	fmt.Printf("URL Hash: %d\n", result.URLHash)
+	if result.UserAgent != config.NoClientUserAgent {
+		fmt.Printf("User-Agent: %s\n", result.UserAgent)
+	}
 	fmt.Println()
 
 	// Print matched pattern
@@ -43,6 +48,10 @@ func printHostTestResult(result *HostTestResult) {
 		if len(patterns) > 0 {
 			fmt.Printf("Matched Pattern: %s\n", patterns[0])
 		}
+		if len(result.MatchedRule.MatchUA) > 0 {
+			fmt.Printf("Matched User-Agent Patterns: %s\n", strings.Join(result.MatchedRule.MatchUA, ", "))
+		}
+		fmt.Printf("Matched Rule: %s\n", result.Config.MatchedRuleID)
 	} else {
 		fmt.Println("Matched Pattern: (default)")
 	}

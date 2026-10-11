@@ -931,7 +931,7 @@ func validateGlobalDimensions(cfg *configtypes.EgConfig, filename string, collec
 					dimensionName)
 				continue
 			}
-			if err := validatePatternSyntax(pattern, "user-agent"); err != nil {
+			if err := validatePatternSyntax(pattern, userAgentPatternContext); err != nil {
 				collector.Add(filename, 0, "dimensions: dimension '%s': invalid match_ua pattern '%s': %v",
 					dimensionName, pattern, err)
 			}
@@ -1441,7 +1441,7 @@ func validateBothitRecacheInternal(config *types.BothitRecacheConfig, level stri
 			if pattern == "" {
 				return fmt.Errorf("%s bothit_recache: match_ua pattern contains empty string", level)
 			}
-			if err := validatePatternSyntax(pattern, "user-agent"); err != nil {
+			if err := validatePatternSyntax(pattern, userAgentPatternContext); err != nil {
 				return fmt.Errorf("%s bothit_recache: invalid match_ua pattern '%s': %w", level, pattern, err)
 			}
 		}
@@ -1917,7 +1917,7 @@ func validateDimensions(hostIndex int, host *types.Host, filename string, hasGlo
 					hostIndex, host.Domain, dimensionName)
 				continue
 			}
-			if err := validatePatternSyntax(pattern, "user-agent"); err != nil {
+			if err := validatePatternSyntax(pattern, userAgentPatternContext); err != nil {
 				collector.Add(filename, 0, "host[%d] (%s): dimension '%s': invalid match_ua pattern '%s': %v",
 					hostIndex, host.Domain, dimensionName, pattern, err)
 			}
@@ -2030,7 +2030,7 @@ func validateURLRules(hostIndex int, host *types.Host, filename string, ht *Host
 					hostIndex, host.Domain, i)
 				continue
 			}
-			if err := validatePatternSyntax(pattern, "URL"); err != nil {
+			if err := validatePatternSyntax(pattern, urlPatternContext); err != nil {
 				collector.Add(filename, 0, "host[%d] (%s): url_rules[%d]: invalid pattern '%s': %v",
 					hostIndex, host.Domain, i, pattern, err)
 			}
@@ -2061,6 +2061,10 @@ func validateURLRules(hostIndex int, host *types.Host, filename string, ht *Host
 			if err := validateHeadersConfig(rule.Headers, fmt.Sprintf("host[%d] (%s): url_rules[%d]", hostIndex, host.Domain, i)); err != nil {
 				collector.Add(filename, 0, "%v", err)
 			}
+		}
+
+		if err := validateMatchUAList(&rule); err != nil {
+			collector.Add(filename, 0, "host[%d] (%s): url_rules[%d]: %v", hostIndex, host.Domain, i, err)
 		}
 
 		// Validate action-specific configuration
@@ -2428,6 +2432,12 @@ func validateBypassTimeout(egConfig *configtypes.EgConfig, hostsConfig *configty
 		}
 	}
 }
+
+// Pattern kinds named in validatePatternSyntax errors.
+const (
+	userAgentPatternContext = "user-agent"
+	urlPatternContext       = "URL"
+)
 
 // validatePatternSyntax validates pattern syntax to catch common mistakes
 func validatePatternSyntax(pattern, context string) error {

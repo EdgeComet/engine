@@ -67,20 +67,11 @@ func (d Dimension) EffectiveAction() URLRuleAction {
 // - ~ prefix: case-sensitive regexp
 // - ~* prefix: case-insensitive regexp
 func (d *Dimension) CompileMatchUAPatterns() error {
-	if len(d.MatchUA) == 0 {
-		return nil
+	compiled, err := pattern.CompileAll(d.MatchUA)
+	if err != nil {
+		return fmt.Errorf("invalid user agent %w", err)
 	}
-
-	d.CompiledPatterns = make([]*pattern.Pattern, len(d.MatchUA))
-
-	for i, pat := range d.MatchUA {
-		compiled, err := pattern.Compile(pat)
-		if err != nil {
-			return fmt.Errorf("invalid user agent pattern '%s': %w", pat, err)
-		}
-		d.CompiledPatterns[i] = compiled
-	}
-
+	d.CompiledPatterns = compiled
 	return nil
 }
 

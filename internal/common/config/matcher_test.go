@@ -68,7 +68,7 @@ func TestPatternMatcher_ExactMatch(t *testing.T) {
 				Action: types.ActionRender,
 			}
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expected {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -169,7 +169,7 @@ func TestPatternMatcher_SingleWildcard(t *testing.T) {
 				Action: types.ActionBypass,
 			}
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expected {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -202,7 +202,7 @@ func TestPatternMatcher_MultiplePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			if tt.expected {
 				require.NotNil(t, matched, "Expected pattern to match")
 			} else {
@@ -232,18 +232,18 @@ func TestPatternMatcher_FirstMatchWins(t *testing.T) {
 	matcher := NewPatternMatcher(rules)
 
 	// Should match first rule, not more specific second rule
-	matched, _ := matcher.FindMatchingRule("https://example.com/blog/post1")
+	matched, _ := matcher.FindMatchingRule("https://example.com/blog/post1", NoClientUserAgent)
 	require.NotNil(t, matched)
 	assert.Equal(t, types.ActionBlock, matched.Action)
 	assert.Equal(t, "first rule", matched.Status.Reason)
 
 	// Should match first rule
-	matched, _ = matcher.FindMatchingRule("https://example.com/blog/post2")
+	matched, _ = matcher.FindMatchingRule("https://example.com/blog/post2", NoClientUserAgent)
 	require.NotNil(t, matched)
 	assert.Equal(t, types.ActionBlock, matched.Action)
 
 	// Should match third rule (fallback)
-	matched, _ = matcher.FindMatchingRule("https://example.com/other")
+	matched, _ = matcher.FindMatchingRule("https://example.com/other", NoClientUserAgent)
 	require.NotNil(t, matched)
 	assert.Equal(t, types.ActionBypass, matched.Action)
 }
@@ -288,7 +288,7 @@ func TestPatternMatcher_PathOnlyMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			require.NotNil(t, matched, "Path-only matching should match regardless of query params")
 			assert.Equal(t, types.ActionRender, matched.Action)
 		})
@@ -347,7 +347,7 @@ func TestPatternMatcher_PathWildcardWithQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			if tt.expected {
 				require.NotNil(t, matched, "Expected pattern to match")
 				assert.Equal(t, types.ActionRender, matched.Action)
@@ -384,7 +384,7 @@ func TestPatternMatcher_SpecialCharsInQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			if tt.expected {
 				require.NotNil(t, matched, "Expected pattern to match")
 				assert.Equal(t, types.ActionRender, matched.Action)
@@ -403,7 +403,7 @@ func TestPatternMatcher_EdgeCases(t *testing.T) {
 			Action: types.ActionRender,
 		}
 		matcher := NewPatternMatcher([]types.URLRule{rule})
-		matched, _ := matcher.FindMatchingRule("://invalid-url")
+		matched, _ := matcher.FindMatchingRule("://invalid-url", NoClientUserAgent)
 		assert.Nil(t, matched, "Malformed URL should return nil")
 	})
 
@@ -413,7 +413,7 @@ func TestPatternMatcher_EdgeCases(t *testing.T) {
 			Action: types.ActionRender,
 		}
 		matcher := NewPatternMatcher([]types.URLRule{rule})
-		matched, _ := matcher.FindMatchingRule("https://example.com/test")
+		matched, _ := matcher.FindMatchingRule("https://example.com/test", NoClientUserAgent)
 		assert.Nil(t, matched, "Empty pattern should never match")
 	})
 
@@ -423,13 +423,13 @@ func TestPatternMatcher_EdgeCases(t *testing.T) {
 			Action: types.ActionRender,
 		}
 		matcher := NewPatternMatcher([]types.URLRule{rule})
-		matched, _ := matcher.FindMatchingRule("https://example.com/test")
+		matched, _ := matcher.FindMatchingRule("https://example.com/test", NoClientUserAgent)
 		require.NotNil(t, matched, "Wildcard-only should match anything")
 	})
 
 	t.Run("no rules returns nil", func(t *testing.T) {
 		matcher := NewPatternMatcher([]types.URLRule{})
-		matched, _ := matcher.FindMatchingRule("https://example.com/test")
+		matched, _ := matcher.FindMatchingRule("https://example.com/test", NoClientUserAgent)
 		assert.Nil(t, matched, "No rules should return nil")
 	})
 
@@ -441,7 +441,7 @@ func TestPatternMatcher_EdgeCases(t *testing.T) {
 		matcher := NewPatternMatcher([]types.URLRule{rule})
 		// NOTE: URL without path ("https://example.com") has empty path, not "/"
 		// So we need to use explicit "/" in URL
-		matched, _ := matcher.FindMatchingRule("https://example.com/")
+		matched, _ := matcher.FindMatchingRule("https://example.com/", NoClientUserAgent)
 		require.NotNil(t, matched, "Should match root path")
 	})
 
@@ -452,7 +452,7 @@ func TestPatternMatcher_EdgeCases(t *testing.T) {
 		}
 		matcher := NewPatternMatcher([]types.URLRule{rule})
 		// Fragments are not included in matching
-		matched, _ := matcher.FindMatchingRule("https://example.com/page#section")
+		matched, _ := matcher.FindMatchingRule("https://example.com/page#section", NoClientUserAgent)
 		require.NotNil(t, matched, "Should match ignoring fragment")
 	})
 }
@@ -537,7 +537,7 @@ func TestPatternMatcher_ComplexScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			require.NotNil(t, matched, "Expected a rule to match")
 			assert.Equal(t, tt.expectedAction, matched.Action)
 			if tt.expectedReason != "" {
@@ -599,7 +599,7 @@ func TestPatternMatcher_RealWorldPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 			require.NotNil(t, matched, "Expected a rule to match")
 			assert.Equal(t, tt.expectedAction, matched.Action)
 		})
@@ -716,7 +716,7 @@ func TestPatternMatcher_QueryParamExact(t *testing.T) {
 			require.NoError(t, err)
 
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expectMatch {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -781,7 +781,7 @@ func TestPatternMatcher_QueryParamWildcard(t *testing.T) {
 			require.NoError(t, err)
 
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expectMatch {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -922,7 +922,7 @@ func TestPatternMatcher_QueryParamRegexp(t *testing.T) {
 			require.NoError(t, err)
 
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expectMatch {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -1018,7 +1018,7 @@ func TestPatternMatcher_QueryParamArrayOR(t *testing.T) {
 			require.NoError(t, err)
 
 			matcher := NewPatternMatcher([]types.URLRule{rule})
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expectMatch {
 				require.NotNil(t, matched, "Expected pattern to match")
@@ -1112,7 +1112,7 @@ func TestPatternMatcher_QueryParamCombined(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matched, _ := matcher.FindMatchingRule(tt.url)
+			matched, _ := matcher.FindMatchingRule(tt.url, NoClientUserAgent)
 
 			if tt.expectMatch {
 				require.NotNil(t, matched, "Expected a rule to match")

@@ -19,6 +19,12 @@ const (
 	defaultScroll        = false
 )
 
+// Rule ID markers for a matched rule that also carries match_query / match_ua conditions.
+const (
+	ruleIDQuerySuffix = "?..."
+	ruleIDUASuffix    = "+ua"
+)
+
 // redactedHeaderValue replaces the value of a header set from configuration wherever that value
 // would be stored or logged. The name is kept so "did the header reach the origin" stays answerable.
 const redactedHeaderValue = "(redacted)"
@@ -141,12 +147,17 @@ func NewConfigResolver(globalRender *GlobalRenderConfig, globalBypass *GlobalByp
 	}
 }
 
-// ResolveForURL resolves configuration for the given URL
+// ResolveForRequest resolves configuration for a live client request.
 // Deep merge order: Global → Host → URL Pattern (first match)
-func (r *ConfigResolver) ResolveForURL(targetURL string) *ResolvedConfig {
+func (r *ConfigResolver) ResolveForRequest(targetURL, userAgent string) *ResolvedConfig {
 	// Find matching URL rule (returns nil, -1 if no match)
-	matchedRule, ruleIndex := r.matcher.FindMatchingRule(targetURL)
+	matchedRule, ruleIndex := r.matcher.FindMatchingRule(targetURL, userAgent)
 	return r.resolve(matchedRule, ruleIndex)
+}
+
+// ResolveForURL resolves configuration without a client. Rules with match_ua never match.
+func (r *ConfigResolver) ResolveForURL(targetURL string) *ResolvedConfig {
+	return r.ResolveForRequest(targetURL, NoClientUserAgent)
 }
 
 // ResolveHostLevel resolves the configuration a URL matching no URL rule receives: global and
@@ -215,9 +226,10 @@ func (r *ConfigResolver) resolve(matchedRule *types.URLRule, ruleIndex int) *Res
 // resolves headers alongside it. Paths that render unconditionally - HAR debug and Edge SEO
 // preview - still need render configuration and origin request headers for a URL that a rule marks
 // bypass or status, where ResolveForURL leaves the render section empty because nothing would
-// render it. Sections other than render and headers are left at their zero values.
+// render it. Sections other than render and headers are left at their zero values. Resolves
+// without a client, so rules with match_ua never match.
 func (r *ConfigResolver) ResolveRenderForURL(targetURL string) *ResolvedConfig {
-	matchedRule, _ := r.matcher.FindMatchingRule(targetURL)
+	matchedRule, _ := r.matcher.FindMatchingRule(targetURL, NoClientUserAgent)
 
 	resolved := &ResolvedConfig{}
 	r.resolveRenderConfig(resolved, matchedRule)
@@ -226,14 +238,15 @@ func (r *ConfigResolver) ResolveRenderForURL(targetURL string) *ResolvedConfig {
 	return resolved
 }
 
-// formatRuleID generates a human-readable rule identifier
+// formatRuleID generates a human-readable rule identifier: rule_<index>:<pattern>[?...][+ua]
 func formatRuleID(index int, pattern string, rule *types.URLRule) string {
-	// Format: rule_<index>:<pattern>[?<query_condition>]
 	ruleID := fmt.Sprintf("rule_%d:%s", index, pattern)
 
-	// Add query parameter indicator if match_query is specified
 	if len(rule.MatchQuery) > 0 {
-		ruleID += "?..."
+		ruleID += ruleIDQuerySuffix
+	}
+	if len(rule.MatchUA) > 0 {
+		ruleID += ruleIDUASuffix
 	}
 
 	return ruleID

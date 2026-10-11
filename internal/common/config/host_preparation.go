@@ -13,6 +13,8 @@ const (
 	defaultBypassWidth    = 1920
 	defaultBypassHeight   = 1080
 	defaultBypassRenderUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+	expandBotAliasesErrFormat = "failed to expand bot aliases: %w"
 )
 
 // PrepareHost prepares a host by applying global inheritance, expanding aliases,
@@ -29,6 +31,9 @@ func PrepareHost(host *types.Host, globalConfig *configtypes.EgConfig, contextPa
 
 	// Before Step 6 sorts url_rules, so an error's rule index matches the configuration order.
 	if err := validate.ValidateHostTimeouts(host); err != nil {
+		return err
+	}
+	if err := validate.ValidateURLRuleMatchUA(host); err != nil {
 		return err
 	}
 
@@ -92,38 +97,33 @@ func PrepareHost(host *types.Host, globalConfig *configtypes.EgConfig, contextPa
 		}
 	}
 
-	// Step 3: Expand bot aliases in host-level bothit_recache
-	if host.BothitRecache != nil && len(host.BothitRecache.MatchUA) > 0 {
-		expanded, err := ExpandBotAliases(host.BothitRecache.MatchUA, contextPath)
-		if err != nil {
-			return fmt.Errorf("failed to expand bothit_recache aliases: %w", err)
-		}
-		host.BothitRecache.MatchUA = expanded
-	}
-
-	// Step 4: Compile host-level bothit_recache patterns
+	// Steps 3-4: Expand and compile host-level bothit_recache patterns
 	if host.BothitRecache != nil {
-		if err := host.BothitRecache.CompileMatchUAPatterns(); err != nil {
+		if err := expandAndCompileBothitUA(host.BothitRecache, contextPath); err != nil {
 			return fmt.Errorf("bothit_recache: %w", err)
 		}
 	}
 
-	// Step 5: Process URL rules - expand aliases and compile bothit_recache
+	// Step 5: Process URL rules - expand aliases and compile bothit_recache and match_ua.
+	// Runs before Step 6 so errors name the submitted index and each rule's match_ua compiles once.
 	for i := range host.URLRules {
 		rule := &host.URLRules[i]
 		ruleContext := fmt.Sprintf("%s:url_rule[%d]", contextPath, i)
 
-		if rule.BothitRecache != nil && len(rule.BothitRecache.MatchUA) > 0 {
-			expanded, err := ExpandBotAliases(rule.BothitRecache.MatchUA, ruleContext)
-			if err != nil {
+		if rule.BothitRecache != nil {
+			if err := expandAndCompileBothitUA(rule.BothitRecache, ruleContext); err != nil {
 				return fmt.Errorf("url_rule[%d] bothit_recache: %w", i, err)
 			}
-			rule.BothitRecache.MatchUA = expanded
 		}
 
-		if rule.BothitRecache != nil {
-			if err := rule.BothitRecache.CompileMatchUAPatterns(); err != nil {
-				return fmt.Errorf("url_rule[%d] bothit_recache: %w", i, err)
+		if len(rule.MatchUA) > 0 {
+			expanded, err := ExpandBotAliases(rule.MatchUA, ruleContext)
+			if err != nil {
+				return fmt.Errorf("url_rule[%d] match_ua: "+expandBotAliasesErrFormat, i, err)
+			}
+			rule.MatchUA = expanded
+			if err := rule.CompileMatchUAPatterns(); err != nil {
+				return fmt.Errorf("url_rule[%d] %w", i, err)
 			}
 		}
 	}
@@ -138,6 +138,16 @@ func PrepareHost(host *types.Host, globalConfig *configtypes.EgConfig, contextPa
 	}
 
 	return nil
+}
+
+// expandAndCompileBothitUA expands $Alias entries in c.MatchUA in place, then compiles them.
+func expandAndCompileBothitUA(c *types.BothitRecacheConfig, context string) error {
+	expanded, err := ExpandBotAliases(c.MatchUA, context)
+	if err != nil {
+		return fmt.Errorf(expandBotAliasesErrFormat, err)
+	}
+	c.MatchUA = expanded
+	return c.CompileMatchUAPatterns()
 }
 
 func injectBypassDimension(host *types.Host, logger *zap.Logger, contextPath string) {

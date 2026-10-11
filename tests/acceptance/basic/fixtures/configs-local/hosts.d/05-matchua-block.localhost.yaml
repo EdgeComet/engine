@@ -1,0 +1,36 @@
+# Host for the match_ua specs that need host-wide blocking (url_rule_match_ua_test.go): a block
+# dimension and unmatched_dimension: block, next to a site-wide match_ua render rule that names
+# the very UAs those two checks block.
+hosts:
+  - id: 5
+    domain: "matchua-block.localhost"
+    render_key: "sk_test_matchua_block_55555"
+    enabled: true
+
+    unmatched_dimension: "block"
+
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua:
+          - "*Googlebot*"
+      scrapers:
+        id: 3
+        action: "block"
+        match_ua:
+          - "*SemrushBot*"
+
+    render:
+      timeout: 15s
+      cache:
+        ttl: 5m
+      events:
+        wait_for: "networkIdle"
+
+    url_rules:
+      - match: "*"
+        match_ua: ["*SemrushBot*", "*MatchUAProbe*", "*Googlebot*"]
+        action: "render"

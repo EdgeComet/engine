@@ -355,6 +355,24 @@ func TestGetBotAlias_AmazonUser(t *testing.T) {
 	assert.Contains(t, patterns, "*AMZN-User/*")
 }
 
+func TestGetBotAlias_MetaExternalAgent(t *testing.T) {
+	patterns, exists := GetBotAlias("MetaExternalAgent")
+	assert.True(t, exists)
+	assert.Equal(t, []string{"*meta-externalagent/*"}, patterns)
+}
+
+func TestGetBotAlias_MetaWebIndexer(t *testing.T) {
+	patterns, exists := GetBotAlias("MetaWebIndexer")
+	assert.True(t, exists)
+	assert.Equal(t, []string{"*meta-webindexer/*"}, patterns)
+}
+
+func TestGetBotAlias_StorebotGoogle(t *testing.T) {
+	patterns, exists := GetBotAlias("StorebotGoogle")
+	assert.True(t, exists)
+	assert.Equal(t, []string{"*Storebot-Google/*"}, patterns)
+}
+
 func TestGetBotAlias_SearchBots(t *testing.T) {
 	patterns, exists := GetBotAlias("SearchBots")
 	assert.True(t, exists)
@@ -386,7 +404,7 @@ func TestGetBotAlias_AIBots(t *testing.T) {
 
 func TestGetAvailableAliases_AllBots(t *testing.T) {
 	aliases := GetAvailableAliases()
-	assert.Len(t, aliases, 23)
+	assert.Len(t, aliases, 26)
 
 	assert.Contains(t, aliases, "GooglebotSearchDesktop")
 	assert.Contains(t, aliases, "GooglebotSearchMobile")
@@ -407,6 +425,9 @@ func TestGetAvailableAliases_AllBots(t *testing.T) {
 	assert.Contains(t, aliases, "AnthropicSearchBot")
 	assert.Contains(t, aliases, "Amazonbot")
 	assert.Contains(t, aliases, "AmazonUser")
+	assert.Contains(t, aliases, "MetaExternalAgent")
+	assert.Contains(t, aliases, "MetaWebIndexer")
+	assert.Contains(t, aliases, "StorebotGoogle")
 	assert.Contains(t, aliases, "Messengers")
 	assert.Contains(t, aliases, "Socials")
 	assert.Contains(t, aliases, "SearchBots")
@@ -430,12 +451,15 @@ func TestGetAvailableAliases_AllBots(t *testing.T) {
 		"GooglebotSearchDesktop",
 		"GooglebotSearchMobile",
 		"Messengers",
+		"MetaExternalAgent",
+		"MetaWebIndexer",
 		"OpenAIAdsBot",
 		"OpenAISearchBot",
 		"PerplexityBot",
 		"PerplexityUserBot",
 		"SearchBots",
 		"Socials",
+		"StorebotGoogle",
 	}, aliases)
 }
 
@@ -582,6 +606,8 @@ func TestBotAliases_VendorGrouping(t *testing.T) {
 	perplexityAliases := []string{}
 	anthropicAliases := []string{}
 	amazonAliases := []string{}
+	metaAliases := []string{}
+	storebotAliases := []string{}
 	messengerAliases := []string{}
 	socialAliases := []string{}
 	compositeAliases := []string{}
@@ -600,6 +626,10 @@ func TestBotAliases_VendorGrouping(t *testing.T) {
 			anthropicAliases = append(anthropicAliases, alias)
 		case len(alias) >= 6 && alias[:6] == "Amazon":
 			amazonAliases = append(amazonAliases, alias)
+		case len(alias) >= 4 && alias[:4] == "Meta":
+			metaAliases = append(metaAliases, alias)
+		case alias == "StorebotGoogle":
+			storebotAliases = append(storebotAliases, alias)
 		case alias == "Messengers":
 			messengerAliases = append(messengerAliases, alias)
 		case alias == "Socials":
@@ -615,6 +645,8 @@ func TestBotAliases_VendorGrouping(t *testing.T) {
 	assert.Len(t, perplexityAliases, 2, "Should have 2 Perplexity aliases")
 	assert.Len(t, anthropicAliases, 3, "Should have 3 Anthropic aliases")
 	assert.Len(t, amazonAliases, 2, "Should have 2 Amazon aliases")
+	assert.Len(t, metaAliases, 2, "Should have 2 Meta aliases")
+	assert.Len(t, storebotAliases, 1, "Should have 1 Storebot alias")
 	assert.Len(t, messengerAliases, 1, "Should have 1 Messengers alias")
 	assert.Len(t, socialAliases, 1, "Should have 1 Socials alias")
 	assert.Len(t, compositeAliases, 2, "Should have 2 composite aliases")

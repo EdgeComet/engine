@@ -1,0 +1,132 @@
+# Host for the URL rule match_ua specs (url_rule_match_ua_test.go). *.localhost resolves to
+# loopback, so the shared test pages origin answers under a hostname of its own and these
+# site-wide bot rules cannot reach host 1's specs, several of which send a ClaudeBot UA.
+hosts:
+  - id: 4
+    domain: "matchua.localhost"
+    render_key: "sk_test_matchua_44444"
+    enabled: true
+
+    # A named dimension, so an unmatched UA is resolved in desktop with the unmatched flag set
+    unmatched_dimension: "desktop"
+
+    dimensions:
+      desktop:
+        id: 1
+        width: 1920
+        height: 1080
+        render_ua: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        match_ua:
+          - "*Googlebot*"
+          - "*Mozilla*"
+      mobile:
+        id: 2
+        width: 375
+        height: 812
+        render_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        match_ua:
+          - "*iPhone*"
+
+    render:
+      timeout: 15s
+      cache:
+        ttl: 5m
+      events:
+        wait_for: "networkIdle"
+
+    # On for the whole host, so a cache-only rule's own switch is all that keeps its slot empty
+    bypass:
+      cache:
+        enabled: true
+
+    # Only ClaudeBot cache hits schedule a recache, so no other spec on this host does
+    bothit_recache:
+      enabled: true
+      interval: 30m
+      match_ua: ["$AnthropicBot"]
+
+    url_rules:
+      # Site-wide block. Sorts above the exact "/" rule below, so it covers "/" too
+      - match: "*"
+        match_ua: ["$AnthropicBot"]
+        action: "status_403"
+
+      - match: "*"
+        match_query:
+          inches: "*"
+        match_ua: ["$MetaExternalAgent", "$MetaWebIndexer"]
+        action: "status"
+        status:
+          code: 429
+          headers:
+            Retry-After: "3600"
+
+      # Cache-only, the documented recipe including the bothit_recache switch
+      - match: "/match-ua/cache-only/*"
+        match_ua: ["$AnthropicBot"]
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+        bothit_recache:
+          enabled: false
+
+      # Cache-only without the bothit_recache switch: inherits the host's recache
+      - match: "/match-ua/cache-only-recache/*"
+        match_ua: ["$AnthropicBot"]
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+
+      # Cache-only for a UA that matches no dimension
+      - match: "/match-ua/unmatched/*"
+        match_ua: ["*MatchUAProbe*"]
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+
+      # The cache-only rules above without the cache switch: stores under the host's bypass cache
+      - match: "/match-ua/bypass-cached/*"
+        match_ua: ["$AnthropicBot", "*MatchUAProbe*"]
+        action: "bypass"
+
+      # Cache-only next to the bypass-with-cache path rule below: the price verification case
+      - match: "/match-ua/bypass-only/*"
+        match_ua: ["$StorebotGoogle"]
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+
+      # Site-wide bypass for one bot, shadowing the /match-ua/admin/* status rule for it
+      - match: "*"
+        match_ua: ["$Amazonbot"]
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: false
+
+      - match: "/match-ua/products/*"
+        match_ua: ["$AnthropicBot"]
+        action: "render"
+        render:
+          dimension: "mobile"
+
+      - match: "/"
+        action: "bypass"
+
+      - match: "/match-ua/bypass-only/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 1h
+
+      - match: "/match-ua/admin/*"
+        action: "status_404"

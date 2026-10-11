@@ -83,6 +83,15 @@ var BotAliases = map[string][]string{
 	"AmazonUser": {
 		"*AMZN-User/*",
 	},
+	"MetaExternalAgent": {
+		"*meta-externalagent/*",
+	},
+	"MetaWebIndexer": {
+		"*meta-webindexer/*",
+	},
+	"StorebotGoogle": {
+		"*Storebot-Google/*",
+	},
 
 	"Messengers": {
 		"*WhatsApp/*",

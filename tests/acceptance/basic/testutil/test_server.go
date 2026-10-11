@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -170,6 +171,8 @@ type TestServer struct {
 	thirdPartyShutdown chan struct{}
 	redisClient        *redis.Client
 	receivedHeaders    *headerRecorder
+
+	matchUAOriginVersion atomic.Pointer[string]
 }
 
 // NewTestServer creates a new test server instance
@@ -1186,6 +1189,7 @@ startxref
 
 	registerRenderKeyRoutes(mux, ts.thirdPartyBaseURL)
 	ts.registerSetHeadersRoutes(mux)
+	ts.registerMatchUARoutes(mux)
 
 	ts.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ts.port),

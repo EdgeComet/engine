@@ -147,6 +147,25 @@ When a request matches a dimension, the following precedence determines the resp
 3. **URL rule action** - render or bypass action from a matching URL rule
 4. **Dimension default action** - the dimension's `action` field applies when no URL rule matches
 
+A URL rule with `match_ua` takes part in steps 2 and 3 like any other URL rule.
+
+## Block dimension or match_ua rule
+
+A block dimension and a [URL rule with `match_ua`](./url-rules.md#user-agent-matching) can both single out a bot by User-Agent:
+
+| | Block dimension | URL rule with `match_ua` |
+|---|---|---|
+| Response | 403 Forbidden | Any URL rule action: a status (403, 404, 410, 429 with `Retry-After`, a redirect), bypass, cache-only bypass, or render with overrides |
+| Scope | Whole site | Any path, query parameters, or both |
+| Precedence | Runs before URL rules; nothing overrides it | A URL rule; cannot unblock a block dimension or `unmatched_dimension: "block"` |
+| Cache | Not used | The bot stays in its dimension and shares that dimension's cache |
+
+Use a block dimension when a bot must receive 403 everywhere and no URL rule may change that. Use a `match_ua` rule for everything else.
+
+Moving a bot into its own render dimension to treat it differently has a cost: the dimension ID is part of the cache key, so the bot no longer sees any page cached for other bots. A `match_ua` rule leaves the bot in the dimension it was detected in.
+
+A `match_ua` rule also applies to a User-Agent that matches no dimension, unless `unmatched_dimension` is `"block"`: the request is handled in the fallback dimension and URL rules apply as usual.
+
 ## User-Agent aliases
 
 Aliases simplify configuration by grouping common bot User-Agent patterns under memorable names. Each alias expands to multiple exact strings and regexp patterns that cover known bot variants. When bots update their User-Agents, aliases are updated accordingly.
@@ -204,6 +223,7 @@ match_ua:
 | `$GooglebotSearchMobile` | Googlebot mobile search crawler and Google-InspectionTool mobile |
 | `$GoogleBotAds` | Google Ads bot |
 | `$GoogleBotAdsMobileWeb` | Google Ads mobile bot |
+| `$StorebotGoogle` | Google Storebot, desktop and mobile (`*Storebot-Google/*`) |
 
 **Bing**
 
@@ -227,12 +247,22 @@ match_ua:
 | `$AnthropicBot` | Claude indexing bot |
 | `$AnthropicUserBot` | Claude user browsing |
 | `$AnthropicSearchBot` | Claude search bot |
+| `$Amazonbot` | Amazon crawler (`*Amazonbot/*`) |
+| `$AmazonUser` | Amazon user browsing (`*AMZN-User/*`) |
 
-**Messaging apps**
+**Meta**
+
+| Alias | Description |
+|-------|-------------|
+| `$MetaExternalAgent` | Meta external agent crawler (`*meta-externalagent/*`) |
+| `$MetaWebIndexer` | Meta web indexer (`*meta-webindexer/*`) |
+
+**Messaging apps and social networks**
 
 | Alias | Description |
 |-------|-------------|
 | `$Messengers` | WhatsApp, Viber, Telegram, Snapchat, Discord, and Slack link preview bots. |
+| `$Socials` | Facebook link previews (`facebookexternalhit`), Twitterbot, Pinterestbot, and Applebot. |
 
 **Composite aliases**
 
@@ -242,6 +272,8 @@ Composite aliases combine multiple individual aliases for convenience:
 |-------|----------|
 | `$SearchBots` | GooglebotSearchDesktop, GooglebotSearchMobile, BingbotDesktop, BingbotMobile. |
 | `$AIBots` | All AI bot aliases (ChatGPT, OpenAI, Google-Agent, Perplexity, Anthropic, Amazon). |
+
+`$AIBots` and `$Socials` do not include `$MetaExternalAgent`, `$MetaWebIndexer` or `$StorebotGoogle`. Name those aliases explicitly where you need them.
 
 ## Fallback behavior
 

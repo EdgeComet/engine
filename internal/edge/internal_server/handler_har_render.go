@@ -208,7 +208,7 @@ func (h *HARRenderHandler) checkURLRules(ctx *fasthttp.RequestCtx, host *types.H
 	}
 
 	matcher := config.NewPatternMatcher(host.URLRules)
-	matchedRule, _ := matcher.FindMatchingRule(targetURL)
+	matchedRule, _ := matcher.FindMatchingRule(targetURL, config.NoClientUserAgent)
 
 	if matchedRule == nil {
 		// No rule matched, default is render

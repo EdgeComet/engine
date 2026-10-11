@@ -1,6 +1,7 @@
 package pattern
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -232,4 +233,52 @@ func BenchmarkMatchRegexp(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		p.Match(input)
 	}
+}
+
+func TestCompileAll(t *testing.T) {
+	t.Run("compiles in input order", func(t *testing.T) {
+		compiled, err := CompileAll([]string{"Googlebot", "*bingbot*", "~*claudebot"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(compiled) != 3 {
+			t.Fatalf("len = %d, want 3", len(compiled))
+		}
+		wantTypes := []PatternType{PatternTypeExact, PatternTypeWildcard, PatternTypeRegexp}
+		for i, p := range compiled {
+			if p.Type != wantTypes[i] {
+				t.Errorf("compiled[%d].Type = %v, want %v", i, p.Type, wantTypes[i])
+			}
+		}
+	})
+
+	t.Run("empty and nil lists return nil", func(t *testing.T) {
+		for _, in := range [][]string{nil, {}} {
+			compiled, err := CompileAll(in)
+			if err != nil || compiled != nil {
+				t.Errorf("CompileAll(%#v) = %v, %v; want nil, nil", in, compiled, err)
+			}
+		}
+	})
+
+	t.Run("error names index and pattern", func(t *testing.T) {
+		compiled, err := CompileAll([]string{"*ok*", "~(unclosed"})
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if compiled != nil {
+			t.Errorf("compiled = %v, want nil on error", compiled)
+		}
+		want := "pattern[1] '~(unclosed': "
+		if !strings.HasPrefix(err.Error(), want) {
+			t.Errorf("error %q does not start with %q", err.Error(), want)
+		}
+	})
+
+	t.Run("empty element names its index", func(t *testing.T) {
+		_, err := CompileAll([]string{"*ok*", "", "x"})
+		if err == nil || !strings.HasPrefix(err.Error(), "pattern[1] '': ") {
+			t.Errorf("error = %v, want prefix pattern[1] '': ", err)
+		}
+	})
 }

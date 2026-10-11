@@ -208,7 +208,7 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	// Resolve configuration ONCE for this URL (Global -> Host -> Pattern)
 	globalConfig := s.configManager.GetConfig()
 	resolver := config.NewConfigResolver(&globalConfig.Render, &globalConfig.Bypass, globalConfig.TrackingParams, globalConfig.CacheSharding, globalConfig.BothitRecache, globalConfig.Headers, globalConfig.Storage.Compression, host)
-	resolved := resolver.ResolveForURL(targetURL)
+	resolved := resolver.ResolveForRequest(targetURL, string(ctx.UserAgent()))
 
 	// Store resolved config in context for use by orchestrator and cache key generation
 	renderCtx.ResolvedConfig = resolved

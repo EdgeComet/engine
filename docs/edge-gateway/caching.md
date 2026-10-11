@@ -102,6 +102,10 @@ Common configurations:
 | With redirects | `[200, 301, 302]` |
 | With not found | `[200, 301, 302, 404]` |
 
+### Cache-only rules
+
+A URL rule with `action: "bypass"` and `bypass.cache.enabled: false` is cache-only. It reads one kind of entry: a fresh render in the request's slot (host, dimension and URL), which it serves. It never reads a bypass entry, fresh or stale, and never serves a stale render. Every other request goes to the origin: the response is served without being stored, no render lock is taken, no render starts, and an unreachable origin returns 502 with no stale fallback. A served render still schedules a [bot hit recache](#bot-hit-recache) when bot hit recache is enabled and its `match_ua` lists the client; set `bothit_recache.enabled: false` on the rule to prevent it. Add `match_ua` to apply cache-only to chosen bots only, see [URL rules](./url-rules.md#cache-only).
+
 ## Expiration strategies
 
 ### Delete strategy

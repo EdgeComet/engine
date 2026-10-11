@@ -26,6 +26,7 @@ type HostTestResult struct {
 	HostID        int
 	Host          string
 	OriginalURL   string // URL as provided for testing (before normalization)
+	UserAgent     string // client User-Agent from -ua; empty means no client
 	NormalizedURL string
 	URLHash       uint64
 	MatchedRule   *types.URLRule // nil if no rule matched (default behavior)
@@ -33,19 +34,20 @@ type HostTestResult struct {
 	Config        *config.ResolvedConfig
 }
 
-// TestURL tests how a URL will be processed by the system
-func TestURL(testURL string, result *validate.ValidationResult) (*URLTestResult, error) {
+// TestURL tests how a URL will be processed by the system for a client with the given User-Agent.
+// An empty userAgent resolves without a client, so URL rules with match_ua never match.
+func TestURL(testURL, userAgent string, result *validate.ValidationResult) (*URLTestResult, error) {
 	// Load configuration from validated path
 	egConfig, hostsConfig, err := loadConfigFromPath(result.ConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 
-	return testURLWithConfig(testURL, egConfig, hostsConfig)
+	return testURLWithConfig(testURL, userAgent, egConfig, hostsConfig)
 }
 
 // testURLWithConfig tests URL with loaded configuration
-func testURLWithConfig(testURL string, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
+func testURLWithConfig(testURL, userAgent string, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
 
 	urlResult := &URLTestResult{
 		URL: testURL,
@@ -62,15 +64,15 @@ func testURLWithConfig(testURL string, egConfig *config.EgConfig, hostsConfig *c
 
 	if urlResult.IsAbsolute {
 		// Test against specific host
-		return testAbsoluteURL(testURL, parsedURL, egConfig, hostsConfig)
+		return testAbsoluteURL(testURL, userAgent, parsedURL, egConfig, hostsConfig)
 	}
 
 	// Test against all hosts
-	return testRelativeURL(testURL, egConfig, hostsConfig)
+	return testRelativeURL(testURL, userAgent, egConfig, hostsConfig)
 }
 
 // testAbsoluteURL tests an absolute URL against its specific host
-func testAbsoluteURL(testURL string, parsedURL *url.URL, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
+func testAbsoluteURL(testURL, userAgent string, parsedURL *url.URL, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
 	urlResult := &URLTestResult{
 		URL:        testURL,
 		IsAbsolute: true,
@@ -92,14 +94,14 @@ func testAbsoluteURL(testURL string, parsedURL *url.URL, egConfig *config.EgConf
 	}
 
 	// Test URL against this host
-	hostResult := testURLAgainstHost(testURL, host, egConfig)
+	hostResult := testURLAgainstHost(testURL, userAgent, host, egConfig)
 	urlResult.HostResults = []HostTestResult{hostResult}
 
 	return urlResult, nil
 }
 
 // testRelativeURL tests a relative URL against all configured hosts
-func testRelativeURL(testURL string, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
+func testRelativeURL(testURL, userAgent string, egConfig *config.EgConfig, hostsConfig *config.HostsConfig) (*URLTestResult, error) {
 	urlResult := &URLTestResult{
 		URL:        testURL,
 		IsAbsolute: false,
@@ -112,7 +114,7 @@ func testRelativeURL(testURL string, egConfig *config.EgConfig, hostsConfig *con
 		// Construct full URL for this host
 		fullURL := fmt.Sprintf("https://%s%s", host.Domain, testURL)
 
-		hostResult := testURLAgainstHost(fullURL, host, egConfig)
+		hostResult := testURLAgainstHost(fullURL, userAgent, host, egConfig)
 		urlResult.HostResults = append(urlResult.HostResults, hostResult)
 	}
 
@@ -138,7 +140,7 @@ func loadConfigFromPath(configPath string) (*config.EgConfig, *config.HostsConfi
 }
 
 // testURLAgainstHost tests a URL against a specific host configuration
-func testURLAgainstHost(testURL string, host *types.Host, globalConfig *config.EgConfig) HostTestResult {
+func testURLAgainstHost(testURL, userAgent string, host *types.Host, globalConfig *config.EgConfig) HostTestResult {
 	// Normalize URL
 	normalizer := hash.NewURLNormalizer()
 	normalizeResult, err := normalizer.Normalize(testURL, nil)
@@ -155,17 +157,18 @@ func testURLAgainstHost(testURL string, host *types.Host, globalConfig *config.E
 	resolver := config.NewConfigResolver(&globalConfig.Render, &globalConfig.Bypass, globalConfig.TrackingParams, globalConfig.CacheSharding, globalConfig.BothitRecache, globalConfig.Headers, globalConfig.Storage.Compression, host)
 
 	// Resolve configuration for URL
-	resolvedConfig := resolver.ResolveForURL(normalizedURL)
+	resolvedConfig := resolver.ResolveForRequest(normalizedURL, userAgent)
 
 	// Find matching rule (if any)
 	matcher := config.NewPatternMatcher(host.URLRules)
-	matchedRule, _ := matcher.FindMatchingRule(normalizedURL)
+	matchedRule, _ := matcher.FindMatchingRule(normalizedURL, userAgent)
 
 	// Build result
 	hostResult := HostTestResult{
 		HostID:        host.ID,
 		Host:          host.Domain,
 		OriginalURL:   testURL,
+		UserAgent:     userAgent,
 		NormalizedURL: normalizedURL,
 		URLHash:       urlHash,
 		MatchedRule:   matchedRule,

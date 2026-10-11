@@ -5,7 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/edge/validate"
 	"github.com/edgecomet/engine/pkg/types"
 )
@@ -60,7 +62,7 @@ func TestTestURL_AbsoluteURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urlResult, err := TestURL(tt.url, result)
+			urlResult, err := TestURL(tt.url, config.NoClientUserAgent, result)
 			require.NoError(t, err)
 
 			assert.True(t, urlResult.IsAbsolute)
@@ -118,7 +120,7 @@ func TestTestURL_RelativeURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urlResult, err := TestURL(tt.url, result)
+			urlResult, err := TestURL(tt.url, config.NoClientUserAgent, result)
 			require.NoError(t, err)
 
 			assert.False(t, urlResult.IsAbsolute)
@@ -170,7 +172,7 @@ func TestTestURL_PatternMatching(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urlResult, err := TestURL(tt.url, result)
+			urlResult, err := TestURL(tt.url, config.NoClientUserAgent, result)
 			require.NoError(t, err)
 
 			require.Len(t, urlResult.HostResults, 1)
@@ -231,7 +233,7 @@ func TestTestURL_ConfigResolution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			urlResult, err := TestURL(tt.url, result)
+			urlResult, err := TestURL(tt.url, config.NoClientUserAgent, result)
 			require.NoError(t, err)
 			require.Len(t, urlResult.HostResults, 1)
 
@@ -252,13 +254,13 @@ func TestTestURL_URLNormalization(t *testing.T) {
 	url2 := "https://example.com/blog/post/"
 	url3 := "https://example.com/blog/post?utm_source=google"
 
-	urlResult1, err := TestURL(url1, result)
+	urlResult1, err := TestURL(url1, config.NoClientUserAgent, result)
 	require.NoError(t, err)
 
-	urlResult2, err := TestURL(url2, result)
+	urlResult2, err := TestURL(url2, config.NoClientUserAgent, result)
 	require.NoError(t, err)
 
-	urlResult3, err := TestURL(url3, result)
+	urlResult3, err := TestURL(url3, config.NoClientUserAgent, result)
 	require.NoError(t, err)
 
 	// All should normalize to similar base URL
@@ -305,4 +307,39 @@ func TestFindHostByDomain(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTestURL_UserAgentSelectsMatchUARule(t *testing.T) {
+	const (
+		claudeBotUA = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"
+		testURL     = "https://example.com/admin/users"
+	)
+
+	host := &types.Host{
+		ID:     1,
+		Domain: "example.com",
+		Dimensions: map[string]types.Dimension{
+			"desktop": {ID: 1, Width: 1920, Height: 1080, MatchUA: []string{"*"}},
+		},
+		URLRules: []types.URLRule{
+			{Match: "/admin/*", Action: types.ActionStatus404},
+			{Match: "*", MatchUA: []string{"$AnthropicBot"}, Action: types.ActionStatus403},
+		},
+	}
+	require.NoError(t, config.PrepareHost(host, nil, "test", zap.NewNop()))
+	egConfig := &config.EgConfig{}
+
+	withUA := testURLAgainstHost(testURL, claudeBotUA, host, egConfig)
+	require.NotNil(t, withUA.MatchedRule)
+	assert.Equal(t, string(types.ActionStatus403), withUA.Action)
+	assert.Equal(t, "*", withUA.MatchedRule.GetMatchPatterns()[0])
+	assert.NotEmpty(t, withUA.MatchedRule.MatchUA)
+	assert.Equal(t, "rule_0:*+ua", withUA.Config.MatchedRuleID)
+	assert.Equal(t, claudeBotUA, withUA.UserAgent)
+
+	noClient := testURLAgainstHost(testURL, config.NoClientUserAgent, host, egConfig)
+	require.NotNil(t, noClient.MatchedRule)
+	assert.Equal(t, string(types.ActionStatus404), noClient.Action)
+	assert.Equal(t, "/admin/*", noClient.MatchedRule.GetMatchPatterns()[0])
+	assert.Equal(t, "rule_1:/admin/*", noClient.Config.MatchedRuleID)
 }

@@ -33,6 +33,8 @@ type (
 // Compile-time interface satisfaction check
 var _ configtypes.EGConfigManager = (*EGConfigManager)(nil)
 
+const globalConfigContext = "global config"
+
 // hostsCache holds cached hosts data for thread-safe O(1) domain lookup
 type hostsCache struct {
 	hosts    []types.Host
@@ -95,21 +97,8 @@ func (cm *EGConfigManager) LoadConfig() error {
 	}
 
 	// Expand bot aliases and compile user agent patterns for global bothit_recache
-	if cm.config.BothitRecache != nil && len(cm.config.BothitRecache.MatchUA) > 0 {
-		expanded, err := ExpandBotAliases(cm.config.BothitRecache.MatchUA, "global config")
-		if err != nil {
-			return fmt.Errorf("failed to expand bot aliases in global bothit_recache: %w", err)
-		}
-		cm.config.BothitRecache.MatchUA = expanded
-
-		//cm.logger.Debug("Expanded bot aliases in global bothit_recache",
-		//	zap.String("config_path", cm.configPath),
-		//	zap.Int("pattern_count", len(cm.config.BothitRecache.MatchUA)))
-	}
-
-	// Compile user agent patterns for global bothit_recache
 	if cm.config.BothitRecache != nil {
-		if err := cm.config.BothitRecache.CompileMatchUAPatterns(); err != nil {
+		if err := expandAndCompileBothitUA(cm.config.BothitRecache, globalConfigContext); err != nil {
 			return fmt.Errorf("global bothit_recache: %w", err)
 		}
 	}

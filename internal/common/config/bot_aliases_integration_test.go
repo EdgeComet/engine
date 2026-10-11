@@ -603,7 +603,7 @@ func TestBothitRecache_HostAlias_UnknownFails(t *testing.T) {
 	})
 
 	t.Run("error message is descriptive", func(t *testing.T) {
-		assert.Contains(t, err.Error(), "failed to expand bothit_recache aliases",
+		assert.Contains(t, err.Error(), "bothit_recache: failed to expand bot aliases",
 			"Error should mention alias expansion failure")
 		assert.Contains(t, err.Error(), "host 'invalid.example.com'",
 			"Error should mention host domain")

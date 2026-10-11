@@ -96,6 +96,25 @@ func Compile(pattern string) (*Pattern, error) {
 	return p, nil
 }
 
+// CompileAll compiles every pattern, keeping input order. Returns nil for an empty list.
+// The error names the failing index and pattern and starts with "pattern[".
+func CompileAll(patterns []string) ([]*Pattern, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+
+	compiled := make([]*Pattern, len(patterns))
+	for i, pat := range patterns {
+		p, err := Compile(pat)
+		if err != nil {
+			return nil, fmt.Errorf("pattern[%d] '%s': %w", i, pat, err)
+		}
+		compiled[i] = p
+	}
+
+	return compiled, nil
+}
+
 // Match tests if input matches the compiled pattern
 // This is a method on Pattern, similar to regexp.Regexp.MatchString()
 func (p *Pattern) Match(input string) bool {

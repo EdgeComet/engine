@@ -46,15 +46,18 @@ func main() {
 	// Parse command-line flags
 	configPath := flag.String("c", "configs/edge-gateway.yaml", "path to configuration file")
 	testMode := flag.Bool("t", false, "test configuration and exit")
+	testUserAgent := flag.String("ua", config.NoClientUserAgent, "client User-Agent for -t <url>; URL rules with match_ua match only when it is set")
 	flag.Parse()
 
 	// If test mode, run validation
 	if *testMode {
-		var testURL string
-		if flag.NArg() > 0 {
-			testURL = flag.Arg(0)
+		testURL, err := parseTestURL(flag.CommandLine)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			flag.Usage()
+			os.Exit(usageExitCode)
 		}
-		exitCode := runConfigTest(*configPath, testURL)
+		exitCode := runConfigTest(*configPath, testURL, *testUserAgent)
 		os.Exit(exitCode)
 	}
 
@@ -469,8 +472,30 @@ func (s *serverLifecycle) Shutdown(ctx context.Context) error {
 	return err
 }
 
+// usageExitCode matches the flag package's exit code for a bad command line.
+const usageExitCode = 2
+
+// parseTestURL returns the -t URL, the first positional argument, and parses the flags after
+// it: fs.Parse stops at the first positional, so "-t <url> -ua <ua>" needs a second pass.
+// Any further positional is an error, or a flag after it would be dropped without notice.
+func parseTestURL(fs *flag.FlagSet) (string, error) {
+	if fs.NArg() == 0 {
+		return "", nil
+	}
+
+	testURL := fs.Arg(0)
+	if err := fs.Parse(fs.Args()[1:]); err != nil {
+		return "", err
+	}
+	if fs.NArg() > 0 {
+		return "", fmt.Errorf("unexpected argument %q after the URL to test", fs.Arg(0))
+	}
+
+	return testURL, nil
+}
+
 // runConfigTest runs configuration validation and optional URL testing
-func runConfigTest(configPath string, testURL string) int {
+func runConfigTest(configPath, testURL, userAgent string) int {
 	result, err := validate.ValidateConfiguration(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Validation error: %v\n", err)
@@ -507,7 +532,7 @@ func runConfigTest(configPath string, testURL string) int {
 	fmt.Println("configuration test is successful")
 
 	if testURL != "" {
-		urlResult, err := configtest.TestURL(testURL, result)
+		urlResult, err := configtest.TestURL(testURL, userAgent, result)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "\nURL test error: %v\n", err)
 			return 1

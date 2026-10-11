@@ -15,6 +15,7 @@ type expandedRule struct {
 	rule          types.URLRule
 	pattern       string
 	patternType   pattern.PatternType
+	hasUA         bool
 	hasQuery      bool
 	slashCount    int
 	originalIndex int
@@ -24,10 +25,11 @@ type expandedRule struct {
 // Returns a new slice with sorted rules (does not modify input).
 //
 // Sorting priority:
-//  1. Pattern Type: Exact > Wildcard > Regexp
-//  2. Query Matching: Has match_query > No match_query
-//  3. Slash Count: Descending (more slashes first)
-//  4. Declaration Order: Stable sort (preserve original order)
+//  1. User-Agent Matching: Has match_ua > No match_ua (a match_ua rule on "*" still covers "/")
+//  2. Pattern Type: Exact > Wildcard > Regexp
+//  3. Query Matching: Has match_query > No match_query
+//  4. Slash Count: Descending (more slashes first)
+//  5. Declaration Order: Stable sort (preserve original order)
 //
 // Multi-pattern rules are expanded into separate rules before sorting.
 // Returns error if pattern compilation fails during expansion.
@@ -69,19 +71,9 @@ func expandMultiPatternRules(rules []types.URLRule) ([]expandedRule, error) {
 		}
 
 		for _, pattern := range patterns {
-			// Create a new rule for this pattern
-			newRule := types.URLRule{
-				Match:          pattern, // Single pattern string
-				Action:         rule.Action,
-				MatchQuery:     rule.MatchQuery,
-				Render:         rule.Render,
-				Bypass:         rule.Bypass,
-				Status:         rule.Status,
-				TrackingParams: rule.TrackingParams,
-				CacheSharding:  rule.CacheSharding,
-				BothitRecache:  rule.BothitRecache,
-				Headers:        rule.Headers,
-			}
+			// Whole-struct copy carries every field, including compiled match_ua patterns.
+			newRule := rule
+			newRule.Match = pattern
 
 			// Compile patterns for the new rule (sets matchPatterns and patternMetadata)
 			// This is needed because we changed the Match field
@@ -97,6 +89,7 @@ func expandMultiPatternRules(rules []types.URLRule) ([]expandedRule, error) {
 				rule:          newRule,
 				pattern:       pattern,
 				patternType:   newRule.GetCompiledPattern(0).Type,
+				hasUA:         len(rule.MatchUA) > 0,
 				hasQuery:      len(rule.MatchQuery) > 0,
 				slashCount:    countSlashes(pattern),
 				originalIndex: originalIndex,
@@ -112,24 +105,29 @@ func expandMultiPatternRules(rules []types.URLRule) ([]expandedRule, error) {
 // compareExpandedRules compares two expanded rules for sorting
 // Returns true if a should come before b
 func compareExpandedRules(a, b *expandedRule) bool {
-	// Priority 1: Pattern Type (Exact > Wildcard > Regexp)
+	// Priority 1: User-Agent Matching (has match_ua > no match_ua)
+	if a.hasUA != b.hasUA {
+		return a.hasUA
+	}
+
+	// Priority 2: Pattern Type (Exact > Wildcard > Regexp)
 	// PatternTypeWildcard = 0, PatternTypeRegexp = 1, PatternTypeExact = 2
 	// Map to priority: Exact (2) → 3, Wildcard (0) → 2, Regexp (1) → 1
 	if a.patternType != b.patternType {
 		return pattern.TypePriority(a.patternType) > pattern.TypePriority(b.patternType)
 	}
 
-	// Priority 2: Query Matching (has match_query > no match_query)
+	// Priority 3: Query Matching (has match_query > no match_query)
 	if a.hasQuery != b.hasQuery {
 		return a.hasQuery // true before false
 	}
 
-	// Priority 3: Slash Count (more slashes = more specific)
+	// Priority 4: Slash Count (more slashes = more specific)
 	if a.slashCount != b.slashCount {
 		return a.slashCount > b.slashCount
 	}
 
-	// Priority 4: Original Index (stable sort - preserve declaration order)
+	// Priority 5: Original Index (stable sort - preserve declaration order)
 	return a.originalIndex < b.originalIndex
 }
 

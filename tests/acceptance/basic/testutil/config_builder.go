@@ -13,6 +13,23 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 )
 
+// Edge Gateway metrics endpoint. Specs read counters from it when a behavior has no other
+// observable effect, such as the reason label of a bypass.
+const (
+	EGMetricsListen = ":9139"
+	EGMetricsPath   = "/metrics"
+)
+
+// Edge Gateway internal API, as the cache daemon and other gateways call it.
+const (
+	egInternalPort = "10071"
+
+	EGInternalListen     = "0.0.0.0:" + egInternalPort
+	EGInternalBaseURL    = "http://localhost:" + egInternalPort
+	EGInternalAuthKey    = "test-auth-key-12345"
+	EGInternalAuthHeader = "X-Internal-Auth"
+)
+
 // ConfigBuilder builds typed daemon configs from TestEnvironmentConfig
 type ConfigBuilder struct {
 	testConfig *TestEnvironmentConfig
@@ -44,8 +61,8 @@ func (b *ConfigBuilder) BuildEGConfig(tempDir string) *config.EgConfig {
 
 	return &config.EgConfig{
 		Internal: configtypes.InternalConfig{
-			Listen:  "0.0.0.0:10071",
-			AuthKey: "test-auth-key-12345",
+			Listen:  EGInternalListen,
+			AuthKey: EGInternalAuthKey,
 		},
 		Server: config.ServerConfig{
 			Listen:  fmt.Sprintf(":%d", b.testConfig.EdgeGateway.Port),
@@ -97,6 +114,11 @@ func (b *ConfigBuilder) BuildEGConfig(tempDir string) *config.EgConfig {
 		// spec pins, and the reason the validator warns about it at load.
 		Headers: &types.HeadersConfig{
 			RequestHeadersSet: map[string]string{SetHeaderGlobal: SetHeaderGlobalValue},
+		},
+		Metrics: configtypes.MetricsConfig{
+			Enabled: true,
+			Listen:  EGMetricsListen,
+			Path:    EGMetricsPath,
 		},
 		EventLogging: &configtypes.EventLoggingConfig{
 			File: configtypes.EventFileConfig{

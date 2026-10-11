@@ -294,7 +294,7 @@ func TestExpandDimensionAliases_ErrorMessageHint(t *testing.T) {
 	assert.Contains(t, errorMsg, "$Amazonbot")
 	assert.Contains(t, errorMsg, "$AnthropicBot")
 	assert.Contains(t, errorMsg, "$AnthropicSearchBot")
-	assert.Contains(t, errorMsg, "and 18 more") // 23 total - 5 displayed = 18 more
+	assert.Contains(t, errorMsg, "and 21 more") // 26 total - 5 displayed = 21 more
 }
 
 func TestExpandDimensionAliases_MultipleUnknownAliases(t *testing.T) {

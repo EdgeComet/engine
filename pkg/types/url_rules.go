@@ -23,13 +23,15 @@ const (
 )
 
 // URLRule defines behavior for URLs matching specific patterns
-// any added config fields should be processed in the config.expandMultiPatternRules
 type URLRule struct {
 	Match  interface{}   `yaml:"match" json:"match"`   // string or []string - URL pattern(s)
 	Action URLRuleAction `yaml:"action" json:"action"` // "render" | "bypass" | "block" | "status_403" | "status_404" | "status_410" | "status"
 
 	// Query parameter matching (optional, all conditions must match - AND logic)
 	MatchQuery map[string]interface{} `yaml:"match_query,omitempty" json:"match_query,omitempty"`
+
+	// User-Agent patterns (OR); when set, the rule requires a match. nil means every client, [] is invalid.
+	MatchUA []string `yaml:"match_ua,omitempty" json:"match_ua,omitempty"`
 
 	// Render overrides (only for action="render")
 	Render *RenderRuleConfig `yaml:"render,omitempty" json:"render,omitempty"`
@@ -63,6 +65,10 @@ type URLRule struct {
 	// QueryParamMetadata stores pre-compiled query parameter patterns
 	// Key is the parameter name, value is array of patterns (for OR logic)
 	QueryParamMetadata map[string][]*pattern.Pattern `yaml:"-" json:"-"`
+
+	// uaPatterns is compiled from MatchUA after alias expansion, never by CompilePatterns,
+	// so expanded copies of a multi-pattern rule share one compiled slice.
+	uaPatterns []*pattern.Pattern `yaml:"-" json:"-"`
 }
 
 // PatternMetadata contains pre-compiled pattern matching data (deprecated, use pattern.Pattern)
@@ -191,20 +197,11 @@ func (c *BothitRecacheConfig) Validate() error {
 // - ~ prefix: case-sensitive regexp
 // - ~* prefix: case-insensitive regexp
 func (c *BothitRecacheConfig) CompileMatchUAPatterns() error {
-	if len(c.MatchUA) == 0 {
-		return nil
+	compiled, err := pattern.CompileAll(c.MatchUA)
+	if err != nil {
+		return fmt.Errorf("invalid bothit_recache user agent %w", err)
 	}
-
-	c.CompiledPatterns = make([]*pattern.Pattern, len(c.MatchUA))
-
-	for i, pat := range c.MatchUA {
-		compiled, err := pattern.Compile(pat)
-		if err != nil {
-			return fmt.Errorf("invalid bothit_recache user agent pattern '%s': %w", pat, err)
-		}
-		c.CompiledPatterns[i] = compiled
-	}
-
+	c.CompiledPatterns = compiled
 	return nil
 }
 
@@ -466,6 +463,21 @@ func (r *URLRule) CompilePatterns() error {
 	}
 
 	return nil
+}
+
+// CompileMatchUAPatterns compiles MatchUA as written; $Alias entries must already be expanded.
+func (r *URLRule) CompileMatchUAPatterns() error {
+	compiled, err := pattern.CompileAll(r.MatchUA)
+	if err != nil {
+		return fmt.Errorf("match_ua %w", err)
+	}
+	r.uaPatterns = compiled
+	return nil
+}
+
+// UAPatterns returns the compiled MatchUA patterns, nil until CompileMatchUAPatterns runs.
+func (r *URLRule) UAPatterns() []*pattern.Pattern {
+	return r.uaPatterns
 }
 
 // IsValid checks if the action is valid
