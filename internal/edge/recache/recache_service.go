@@ -34,8 +34,9 @@ const (
 
 // ErrRecacheSkipped marks a recache the configuration declines by design: bypass caching is off
 // for the URL, the resolved cache TTL is zero (bypass or render - the live path caches in neither
-// case), or a render cache entry already owns the key. The outcome is terminal - a retry resolves
-// to the same decision - so the handler answers 200 and logs at info.
+// case), the origin answered with a binary content type neither cache stores, or a render cache
+// entry already owns the key. The outcome is terminal - a retry resolves to the same decision -
+// so the handler answers 200 and logs at info.
 // Reporting it as a failure made the daemon retry to MaxRetries, and every attempt raised an
 // error on both services, which is what drowned Rollbar.
 // Origin failures are NOT skips: they are classified via recacheError so they stay countable.
@@ -261,6 +262,12 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		return failure.withRedirect(renderResp.Metrics.FinalURL)
 	}
 
+	// The live path serves such a URL via bypass and caches nothing; storing the render here would
+	// write the viewer stub it refuses to cache.
+	if contentType := orchestrator.ContentTypeHeaderValue(renderResp.Headers); !orchestrator.IsCacheableContentType(contentType) {
+		return fmt.Errorf("%w: non-cacheable content type %q", ErrRecacheSkipped, contentType)
+	}
+
 	renderCtx.Logger.Info("Render completed",
 		zap.Int("status_code", statusCode),
 		zap.Int("html_size", len(renderResp.HTML)))
@@ -458,6 +465,10 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 	// above, and folding an uncacheable origin status into a skip is what hid origin outages.
 	if failure := rs.classifyStatus(bypassResp.StatusCode, renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes); failure != nil {
 		return failure.withRedirect(orchestrator.LocationHeaderValue(bypassResp.Headers))
+	}
+
+	if !orchestrator.IsCacheableContentType(bypassResp.ContentType) {
+		return fmt.Errorf("%w: non-cacheable content type %q", ErrRecacheSkipped, bypassResp.ContentType)
 	}
 
 	if existing, exists := rs.cacheCoord.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {

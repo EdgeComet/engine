@@ -102,6 +102,15 @@ Common configurations:
 | With redirects | `[200, 301, 302]` |
 | With not found | `[200, 301, 302, 404]` |
 
+### Binary content types
+
+Responses with a binary download Content-Type are never cached, whatever the configuration says: `application/pdf`, `application/octet-stream`, `application/zip`, and every `image/*`, `video/*` and `audio/*` type. The check applies to both caches, on live requests and on recache:
+
+- **Bypass:** the response is served to the client and not stored. A recache of the URL is skipped.
+- **Render:** Chrome renders a PDF to an empty viewer page, not the document. When a render returns one of these types, the edge gateway discards it and serves the origin's file through bypass, which stores nothing. A recache of the URL is skipped.
+
+Other non-HTML types, such as JSON, JavaScript, RSS feeds and XML sitemaps, are cached as configured.
+
 ### Cache-only rules
 
 A URL rule with `action: "bypass"` and `bypass.cache.enabled: false` is cache-only. It reads one kind of entry: a fresh render in the request's slot (host, dimension and URL), which it serves. It never reads a bypass entry, fresh or stale, and never serves a stale render. Every other request goes to the origin: the response is served without being stored, no render lock is taken, no render starts, and an unreachable origin returns 502 with no stale fallback. A served render still schedules a [bot hit recache](#bot-hit-recache) when bot hit recache is enabled and its `match_ua` lists the client; set `bothit_recache.enabled: false` on the rule to prevent it. Add `match_ua` to apply cache-only to chosen bots only, see [URL rules](./url-rules.md#cache-only).

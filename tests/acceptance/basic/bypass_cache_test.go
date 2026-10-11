@@ -401,7 +401,7 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			Expect(metadata["source"]).To(Equal("bypass"))
 		})
 
-		It("should handle PDF bypass with caching", func() {
+		It("should serve a PDF via bypass without caching it", func() {
 			url := "/documents/test.pdf"
 
 			By("First request for PDF")
@@ -409,14 +409,29 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			Expect(resp1.StatusCode).To(Equal(200))
 			Expect(resp1.Headers.Get("Content-Type")).To(Equal("application/pdf"))
 
-			By("Verifying PDF cached (*.pdf pattern has caching enabled)")
+			By("Verifying PDF not cached although the *.pdf pattern enables bypass caching")
 			cacheKey, _ := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
-			Expect(testEnv.CacheExists(cacheKey)).To(BeTrue())
+			Expect(testEnv.CacheExists(cacheKey)).To(BeFalse())
 
-			By("Second request - served from cache")
+			By("Second request - fetched from origin again")
 			resp2 := testEnv.RequestRender(url)
-			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass"))
 			Expect(resp2.Headers.Get("Content-Type")).To(Equal("application/pdf"))
+		})
+
+		It("should serve a PDF from a render URL via bypass without caching it", func() {
+			url := "/render-pdf/document.pdf"
+
+			By("Requesting a render URL that answers with a PDF")
+			resp := testEnv.RequestRender(url)
+			Expect(resp.StatusCode).To(Equal(200))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal("bypass"))
+			Expect(resp.Headers.Get("Content-Type")).To(Equal("application/pdf"))
+			Expect(resp.Body).To(HavePrefix("%PDF-"), "the origin bytes, not Chrome's PDF viewer stub")
+
+			By("Verifying neither the render nor the bypass cache stored it")
+			cacheKey, _ := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
+			Expect(testEnv.CacheExists(cacheKey)).To(BeFalse())
 		})
 	})
 

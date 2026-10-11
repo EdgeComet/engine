@@ -84,6 +84,38 @@ func TestIsHTMLContentTypeValue(t *testing.T) {
 	}
 }
 
+// Binary downloads must never reach the bypass cache, while the non-HTML text types bots reuse
+// heavily (JSON, JS, feeds, sitemaps) must stay cacheable.
+func TestIsCacheableContentType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		expected    bool
+	}{
+		{"html", "text/html; charset=utf-8", true},
+		{"empty defaults to cacheable", "", true},
+		{"json", "application/json", true},
+		{"javascript", "application/javascript", true},
+		{"rss feed", "application/rss+xml", true},
+		{"xml sitemap", "text/xml; charset=UTF-8", true},
+		{"plain text", "text/plain", true},
+		{"pdf", "application/pdf", false},
+		{"pdf with parameter", "application/pdf; qs=0.001", false},
+		{"pdf mixed case with spaces", "  Application/PDF", false},
+		{"octet-stream", "application/octet-stream", false},
+		{"zip", "application/zip", false},
+		{"image", "image/png", false},
+		{"video", "video/mp4", false},
+		{"audio", "audio/mpeg", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsCacheableContentType(tt.contentType))
+		})
+	}
+}
+
 func TestFirstHeaderValueSorted(t *testing.T) {
 	tests := []struct {
 		name      string

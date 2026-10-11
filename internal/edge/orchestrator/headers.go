@@ -104,13 +104,46 @@ func IsHTMLContentTypeValue(contentType string) bool {
 	return strings.Contains(contentType, contentTypeHTML)
 }
 
+// nonCacheableContentTypes are binary download media types neither cache stores. In the bypass
+// cache they are almost never re-requested, yet they are the only entries large enough to exceed
+// the EG-to-EG push body limit. In the render cache they are worse: Chrome renders a PDF to its
+// empty viewer stub, which would be replayed to bots under the origin's binary Content-Type.
+// Matched as prefixes, so "image/" covers every image subtype and a trailing "; charset=..."
+// parameter does not defeat the match.
+var nonCacheableContentTypes = []string{
+	"application/pdf",
+	"application/octet-stream",
+	"application/zip",
+	"image/",
+	"video/",
+	"audio/",
+}
+
+// IsCacheableContentType reports whether a response with this Content-Type value may be stored in
+// the render or bypass cache. Exported so the recache service applies the same rule as the live
+// serving paths.
+func IsCacheableContentType(contentType string) bool {
+	mediaType := strings.ToLower(strings.TrimSpace(contentType))
+	for _, prefix := range nonCacheableContentTypes {
+		if strings.HasPrefix(mediaType, prefix) {
+			return false
+		}
+	}
+	return true
+}
+
+// ContentTypeHeaderValue returns the Content-Type header value, matched case-insensitively, or an
+// empty string when the header is absent.
+func ContentTypeHeaderValue(headers map[string][]string) string {
+	if ct, ok := getHeaderCaseInsensitive(headers, headerContentType); ok && len(ct) > 0 {
+		return ct[0]
+	}
+	return ""
+}
+
 // isHTMLContentType reports whether response headers indicate an HTML body.
 func isHTMLContentType(headers map[string][]string) bool {
-	ct, ok := getHeaderCaseInsensitive(headers, headerContentType)
-	if !ok || len(ct) == 0 {
-		return true
-	}
-	return IsHTMLContentTypeValue(ct[0])
+	return IsHTMLContentTypeValue(ContentTypeHeaderValue(headers))
 }
 
 // FilterHeaders filters headers to only include those in the safe headers list

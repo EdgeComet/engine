@@ -165,6 +165,8 @@ hosts:
             ttl: 1h  # Cache product reviews
 
       # --- EXTENSION PATTERNS ---
+      # Bypass cache enabled on purpose: binary content types are declined regardless of config
+      # (bypass_cache_test.go)
       - match: "*.pdf"
         action: "bypass"
         bypass:
@@ -172,6 +174,11 @@ hosts:
             enabled: true
             ttl: 24h
             status_codes: [200, 404]
+
+      # A render URL that answers with a PDF: Chrome produces only its viewer stub, so the EG
+      # serves the origin bytes via bypass and caches nothing (bypass_cache_test.go)
+      - match: "/render-pdf/document.pdf"
+        action: "render"
 
       - match: "*.zip"
         action: "status_403"

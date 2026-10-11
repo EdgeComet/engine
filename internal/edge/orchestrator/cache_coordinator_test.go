@@ -724,3 +724,33 @@ func TestSaveRenderCache_LocationGatedByStatus(t *testing.T) {
 		assert.Contains(t, mr.HGet(metaKey, "headers"), "https://example.com/new-page")
 	})
 }
+
+func TestCanSaveBypassCache_ContentType(t *testing.T) {
+	newCtx := func() *edgectx.RenderContext {
+		renderCtx := overrideRenderCtx(&types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0xb1a})
+		renderCtx.ResolvedConfig.Bypass.Cache = config.ResolvedBypassCacheConfig{
+			Enabled:     true,
+			TTL:         time.Hour,
+			StatusCodes: []int{200},
+		}
+		return renderCtx
+	}
+
+	t.Run("html is saved", func(t *testing.T) {
+		cc, _ := newOverrideCacheCoordinator(t)
+
+		canSave, reason := cc.CanSaveBypassCache(newCtx(), 200, "text/html; charset=utf-8")
+
+		assert.True(t, canSave)
+		assert.Empty(t, reason)
+	})
+
+	t.Run("binary download is declined", func(t *testing.T) {
+		cc, _ := newOverrideCacheCoordinator(t)
+
+		canSave, reason := cc.CanSaveBypassCache(newCtx(), 200, "application/pdf")
+
+		assert.False(t, canSave)
+		assert.Equal(t, "non-cacheable content type", reason)
+	})
+}

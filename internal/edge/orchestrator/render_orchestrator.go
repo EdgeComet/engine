@@ -521,6 +521,15 @@ func (ro *RenderOrchestrator) executeRenderWithExplicitServing(renderCtx *edgect
 		}, nil
 	}
 
+	// A binary document renders to Chrome's empty viewer stub, useless to a bot and mislabeled by
+	// the origin's binary Content-Type. Serve the original bytes from origin instead; the bypass
+	// cache declines the same content types, so nothing is stored on either path.
+	if contentType := ContentTypeHeaderValue(renderResult.Headers); !IsCacheableContentType(contentType) {
+		renderCtx.Logger.Info("Render returned a non-cacheable content type, serving origin via bypass",
+			zap.String("content_type", contentType))
+		return ro.serveBypass(renderCtx, "non_cacheable_content_type")
+	}
+
 	// Content processing: script cleaning, SEO extraction, and optional content processor.
 	// Only HTML responses are processed (mirrors the bypass path content-type guard).
 	html := renderResult.HTML
@@ -1264,14 +1273,15 @@ func (ro *RenderOrchestrator) serveBypass(renderCtx *edgectx.RenderContext, reas
 	}
 
 	// 3. SAVE TO CACHE if all preconditions are met
-	if canSave, reason := ro.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode); canSave {
+	if canSave, reason := ro.cacheCoord.CanSaveBypassCache(renderCtx, bypassResp.StatusCode, bypassResp.ContentType); canSave {
 		if err := ro.cacheCoord.SaveBypassCache(renderCtx, bypassResp, pageSEO); err != nil {
 			renderCtx.Logger.Error("Failed to save bypass response to cache", zap.Error(err))
 		}
 	} else if renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
 		renderCtx.Logger.Info("Skipping bypass cache save",
 			zap.String("reason", reason),
-			zap.Int("status_code", bypassResp.StatusCode))
+			zap.Int("status_code", bypassResp.StatusCode),
+			zap.String("content_type", bypassResp.ContentType))
 	}
 
 	// 4. SERVE RESPONSE to client

@@ -437,7 +437,7 @@ func (cc *CacheCoordinator) SaveOverrideCache(
 
 // CanSaveBypassCache checks all preconditions for saving bypass cache.
 // Returns (true, "") if save is allowed, or (false, reason) if not.
-func (cc *CacheCoordinator) CanSaveBypassCache(renderCtx *edgectx.RenderContext, statusCode int) (bool, string) {
+func (cc *CacheCoordinator) CanSaveBypassCache(renderCtx *edgectx.RenderContext, statusCode int, contentType string) (bool, string) {
 	if !renderCtx.ResolvedConfig.Bypass.Cache.Enabled {
 		return false, "bypass cache disabled"
 	}
@@ -446,6 +446,9 @@ func (cc *CacheCoordinator) CanSaveBypassCache(renderCtx *edgectx.RenderContext,
 	}
 	if !cc.IsStatusCodeCacheable(statusCode, renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes) {
 		return false, "non-cacheable status code"
+	}
+	if !IsCacheableContentType(contentType) {
+		return false, "non-cacheable content type"
 	}
 	if existing, exists := cc.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {
 		return false, "render cache already exists"

@@ -25,7 +25,8 @@ Bypass cache never overwrites render cache - render cache always takes priority 
 ### Automatic fallback
 The system automatically falls back to bypass mode when rendering fails or is unavailable. This ensures requests complete successfully even when the render service encounters
 problems. Bypass mode triggers when no render services are registered, all services are at capacity, or service selection fails. It also activates during request timeouts,
-render service failures, or Chrome process errors.
+render service failures, or Chrome process errors, and when a render returns a binary content type such as a PDF, whose rendered form is an empty viewer page rather than
+the document (see [Binary content types](./caching.md#binary-content-types)).
 
 Bypass mode also serves as a fallback for cache-related issues in distributed environments, including lock acquisition errors, concurrent render timeouts, and cache pull
 failures across sharded instances. When `unmatched_dimension` is set to `"bypass"` (the default), requests with User-Agents that don't match any configured dimension are routed through the built-in bypass dimension (ID 0) and fetched directly from origin. There is no response header for this fallback; the unmatched-dimension signal is recorded in logs and metrics instead.
@@ -143,6 +144,8 @@ Common patterns:
 - `[200, 301, 302, 404]` - All cacheable responses
 
 Use restrictive filtering for dynamic content and broader filtering for stable resources.
+
+Binary download types (PDF, `application/octet-stream`, archives, images, video, audio) are never cached, whatever `status_codes` allows. See [Binary content types](./caching.md#binary-content-types).
 
 ### TTL settings
 

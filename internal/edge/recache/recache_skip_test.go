@@ -3,6 +3,8 @@ package recache
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -143,4 +145,53 @@ func TestProcessRecache_RenderWithoutCacheTTLIsSkipped(t *testing.T) {
 // A skip must not be mistaken for success: the handler still needs an error to report and log.
 func TestErrRecacheSkipped_IsNotNil(t *testing.T) {
 	assert.Error(t, ErrRecacheSkipped)
+}
+
+// A binary download is declined the same way the live bypass path declines it: terminal, so the
+// daemon must see a skip rather than a failure it would retry to MaxRetries.
+func TestProcessBypassRecache_BinaryContentTypeIsSkipped(t *testing.T) {
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write([]byte("%PDF-1.4"))
+	}))
+	defer origin.Close()
+
+	ssrfProtection := false
+	rs := &RecacheService{
+		logger:     zap.NewNop(),
+		cacheCoord: &orchestrator.CacheCoordinator{},
+		bypassSvc:  bypass.NewBypassService(&config.GlobalBypassConfig{SSRFProtection: &ssrfProtection}, zap.NewNop()),
+	}
+
+	renderCtx := bypassRecacheContext(true, time.Minute)
+	renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes = []int{200}
+	renderCtx.Host = &types.Host{ID: 1, Domain: "127.0.0.1"}
+
+	err := rs.processBypassRecache(context.Background(), origin.URL+"/doc.pdf", renderCtx, time.Now())
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrRecacheSkipped),
+		"a binary content type is a terminal decline, not a failure, got: %v", err)
+
+	var classified *recacheError
+	assert.False(t, errors.As(err, &classified), "a decline must not be counted as a failed attempt")
+}
+
+// Chrome renders a PDF to its empty viewer stub. Recache must decline it rather than write the stub
+// the live path refuses to cache, and a decline files no precache row.
+func TestProcessRecache_RenderBinaryContentTypeIsSkipped(t *testing.T) {
+	rs, emitter, sentRequest := stampRenderRecacheService(t, types.RenderResponse{
+		Success: true,
+		HTML:    `<!DOCTYPE html><html><head><link rel="stylesheet" href="chrome-extension://pdf_embedder.css"></head><body></body></html>`,
+		Headers: map[string][]string{"content-type": {"application/pdf"}},
+		Metrics: types.PageMetrics{StatusCode: 200},
+	})
+
+	err := rs.ProcessRecache(context.Background(), "https://example.com/doc.pdf", 1, 0, types.RecacheModeRender)
+
+	require.Error(t, err)
+	require.Equal(t, stampRenderKey, sentRequest().RenderKey, "the render service was actually called")
+	assert.True(t, errors.Is(err, ErrRecacheSkipped),
+		"a binary content type is a terminal decline, not a failure, got: %v", err)
+	assert.Empty(t, emitter.emitted, "a decline writes no precache row")
 }
