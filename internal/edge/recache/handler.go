@@ -1,6 +1,7 @@
 package recache
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -53,7 +54,11 @@ func (rs *RecacheService) handleRecache(ctx *fasthttp.RequestCtx) {
 		zap.Int("host_id", req.HostID),
 		zap.Int("dimension_id", req.DimensionID))
 
-	if err := rs.ProcessRecache(ctx, req.URL, req.HostID, req.DimensionID, req.Mode); err != nil {
+	// fasthttp closes the Done channel of every in-flight RequestCtx as soon as Server.Shutdown
+	// starts, so the request itself as the recache's context would cancel the render the drain is
+	// meant to let finish. The recache keeps the request's values but not that cancellation; the
+	// process exit at the end of the drain still bounds it.
+	if err := rs.ProcessRecache(context.WithoutCancel(ctx), req.URL, req.HostID, req.DimensionID, req.Mode); err != nil {
 		if errors.Is(err, ErrRecacheSkipped) {
 			rs.logger.Info("Recache skipped by configuration",
 				zap.String("url", req.URL),
