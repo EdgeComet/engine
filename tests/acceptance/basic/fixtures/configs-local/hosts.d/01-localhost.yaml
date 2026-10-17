@@ -907,3 +907,42 @@ hosts:
             additional_wait: 10s
           cache:
             ttl: 0s
+
+      # --- WIRE SPELLING TESTS (for url_wire_spelling_test.go) ---
+      # The origin records the verbatim request-target of every /wire/ request. Redirects and 404s
+      # are cacheable so a spec can observe which spelling produced a cached redirect.
+      - match: "/wire/bypass/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 5m
+            status_codes: [200, 301, 302, 404]
+
+      - match: "/wire/render/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 5m
+            status_codes: [200, 301, 302, 404]
+
+      - match: "/wire/bypass-stale/*"
+        action: "bypass"
+        bypass:
+          cache:
+            enabled: true
+            ttl: 2s
+            status_codes: [200, 301, 302, 404]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 1m
+
+      - match: "/wire/render-stale/*"
+        action: "render"
+        render:
+          cache:
+            ttl: 2s
+            status_codes: [200, 301, 302, 404]
+            expired:
+              strategy: "serve_stale"
+              stale_ttl: 1m

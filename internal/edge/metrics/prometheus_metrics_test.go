@@ -69,3 +69,17 @@ func TestPrometheusMetrics_HTTPEndpoint(t *testing.T) {
 	assert.Contains(t, body, "# HELP")
 	assert.Contains(t, body, "# TYPE")
 }
+
+func TestPrometheusMetrics_CachedRedirectIgnored(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	pm := NewPrometheusMetricsWithRegistry("edgecomet", registry, zap.NewNop())
+
+	pm.RecordCachedRedirectIgnored("meblini.pl")
+	pm.RecordCachedRedirectIgnored("meblini.pl")
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("/metrics")
+	pm.ServeHTTP(ctx)
+
+	assert.Contains(t, string(ctx.Response.Body()), `edgecomet_eg_cached_redirect_ignored_total{host="meblini.pl"} 2`)
+}

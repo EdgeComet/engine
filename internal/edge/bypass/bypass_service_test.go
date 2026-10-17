@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,7 +42,7 @@ func TestFetchContentSetsLoopPreventionHeaders(t *testing.T) {
 		types.HeaderEdgeRender: {"spoofed"}, // must be overridden by engine value
 	}
 
-	resp, err := svc.FetchContent(origin.URL, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -72,7 +73,7 @@ func TestFetchContentLargeResponseHeaders(t *testing.T) {
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, testBypassConfig, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, testBypassConfig, nil, "", zap.NewNop())
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "rendered body", string(resp.Body))
@@ -88,7 +89,7 @@ func TestFetchContentMarksTransportFailure(t *testing.T) {
 
 	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
 	// without depending on network reachability.
-	resp, err := svc.FetchContent("http://127.0.0.1:1/page", testBypassConfig, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: "http://127.0.0.1:1/page"}, testBypassConfig, nil, "", zap.NewNop())
 
 	require.NoError(t, err, "FetchContent reports transport failures through the response, not an error")
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
@@ -117,7 +118,7 @@ func TestFetchContentCapturesSentHeaders(t *testing.T) {
 		"Authorization": {"Bearer token"},
 	}
 
-	resp, err := svc.FetchContent(origin.URL, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, testBypassConfig, clientHeaders, "render-key-123", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -136,7 +137,7 @@ func TestFetchContentTransportFailureCapturesSentHeaders(t *testing.T) {
 
 	// Loopback is rejected by the SSRF-safe dialer, which surfaces as a transport failure
 	// without depending on network reachability.
-	resp, err := svc.FetchContent("http://127.0.0.1:1/page", testBypassConfig, nil, "render-key-123", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: "http://127.0.0.1:1/page"}, testBypassConfig, nil, "render-key-123", zap.NewNop())
 
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.TransportError)
@@ -165,7 +166,7 @@ func TestFetchContentSentHeadersOmitHostWrittenAtSendTime(t *testing.T) {
 		SSRFProtection: &ssrfOff,
 	}, zap.NewNop())
 
-	resp, err := svc.FetchContent(origin.URL, testBypassConfig, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, testBypassConfig, nil, "", zap.NewNop())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -208,7 +209,7 @@ func TestFetchContentAppliesRequestTimeout(t *testing.T) {
 
 	t.Run("deadline shorter than the origin fails as a transport error", func(t *testing.T) {
 		start := time.Now()
-		resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 150 * time.Millisecond}, nil, "", zap.NewNop())
+		resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, config.ResolvedBypassConfig{Timeout: 150 * time.Millisecond}, nil, "", zap.NewNop())
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusBadGateway, resp.StatusCode)
 		assert.NotEmpty(t, resp.TransportError)
@@ -216,7 +217,7 @@ func TestFetchContentAppliesRequestTimeout(t *testing.T) {
 	})
 
 	t.Run("deadline longer than the origin succeeds", func(t *testing.T) {
-		resp, err := svc.FetchContent(origin.URL, config.ResolvedBypassConfig{Timeout: 5 * time.Second}, nil, "", zap.NewNop())
+		resp, err := svc.FetchContent(FetchTarget{URL: origin.URL}, config.ResolvedBypassConfig{Timeout: 5 * time.Second}, nil, "", zap.NewNop())
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "slow", string(resp.Body))
@@ -248,10 +249,140 @@ func TestFetchContentUsesResolvedHostOverrides(t *testing.T) {
 		ResolveForURL(origin.URL + "/page")
 
 	svc := NewBypassService(global, zap.NewNop())
-	resp, err := svc.FetchContent(origin.URL+"/page", resolved.Bypass, nil, "", zap.NewNop())
+	resp, err := svc.FetchContent(FetchTarget{URL: origin.URL + "/page"}, resolved.Bypass, nil, "", zap.NewNop())
 	require.NoError(t, err)
 
 	assert.Equal(t, "HostUA/1.0", <-gotUA, "the host's User-Agent reaches the origin, not the global one")
 	assert.Equal(t, http.StatusBadGateway, resp.StatusCode, "the host's 100ms timeout applies, not the global 30s")
 	assert.NotEmpty(t, resp.TransportError)
+}
+
+// requestURIRecorder is an origin that records the verbatim request-target of every request.
+type requestURIRecorder struct {
+	mu      sync.Mutex
+	targets []string
+}
+
+func (rr *requestURIRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rr.mu.Lock()
+	rr.targets = append(rr.targets, r.RequestURI)
+	rr.mu.Unlock()
+	w.WriteHeader(http.StatusOK)
+}
+
+func (rr *requestURIRecorder) received() []string {
+	rr.mu.Lock()
+	defer rr.mu.Unlock()
+	return append([]string(nil), rr.targets...)
+}
+
+func newRecordingBypass(t *testing.T) (*BypassService, *requestURIRecorder, string) {
+	t.Helper()
+	recorder := &requestURIRecorder{}
+	origin := httptest.NewServer(recorder)
+	t.Cleanup(origin.Close)
+
+	ssrfOff := false
+	return NewBypassService(&config.GlobalBypassConfig{SSRFProtection: &ssrfOff}, zap.NewNop()), recorder, origin.URL
+}
+
+func TestFetchContentExactPathIsSentByteForByte(t *testing.T) {
+	targets := []string{
+		"/a%2Cb/53",
+		"/a%2cb",
+		"/caf%c3%a9",
+		"/a%3Fb",
+		"/a%23b",
+		"/50%2541",
+		"/p%0A",
+		"/a%21b",
+		"/a,b:c;d=e@f$g&h+i",
+		"/a%2Cb?a=1%2C2&b=2",
+	}
+
+	svc, recorder, originURL := newRecordingBypass(t)
+	for _, target := range targets {
+		resp, err := svc.FetchContent(FetchTarget{URL: originURL + target, ExactPath: true}, testBypassConfig, nil, "", zap.NewNop())
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode, target)
+		assert.Empty(t, resp.TransportError, target)
+	}
+
+	assert.Equal(t, targets, recorder.received())
+}
+
+func TestFetchContentLegacyPathIsStillNormalized(t *testing.T) {
+	tests := []struct {
+		target string
+		want   string
+	}{
+		{target: "/a%2Cb/53", want: "/a,b/53"},
+		{target: "/a%2cb", want: "/a,b"},
+		{target: "/caf%c3%a9", want: "/caf%C3%A9"},
+		{target: "/50%41", want: "/50A"},
+		{target: "/a!b", want: "/a%21b"},
+	}
+
+	svc, recorder, originURL := newRecordingBypass(t)
+	var want []string
+	for _, tt := range tests {
+		_, err := svc.FetchContent(FetchTarget{URL: originURL + tt.target}, testBypassConfig, nil, "", zap.NewNop())
+		require.NoError(t, err)
+		want = append(want, tt.want)
+	}
+
+	assert.Equal(t, want, recorder.received())
+}
+
+func TestFetchContentExactAndLegacyStayIsolated(t *testing.T) {
+	const (
+		exactTarget  = "/a%2Cb"
+		legacyTarget = "/a,b"
+		rounds       = 20
+	)
+
+	t.Run("alternating", func(t *testing.T) {
+		svc, recorder, originURL := newRecordingBypass(t)
+		var want []string
+		for i := 0; i < rounds; i++ {
+			exact := i%2 == 0
+			_, err := svc.FetchContent(FetchTarget{URL: originURL + exactTarget, ExactPath: exact}, testBypassConfig, nil, "", zap.NewNop())
+			require.NoError(t, err)
+			if exact {
+				want = append(want, exactTarget)
+			} else {
+				want = append(want, legacyTarget)
+			}
+		}
+		assert.Equal(t, want, recorder.received())
+	})
+
+	t.Run("concurrent", func(t *testing.T) {
+		svc, recorder, originURL := newRecordingBypass(t)
+		var wg sync.WaitGroup
+		for i := 0; i < rounds; i++ {
+			wg.Add(1)
+			go func(exact bool) {
+				defer wg.Done()
+				_, err := svc.FetchContent(FetchTarget{URL: originURL + exactTarget, ExactPath: exact}, testBypassConfig, nil, "", zap.NewNop())
+				assert.NoError(t, err)
+			}(i%2 == 0)
+		}
+		wg.Wait()
+
+		counts := map[string]int{}
+		for _, target := range recorder.received() {
+			counts[target]++
+		}
+		assert.Equal(t, map[string]int{exactTarget: rounds / 2, legacyTarget: rounds / 2}, counts)
+	})
+}
+
+func TestFetchContentExactWithoutAbsolutePathUsesLegacyClient(t *testing.T) {
+	svc, recorder, originURL := newRecordingBypass(t)
+
+	resp, err := svc.FetchContent(FetchTarget{URL: originURL + "?x=1", ExactPath: true}, testBypassConfig, nil, "", zap.NewNop())
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, []string{"/?x=1"}, recorder.received())
 }

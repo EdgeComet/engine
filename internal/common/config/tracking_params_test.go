@@ -382,3 +382,13 @@ func TestMatchWildcard(t *testing.T) {
 		})
 	}
 }
+
+func TestResolvedTrackingParams_StripPatterns(t *testing.T) {
+	patterns, err := CompileStripPatterns([]string{"utm_*"})
+	require.NoError(t, err)
+
+	var unresolved *ResolvedTrackingParams
+	assert.Nil(t, unresolved.StripPatterns())
+	assert.Nil(t, (&ResolvedTrackingParams{Enabled: false, CompiledPatterns: patterns}).StripPatterns())
+	assert.Equal(t, patterns, (&ResolvedTrackingParams{Enabled: true, CompiledPatterns: patterns}).StripPatterns())
+}

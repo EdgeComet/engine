@@ -41,6 +41,28 @@ type CacheMetadata struct {
 	LastBotHit  *int64              `json:"last_bot_hit,omitempty"` // Unix timestamp, nil if not tracked
 	IndexStatus int                 `json:"index_status,omitempty"` // Indexation status (1=indexable, 2=non200, 3=blocked, 4=noncanonical)
 	Title       string              `json:"title,omitempty"`        // Page title extracted from HTML
+	// FetchURLRequestID is set only by an exact-spelling fetch, and FetchURL only when that spelling
+	// differs from URL. Both count only while FetchURLRequestID equals RequestID: a binary that does
+	// not write these fields rewrites request_id and leaves them stale.
+	FetchURL          string `json:"fetch_url,omitempty"`
+	FetchURLRequestID string `json:"fetch_url_rid,omitempty"`
+}
+
+// Hash fields written on every save, empty or not, so an HSET merge never keeps a stale spelling.
+const (
+	hashFieldFetchURL          = "fetch_url"
+	hashFieldFetchURLRequestID = "fetch_url_rid"
+)
+
+// EffectiveFetchURL returns the spelling that produced the entry, or "" when it is unknown.
+func (cm *CacheMetadata) EffectiveFetchURL() string {
+	if cm.FetchURLRequestID == "" || cm.FetchURLRequestID != cm.RequestID {
+		return ""
+	}
+	if cm.FetchURL == "" {
+		return cm.URL
+	}
+	return cm.FetchURL
 }
 
 func (cm *CacheMetadata) IsExpired() bool {
@@ -133,6 +155,9 @@ func (cm *CacheMetadata) ToHash() map[string]interface{} {
 		"last_access": cm.LastAccess.Unix(),
 		"source":      cm.Source,
 		"status_code": cm.StatusCode,
+
+		hashFieldFetchURL:          cm.FetchURL,
+		hashFieldFetchURLRequestID: cm.FetchURLRequestID,
 	}
 
 	// JSON-encode headers map if present
@@ -261,6 +286,9 @@ func (cm *CacheMetadata) FromHash(data map[string]string) error {
 
 	// Parse title if present
 	cm.Title = data["title"]
+
+	cm.FetchURL = data[hashFieldFetchURL]
+	cm.FetchURLRequestID = data[hashFieldFetchURLRequestID]
 
 	return nil
 }

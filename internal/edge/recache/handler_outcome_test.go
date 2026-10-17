@@ -271,6 +271,7 @@ func TestProcessBypassRecache_OriginStatusRetryTable(t *testing.T) {
 			renderCtx := bypassRecacheContext(true, time.Minute)
 			renderCtx.Host = &types.Host{ID: 1, Domain: "example.com"}
 			renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes = tt.cacheable
+			renderCtx.WithFetchURL(origin.URL+tt.path, false)
 
 			err := rs.processBypassRecache(context.Background(), origin.URL+tt.path, renderCtx, time.Now())
 

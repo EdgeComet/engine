@@ -41,30 +41,46 @@ type BypassResponse struct {
 	TransportError string
 }
 
+// FetchTarget is the URL a bypass fetch requests. ExactPath sends the path bytes exactly as given;
+// the URL must then carry a path that starts with "/" and is already safe to put on the wire.
+type FetchTarget struct {
+	URL       string
+	ExactPath bool
+}
+
 // BypassService handles direct HTTP proxying when render services are unavailable
 type BypassService struct {
 	client *fasthttp.Client
-	logger *zap.Logger
+	// exactClient differs only in DisablePathNormalizing. HostClient copies that flag from the
+	// client onto every request before sending, so a per-request URI flag is overwritten.
+	exactClient *fasthttp.Client
+	logger      *zap.Logger
 }
 
 // NewBypassService creates a new BypassService instance. Only process-wide settings come from the
-// global config; the timeout and User-Agent are per request (see FetchContent), so the client
-// carries no ReadTimeout/WriteTimeout: fasthttp applies the earlier of a client timeout and the
+// global config; the timeout and User-Agent are per request (see FetchContent), so the clients
+// carry no ReadTimeout/WriteTimeout: fasthttp applies the earlier of a client timeout and the
 // request deadline, which would cap a host-level timeout at the global one.
 func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *BypassService {
-	client := &fasthttp.Client{
-		ReadBufferSize: bypassReadBufferSize,
-	}
-
 	// Enable SSRF protection by default (blocks DNS rebinding to private IPs)
-	if cfg.SSRFProtection == nil || *cfg.SSRFProtection {
-		client.Dial = ssrfSafeDial
-	}
+	ssrfProtection := cfg.SSRFProtection == nil || *cfg.SSRFProtection
 
 	return &BypassService{
-		client: client,
-		logger: logger,
+		client:      newBypassClient(ssrfProtection, false),
+		exactClient: newBypassClient(ssrfProtection, true),
+		logger:      logger,
 	}
+}
+
+func newBypassClient(ssrfProtection, exactPath bool) *fasthttp.Client {
+	client := &fasthttp.Client{
+		ReadBufferSize:         bypassReadBufferSize,
+		DisablePathNormalizing: exactPath,
+	}
+	if ssrfProtection {
+		client.Dial = ssrfSafeDial
+	}
+	return client
 }
 
 // FetchContent fetches content directly from the target URL without rendering.
@@ -74,7 +90,8 @@ func NewBypassService(cfg *config.GlobalBypassConfig, logger *zap.Logger) *Bypas
 // request deadline only to its built-in dialer, never to a custom Dial such as ssrfSafeDial.
 // clientHeaders contains safe request headers to forward to the origin.
 // renderKey, when non-empty, is sent as X-Render-Key so the origin can verify the request originated from EdgeComet.
-func (bs *BypassService) FetchContent(targetURL string, bypassCfg config.ResolvedBypassConfig, clientHeaders map[string][]string, renderKey string, logger *zap.Logger) (*BypassResponse, error) {
+func (bs *BypassService) FetchContent(target FetchTarget, bypassCfg config.ResolvedBypassConfig, clientHeaders map[string][]string, renderKey string, logger *zap.Logger) (*BypassResponse, error) {
+	targetURL := target.URL
 	logger.Info("Using bypass mode", zap.String("url", targetURL))
 
 	req := fasthttp.AcquireRequest()
@@ -83,6 +100,7 @@ func (bs *BypassService) FetchContent(targetURL string, bypassCfg config.Resolve
 	defer fasthttp.ReleaseResponse(resp)
 
 	req.SetRequestURI(targetURL)
+	client := bs.clientFor(req, target.ExactPath, logger)
 	req.Header.SetMethod("GET")
 	req.Header.Set("User-Agent", bypassCfg.UserAgent)
 	req.SetTimeout(bypassCfg.Timeout)
@@ -113,7 +131,7 @@ func (bs *BypassService) FetchContent(targetURL string, bypassCfg config.Resolve
 	// below must carry what was prepared.
 	sentHeaders := httputil.CopyHeaders(req.Header.All())
 
-	if err := bs.client.Do(req, resp); err != nil {
+	if err := client.Do(req, resp); err != nil {
 		// Check if error is timeout-related or connection failure
 		// All timeout/connection errors should return 502 Bad Gateway
 		// This includes read timeouts, write timeouts, dial timeouts, and connection failures
@@ -153,6 +171,20 @@ func (bs *BypassService) FetchContent(targetURL string, bypassCfg config.Resolve
 		zap.Int("response_size", len(response.Body)))
 
 	return response, nil
+}
+
+// clientFor picks the exact client for an exact target. The exact client sends the path as is, so
+// a path that does not start with "/" would produce a malformed request line.
+func (bs *BypassService) clientFor(req *fasthttp.Request, exactPath bool, logger *zap.Logger) *fasthttp.Client {
+	if !exactPath {
+		return bs.client
+	}
+	if path := req.URI().PathOriginal(); len(path) == 0 || path[0] != '/' {
+		logger.Error("Exact fetch URL has no absolute path, using the normalizing client",
+			zap.String("url", req.URI().String()))
+		return bs.client
+	}
+	return bs.exactClient
 }
 
 // ssrfSafeDial resolves the hostname, validates all IPs are public, then connects.

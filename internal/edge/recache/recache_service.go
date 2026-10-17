@@ -30,6 +30,10 @@ import (
 const (
 	redisTabOperationTimeout   = 2 * time.Second
 	redisCacheOperationTimeout = 5 * time.Second
+
+	fetchURLReasonNoEntry    = "no_entry"
+	fetchURLReasonNoSpelling = "no_spelling"
+	fetchURLReasonMismatch   = "fetch_url_mismatch"
 )
 
 // ErrRecacheSkipped marks a recache the configuration declines by design: bypass caching is off
@@ -189,6 +193,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 
 	// Route to bypass recache if the effective action is bypass
 	if renderCtx.ResolvedConfig.Action == types.ActionBypass {
+		rs.resolveFetchURL(renderCtx)
 		return rs.processBypassRecache(ctx, url, renderCtx, attempt.startTime)
 	}
 
@@ -211,6 +216,8 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 		})
 	}
 
+	rs.resolveFetchURL(renderCtx)
+
 	// Select and reserve render service tab
 	reservation, err := rs.selectServiceAndReserveTab(ctx, requestID, renderCtx.Logger)
 	if err != nil || reservation == nil {
@@ -226,7 +233,7 @@ func (rs *RecacheService) ProcessRecache(ctx context.Context, url string, hostID
 
 	// Build render request using resolved config (includes merged Global -> Host -> Pattern settings)
 	dimension := host.Dimensions[dimensionName]
-	renderReq := orchestrator.BuildRenderRequest(url, requestID, host.RenderKey, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
+	renderReq := orchestrator.BuildRenderRequest(renderCtx.FetchURL, requestID, host.RenderKey, reservation.TabID, &renderCtx.ResolvedConfig.Render, &dimension)
 	renderReq.Headers = renderCtx.ClientHeaders
 
 	// Build service URL
@@ -439,7 +446,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("%w: bypass cache TTL is 0", ErrRecacheSkipped)
 	}
 
-	bypassResp, err := rs.bypassSvc.FetchContent(url, renderCtx.ResolvedConfig.Bypass, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
+	bypassResp, err := rs.bypassSvc.FetchContent(bypass.FetchTarget{URL: renderCtx.FetchURL, ExactPath: renderCtx.FetchExact}, renderCtx.ResolvedConfig.Bypass, renderCtx.ClientHeaders, renderCtx.Host.RenderKey, renderCtx.Logger)
 	if err != nil {
 		return retryableFailure(types.ErrorTypeNetworkError, noOriginStatus,
 			fmt.Sprintf("bypass fetch failed: %v", err)).withCause(err)
@@ -471,7 +478,7 @@ func (rs *RecacheService) processBypassRecache(ctx context.Context, url string, 
 		return fmt.Errorf("%w: non-cacheable content type %q", ErrRecacheSkipped, bypassResp.ContentType)
 	}
 
-	if existing, exists := rs.cacheCoord.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {
+	if existing, exists := rs.cacheCoord.LookupCacheRaw(renderCtx); exists && existing.Source == cache.SourceRender {
 		return fmt.Errorf("%w: render cache already exists", ErrRecacheSkipped)
 	}
 
@@ -576,6 +583,7 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 	renderCtx := &edgectx.RenderContext{
 		TargetURL:   url,
 		OriginalURL: url,
+		FetchURL:    url,
 		URLHash:     urlHash,
 		Host:        host,
 		Dimension:   dimensionName,
@@ -616,6 +624,43 @@ func (rs *RecacheService) buildRecacheContext(url string, host *types.Host, dime
 	}
 
 	return renderCtx, nil
+}
+
+// resolveFetchURL switches the fetch to the spelling recorded by the save that produced the cached
+// entry. The queue URL carries the decoded path, so without it every precache of a URL like
+// /a%2Cb fetches /a,b.
+func (rs *RecacheService) resolveFetchURL(renderCtx *edgectx.RenderContext) {
+	stored, fetchURL, reason := rs.storedFetchURL(renderCtx)
+	if reason != "" {
+		renderCtx.Logger.Debug("Recache fetches the queue URL",
+			zap.String("reason", reason),
+			zap.String("fetch_url", renderCtx.FetchURL),
+			zap.String("stored_fetch_url", stored))
+		return
+	}
+	renderCtx.WithFetchURL(fetchURL, true)
+	renderCtx.Logger.Debug("Recache fetches the stored spelling",
+		zap.String("fetch_url", fetchURL))
+}
+
+// storedFetchURL returns the entry's spelling and, when it still normalizes to this cache key, the
+// exact fetch URL built from it; otherwise the reason it cannot be used. Recache normalizes with nil
+// strip patterns because a stored fetch URL already carries the normalized query.
+func (rs *RecacheService) storedFetchURL(renderCtx *edgectx.RenderContext) (stored, fetchURL, reason string) {
+	entry, exists := rs.cacheCoord.LookupCacheRaw(renderCtx)
+	if !exists {
+		return "", "", fetchURLReasonNoEntry
+	}
+	stored = entry.EffectiveFetchURL()
+	if stored == "" {
+		return "", "", fetchURLReasonNoSpelling
+	}
+	normalizer := hash.NewURLNormalizer()
+	result, err := normalizer.Normalize(stored, nil)
+	if err != nil || !result.FetchExact || normalizer.Hash(result.NormalizedURL) != renderCtx.URLHash {
+		return stored, "", fetchURLReasonMismatch
+	}
+	return stored, result.FetchURL, ""
 }
 
 // buildRenderResult converts render response to RenderServiceResult.

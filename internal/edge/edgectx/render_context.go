@@ -30,6 +30,8 @@ type RenderContext struct {
 	// Request data
 	TargetURL          string
 	OriginalURL        string // Original client-requested URL, preserved before normalization
+	FetchURL           string // URL sent to the origin; equals TargetURL unless FetchExact
+	FetchExact         bool   // FetchURL keeps the received path spelling and needs the exact bypass client
 	URLHash            uint64
 	Host               *types.Host
 	Dimension          string
@@ -51,6 +53,10 @@ type RenderContext struct {
 
 	// Event logging flags
 	IsPrecache bool // True if this is a precache/recache request (set by recache handler)
+
+	// CachedRedirectIgnored is set by the first lookup that ignores a cached redirect, so the log
+	// line and metric fire once per request although waiters poll the same entry repeatedly.
+	CachedRedirectIgnored bool
 }
 
 // NewRenderContext creates a new render context with the provided request ID, HTTP context, and timeout
@@ -78,6 +84,13 @@ func (rc *RenderContext) WithTargetURL(targetURL string) *RenderContext {
 func (rc *RenderContext) WithProcessedURL(processedURL string) *RenderContext {
 	rc.TargetURL = processedURL
 	rc.Logger = rc.Logger.With(zap.String("processed_url", processedURL))
+	return rc
+}
+
+// WithFetchURL sets the URL the origin fetch uses and whether it keeps the received path spelling.
+func (rc *RenderContext) WithFetchURL(fetchURL string, exact bool) *RenderContext {
+	rc.FetchURL = fetchURL
+	rc.FetchExact = exact
 	return rc
 }
 

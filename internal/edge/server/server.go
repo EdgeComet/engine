@@ -245,12 +245,7 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 
 	// Normalize URL (includes tracking param stripping if enabled)
 	normalizer := hash.NewURLNormalizer()
-	var stripPatterns []config.CompiledStripPattern
-	if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
-		stripPatterns = resolved.TrackingParams.CompiledPatterns
-	}
-
-	normalizeResult, err := normalizer.Normalize(targetURL, stripPatterns)
+	normalizeResult, err := normalizer.Normalize(targetURL, resolved.TrackingParams.StripPatterns())
 	if err != nil {
 		duration := time.Since(start)
 		reqErr := &requestError{
@@ -274,7 +269,12 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 	urlHash := normalizer.Hash(normalizeResult.NormalizedURL)
 
 	// Store in context
-	renderCtx.WithProcessedURL(normalizeResult.NormalizedURL).WithURLHash(urlHash)
+	renderCtx.WithProcessedURL(normalizeResult.NormalizedURL).
+		WithFetchURL(normalizeResult.FetchURL, normalizeResult.FetchExact).
+		WithURLHash(urlHash)
+	renderCtx.Logger.Debug("Origin fetch URL resolved",
+		zap.String("fetch_url", renderCtx.FetchURL),
+		zap.Bool("fetch_exact", renderCtx.FetchExact))
 
 	// Handle status actions before dimension branching
 	if resolved.Action.IsStatusAction() {

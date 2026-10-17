@@ -134,6 +134,11 @@ func (mc *MetricsCollector) RecordStaleServed(host, dimension, source string) {
 		zap.String("source", source))
 }
 
+// RecordCachedRedirectIgnored records a request that ignored a cached redirect to its own cache key
+func (mc *MetricsCollector) RecordCachedRedirectIgnored(host string) {
+	mc.prometheus.RecordCachedRedirectIgnored(host)
+}
+
 // RecordCompression records compression metrics (ratio and bytes saved)
 func (mc *MetricsCollector) RecordCompression(algorithm string, originalSize, compressedSize int) {
 	if originalSize <= 0 {

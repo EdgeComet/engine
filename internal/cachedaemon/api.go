@@ -1507,12 +1507,7 @@ func (d *CacheDaemon) hostURLNormalizer(host *types.Host) func(rawURL string) (s
 	return func(rawURL string) (string, uint64, error) {
 		resolved := resolver.ResolveForURL(rawURL)
 
-		var stripPatterns []config.CompiledStripPattern
-		if resolved.TrackingParams != nil && resolved.TrackingParams.Enabled {
-			stripPatterns = resolved.TrackingParams.CompiledPatterns
-		}
-
-		result, err := d.normalizer.Normalize(rawURL, stripPatterns)
+		result, err := d.normalizer.Normalize(rawURL, resolved.TrackingParams.StripPatterns())
 		if err != nil {
 			return "", 0, err
 		}

@@ -1153,3 +1153,107 @@ func TestMetadataStore_UpdateLastBotHit(t *testing.T) {
 		assert.False(t, mr.Exists(metaKey), "guarded update must not resurrect an expired meta hash")
 	})
 }
+
+func TestCacheMetadata_FetchURL(t *testing.T) {
+	const (
+		spelling    = "https://example.com/a%2Cb/53"
+		writerID    = "req-writer"
+		oldBinaryID = "req-old-binary"
+	)
+	cacheKey := &types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 53}
+	metaKey := "meta:" + cacheKey.String()
+
+	entry := func(fetchURL, requestID string) *CacheMetadata {
+		now := time.Now().UTC().Truncate(time.Second)
+		return &CacheMetadata{
+			Key:               cacheKey.String(),
+			URL:               "https://example.com/a,b/53",
+			HostID:            1,
+			Dimension:         "desktop",
+			RequestID:         requestID,
+			CreatedAt:         now,
+			ExpiresAt:         now.Add(time.Hour),
+			LastAccess:        now,
+			Source:            SourceBypass,
+			StatusCode:        200,
+			FetchURL:          fetchURL,
+			FetchURLRequestID: requestID,
+		}
+	}
+
+	t.Run("round trip keeps the spelling and its writer", func(t *testing.T) {
+		ms, _ := setupTestMetadataStore(t)
+		require.NoError(t, ms.StoreMetadata(context.Background(), entry(spelling, writerID), cacheKey, 0))
+
+		got, err := ms.GetCacheEntry(context.Background(), cacheKey)
+		require.NoError(t, err)
+		assert.Equal(t, spelling, got.FetchURL)
+		assert.Equal(t, writerID, got.FetchURLRequestID)
+		assert.Equal(t, spelling, got.EffectiveFetchURL())
+	})
+
+	legacy := func(requestID string) *CacheMetadata {
+		cm := entry("", requestID)
+		cm.FetchURLRequestID = ""
+		return cm
+	}
+
+	t.Run("both fields are written when empty", func(t *testing.T) {
+		hash := legacy(writerID).ToHash()
+		assert.Contains(t, hash, "fetch_url")
+		assert.Contains(t, hash, "fetch_url_rid")
+		assert.Equal(t, "", hash["fetch_url"])
+		assert.Equal(t, "", hash["fetch_url_rid"])
+	})
+
+	t.Run("an exact save without a spelling reads as its URL", func(t *testing.T) {
+		ms, _ := setupTestMetadataStore(t)
+		require.NoError(t, ms.StoreMetadata(context.Background(), entry("", writerID), cacheKey, 0))
+
+		got, err := ms.GetCacheEntry(context.Background(), cacheKey)
+		require.NoError(t, err)
+		assert.Equal(t, "https://example.com/a,b/53", got.EffectiveFetchURL())
+	})
+
+	t.Run("an empty request ID never validates a spelling", func(t *testing.T) {
+		cm := legacy("")
+		assert.Equal(t, "", cm.EffectiveFetchURL())
+	})
+
+	t.Run("a legacy save overwrites an old spelling", func(t *testing.T) {
+		ms, mr := setupTestMetadataStore(t)
+		require.NoError(t, ms.StoreMetadata(context.Background(), entry(spelling, writerID), cacheKey, 0))
+		require.NoError(t, ms.StoreMetadata(context.Background(), legacy("req-legacy"), cacheKey, 0))
+
+		assert.Equal(t, "", mr.HGet(metaKey, "fetch_url"))
+		assert.Equal(t, "", mr.HGet(metaKey, "fetch_url_rid"))
+		got, err := ms.GetCacheEntry(context.Background(), cacheKey)
+		require.NoError(t, err)
+		assert.Equal(t, "", got.EffectiveFetchURL())
+	})
+
+	t.Run("an old-binary overwrite invalidates the spelling", func(t *testing.T) {
+		ms, mr := setupTestMetadataStore(t)
+		require.NoError(t, ms.StoreMetadata(context.Background(), entry(spelling, writerID), cacheKey, 0))
+
+		// An old binary rewrites its own fields only; the HSET merge keeps fetch_url and fetch_url_rid.
+		mr.HSet(metaKey, "request_id", oldBinaryID, "status_code", "301")
+
+		got, err := ms.GetCacheEntry(context.Background(), cacheKey)
+		require.NoError(t, err)
+		assert.Equal(t, spelling, got.FetchURL)
+		assert.Equal(t, "", got.EffectiveFetchURL())
+	})
+
+	t.Run("absent fields read as empty", func(t *testing.T) {
+		var cm CacheMetadata
+		require.NoError(t, cm.FromHash(map[string]string{
+			"key": cacheKey.String(), "host_id": "1", "status_code": "301", "size": "0",
+			"created_at": "1700000000", "expires_at": "1700003600", "last_access": "1700000000",
+			"request_id": writerID, "url": "https://example.com/a,b/53",
+		}))
+		assert.Equal(t, "", cm.FetchURL)
+		assert.Equal(t, "", cm.FetchURLRequestID)
+		assert.Equal(t, "", cm.EffectiveFetchURL())
+	})
+}

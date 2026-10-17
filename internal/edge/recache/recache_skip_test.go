@@ -92,6 +92,7 @@ func TestProcessBypassRecache_UnreachableOriginIsNetworkError(t *testing.T) {
 
 	renderCtx := bypassRecacheContext(true, time.Minute)
 	renderCtx.Host = &types.Host{ID: 1, Domain: "example.com"}
+	renderCtx.WithFetchURL("http://127.0.0.1:1/page", false)
 
 	// Loopback is rejected by the SSRF-safe dialer, so the fetch fails without touching the network.
 	err := rs.processBypassRecache(context.Background(), "http://127.0.0.1:1/page", renderCtx, time.Now())
@@ -166,6 +167,7 @@ func TestProcessBypassRecache_BinaryContentTypeIsSkipped(t *testing.T) {
 	renderCtx := bypassRecacheContext(true, time.Minute)
 	renderCtx.ResolvedConfig.Bypass.Cache.StatusCodes = []int{200}
 	renderCtx.Host = &types.Host{ID: 1, Domain: "127.0.0.1"}
+	renderCtx.WithFetchURL(origin.URL+"/doc.pdf", false)
 
 	err := rs.processBypassRecache(context.Background(), origin.URL+"/doc.pdf", renderCtx, time.Now())
 

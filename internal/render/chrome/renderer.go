@@ -243,6 +243,10 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 	// Track active fetch handler goroutines
 	var fetchHandlerCount int64
 
+	// Top-level frame ID, set before navigation. The listener reads it to tell the document
+	// request apart from subresources and iframes that request or redirect to the same URL.
+	var mainFrameID atomic.Value
+
 	return chromedp.Tasks{
 		// Set up event listeners FIRST - before any CDP commands
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -350,10 +354,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 						)
 					}
 
-					if ev.RedirectResponse != nil &&
-						urlsMatchIgnoringFragment(ev.RedirectResponse.URL, req.URL) &&
-						ev.DocumentURL == ev.Request.URL &&
-						ev.RedirectResponse.Status != 0 {
+					if isMainDocumentRedirect(ev, req.URL, loadFrameID(&mainFrameID)) {
 						statusCodeMu.Lock()
 						resp.Metrics.StatusCode = int(ev.RedirectResponse.Status)
 						resp.Metrics.FinalURL = ev.Request.URL
@@ -418,7 +419,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 
 					// Capture initial response status code and headers
 					statusCodeMu.Lock()
-					if urlsMatchIgnoringFragment(ev.Response.URL, req.URL) && resp.Metrics.StatusCode == 0 {
+					if resp.Metrics.StatusCode == 0 && isMainDocumentResponse(ev, req.URL, loadFrameID(&mainFrameID)) {
 						resp.Metrics.StatusCode = int(ev.Response.Status)
 
 						if headers := convertCDPHeaders(ev.Response.Headers); headers != nil {
@@ -536,6 +537,15 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 		network.ClearBrowserCookies(),
 		page.Enable(),
 		css.Disable(),
+
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			tree, err := page.GetFrameTree().Do(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to read the main frame: %w", err)
+			}
+			mainFrameID.Store(tree.Frame.ID)
+			return nil
+		}),
 
 		enableLifeCycle(),
 
@@ -917,6 +927,32 @@ func mergeRequestHeaders(original map[string]interface{}, injected map[string][]
 	}
 
 	return headers
+}
+
+// isMainDocumentRedirect reports whether a redirect belongs to the main frame's navigation to
+// targetURL. A subresource or iframe redirecting to the page URL also satisfies the URL checks.
+func isMainDocumentRedirect(ev *network.EventRequestWillBeSent, targetURL string, mainFrameID cdp.FrameID) bool {
+	return ev.RedirectResponse != nil &&
+		ev.RedirectResponse.Status != 0 &&
+		isMainDocument(ev.Type, ev.FrameID, mainFrameID) &&
+		urlsMatchIgnoringFragment(ev.RedirectResponse.URL, targetURL) &&
+		ev.DocumentURL == ev.Request.URL
+}
+
+// isMainDocumentResponse reports whether a response is the main frame's document for targetURL.
+func isMainDocumentResponse(ev *network.EventResponseReceived, targetURL string, mainFrameID cdp.FrameID) bool {
+	return ev.Response != nil &&
+		isMainDocument(ev.Type, ev.FrameID, mainFrameID) &&
+		urlsMatchIgnoringFragment(ev.Response.URL, targetURL)
+}
+
+func isMainDocument(resourceType network.ResourceType, frameID, mainFrameID cdp.FrameID) bool {
+	return resourceType == network.ResourceTypeDocument && mainFrameID != "" && frameID == mainFrameID
+}
+
+func loadFrameID(v *atomic.Value) cdp.FrameID {
+	frameID, _ := v.Load().(cdp.FrameID)
+	return frameID
 }
 
 // urlsMatchIgnoringFragment compares URLs while ignoring fragments and handling encoding differences

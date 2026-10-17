@@ -72,7 +72,32 @@ func NewCacheCoordinator(
 
 // LookupCache retrieves cache metadata if available and valid
 // Returns the cache metadata and a boolean indicating if it exists
+// Every read that may serve the entry goes through here: a cached redirect that would send this
+// request back to its own cache key (ignoreCachedRedirect) reads as absent, including for lock
+// waiters and stale fallbacks.
 func (cc *CacheCoordinator) LookupCache(renderCtx *edgectx.RenderContext) (*cache.CacheMetadata, bool) {
+	entry, exists := cc.LookupCacheRaw(renderCtx)
+	if !exists || !ignoreCachedRedirect(entry, renderCtx) {
+		return entry, exists
+	}
+
+	if !renderCtx.CachedRedirectIgnored {
+		renderCtx.CachedRedirectIgnored = true
+		renderCtx.Logger.Info("Cached redirect ignored for different spelling",
+			zap.String("cache_key", renderCtx.CacheKey.String()),
+			zap.String("location", LocationHeaderValue(entry.Headers)),
+			zap.String("entry_spelling", entry.EffectiveFetchURL()),
+			zap.String("request_spelling", renderCtx.FetchURL))
+		if cc.metrics != nil {
+			cc.metrics.RecordCachedRedirectIgnored(renderCtx.Host.Domain)
+		}
+	}
+	return nil, false
+}
+
+// LookupCacheRaw is LookupCache without the redirect spelling check, for reads that never serve
+// the entry.
+func (cc *CacheCoordinator) LookupCacheRaw(renderCtx *edgectx.RenderContext) (*cache.CacheMetadata, bool) {
 	return cc.cacheService.GetCacheEntry(renderCtx)
 }
 
@@ -194,6 +219,12 @@ func (cc *CacheCoordinator) SaveCache(
 		Headers:     headers,
 		IndexStatus: int(indexStatus),
 		Title:       title,
+	}
+	if renderCtx.FetchExact {
+		metadata.FetchURLRequestID = renderCtx.RequestID
+		if renderCtx.FetchURL != metadata.URL {
+			metadata.FetchURL = renderCtx.FetchURL
+		}
 	}
 
 	// Initialize eg_ids with current EG (only for entries that have files on disk)
@@ -450,7 +481,7 @@ func (cc *CacheCoordinator) CanSaveBypassCache(renderCtx *edgectx.RenderContext,
 	if !IsCacheableContentType(contentType) {
 		return false, "non-cacheable content type"
 	}
-	if existing, exists := cc.LookupCache(renderCtx); exists && existing.Source == cache.SourceRender {
+	if existing, exists := cc.LookupCacheRaw(renderCtx); exists && existing.Source == cache.SourceRender {
 		return false, "render cache already exists"
 	}
 	return true, ""

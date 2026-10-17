@@ -160,6 +160,7 @@ func stampRenderContext(t *testing.T, targetURL string) *edgectx.RenderContext {
 
 	renderCtx := edgectx.NewRenderContext("req-stamp", httpCtx, zap.NewNop(), stampRequestTTL)
 	renderCtx.TargetURL = targetURL
+	renderCtx.WithFetchURL(targetURL, false)
 	renderCtx.URLHash = 0xabc123
 	renderCtx.Dimension = stampDimension
 	renderCtx.Host = &types.Host{

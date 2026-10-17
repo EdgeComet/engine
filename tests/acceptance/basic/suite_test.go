@@ -1,10 +1,12 @@
 package acceptance_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,6 +24,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/edgecomet/engine/internal/common/hash"
+	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/render/registry"
 	"github.com/edgecomet/engine/tests/acceptance/basic/testutil"
 )
@@ -842,6 +845,150 @@ func (te *TestEnvironment) RequestRenderNoRedirect(targetURL string) *TestRespon
 		Body:       string(body),
 		Duration:   duration,
 	}
+}
+
+// classicGooglebotUA matches the desktop dimension of the test host.
+const classicGooglebotUA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
+// seededEntryRedisTTL keeps a seeded metadata key alive for the whole test; ExpiresAt, not the
+// Redis TTL, decides whether the entry is fresh or stale.
+const seededEntryRedisTTL = time.Hour
+
+// encodeURIComponentKeep and fastlyKeep are the bytes each integration leaves unescaped in ?url=.
+const (
+	encodeURIComponentKeep = "-_.!~*'()"
+	fastlyKeep             = "-_.~"
+)
+
+// escapeURLParam percent-encodes every byte of s except ASCII letters, digits and keep.
+func escapeURLParam(s, keep string) string {
+	const upperHex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') || strings.IndexByte(keep, c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(upperHex[c>>4])
+		b.WriteByte(upperHex[c&0x0F])
+	}
+	return b.String()
+}
+
+func (te *TestEnvironment) fullTargetURL(targetURL string) string {
+	if strings.HasPrefix(targetURL, "/") {
+		return te.Config.TestPagesURL() + targetURL
+	}
+	return targetURL
+}
+
+// RequestRenderEncoded sends the target as the Cloudflare Worker does: encodeURIComponent(url).
+func (te *TestEnvironment) RequestRenderEncoded(targetURL string) *TestResponse {
+	return te.requestRenderURLParam(escapeURLParam(te.fullTargetURL(targetURL), encodeURIComponentKeep))
+}
+
+// RequestRenderFastly sends the target as the Fastly integration does: every byte except
+// unreserved characters escaped.
+func (te *TestEnvironment) RequestRenderFastly(targetURL string) *TestResponse {
+	return te.requestRenderURLParam(escapeURLParam(te.fullTargetURL(targetURL), fastlyKeep))
+}
+
+// requestRenderURLParam sends urlParam as the url query value byte for byte; net/url keeps a
+// RawQuery verbatim on the request line.
+func (te *TestEnvironment) requestRenderURLParam(urlParam string) *TestResponse {
+	req, err := http.NewRequest("GET", te.Config.EGBaseURL()+"/render?url="+urlParam, nil)
+	if err != nil {
+		return &TestResponse{Error: err}
+	}
+	req.Header.Set("X-Render-Key", te.Config.Test.ValidAPIKey)
+	req.Header.Set("User-Agent", classicGooglebotUA)
+
+	start := time.Now()
+	resp, err := te.HTTPClient.Do(req)
+	duration := time.Since(start)
+	if err != nil {
+		return &TestResponse{Error: err, Duration: duration}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	return &TestResponse{
+		StatusCode: resp.StatusCode,
+		Headers:    resp.Header,
+		Body:       string(body),
+		Duration:   duration,
+		Error:      err,
+	}
+}
+
+// RequestRenderUnencoded sends url= followed by the target verbatim, as the nginx and HAProxy
+// integrations do. The request line is written to the socket directly so no client library
+// re-encodes it.
+func (te *TestEnvironment) RequestRenderUnencoded(targetURL string) *TestResponse {
+	egAddr := fmt.Sprintf("localhost:%d", te.Config.EdgeGateway.Port)
+	timeout := te.Config.HTTPClientTimeout()
+
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", egAddr, timeout)
+	if err != nil {
+		return &TestResponse{Error: err}
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return &TestResponse{Error: err}
+	}
+
+	requestLine := "GET /render?url=" + te.fullTargetURL(targetURL) + " HTTP/1.1\r\n" +
+		"Host: " + egAddr + "\r\n" +
+		"X-Render-Key: " + te.Config.Test.ValidAPIKey + "\r\n" +
+		"User-Agent: " + classicGooglebotUA + "\r\n" +
+		"Connection: close\r\n\r\n"
+	if _, err := io.WriteString(conn, requestLine); err != nil {
+		return &TestResponse{Error: err}
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return &TestResponse{Error: err, Duration: time.Since(start)}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	return &TestResponse{
+		StatusCode: resp.StatusCode,
+		Headers:    resp.Header,
+		Body:       string(body),
+		Duration:   time.Since(start),
+		Error:      err,
+	}
+}
+
+// SeedCacheEntry writes metadata for cacheKey exactly as the gateway stores it. Only
+// metadata-only entries (DiskSize 0, such as redirects) can be seeded: no cache file is written.
+// extraFields are written after the struct fields and win over them.
+func (te *TestEnvironment) SeedCacheEntry(cacheKey string, meta *cache.CacheMetadata, extraFields map[string]string) error {
+	if te.RedisClient == nil {
+		return fmt.Errorf("redis client not initialized")
+	}
+
+	fields := meta.ToHash()
+	for name, value := range extraFields {
+		fields[name] = value
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	metaKey := "meta:" + cacheKey
+	if err := te.RedisClient.HSet(ctx, metaKey, fields).Err(); err != nil {
+		return fmt.Errorf("failed to seed cache metadata: %w", err)
+	}
+	if err := te.RedisClient.Expire(ctx, metaKey, seededEntryRedisTTL).Err(); err != nil {
+		return fmt.Errorf("failed to set seeded metadata TTL: %w", err)
+	}
+	return nil
 }
 
 // GetCacheKey generates a cache key for the given URL and dimension

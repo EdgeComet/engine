@@ -23,6 +23,10 @@ type PrometheusMetrics struct {
 	cacheHitRatio         *prometheus.GaugeVec
 	staleCacheServedTotal *prometheus.CounterVec
 
+	// cachedRedirectIgnoredTotal counts requests that treated a cached redirect to their own cache
+	// key as absent because a different path spelling produced it.
+	cachedRedirectIgnoredTotal *prometheus.CounterVec
+
 	// Service metrics
 	renderDuration       *prometheus.HistogramVec
 	renderStatusCodeResp *prometheus.CounterVec
@@ -119,6 +123,16 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 			Help:      "Total number of stale cache entries served",
 		},
 		[]string{"host", "dimension", "source"},
+	)
+
+	pm.cachedRedirectIgnoredTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: "eg",
+			Name:      "cached_redirect_ignored_total",
+			Help:      "Total number of requests that ignored a cached redirect to their own cache key produced by a different path spelling",
+		},
+		[]string{"host"},
 	)
 
 	// Service metrics
@@ -254,6 +268,7 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 		pm.cacheMissesTotal,
 		pm.cacheHitRatio,
 		pm.staleCacheServedTotal,
+		pm.cachedRedirectIgnoredTotal,
 		pm.renderDuration,
 		pm.renderStatusCodeResp,
 		pm.bypassTotal,
@@ -301,6 +316,11 @@ func (pm *PrometheusMetrics) RecordCacheMiss(host, dimension string) {
 // RecordStaleServed records that a stale cache entry was served
 func (pm *PrometheusMetrics) RecordStaleServed(host, dimension, source string) {
 	pm.staleCacheServedTotal.WithLabelValues(host, dimension, source).Inc()
+}
+
+// RecordCachedRedirectIgnored records a request that ignored a cached redirect to its own cache key
+func (pm *PrometheusMetrics) RecordCachedRedirectIgnored(host string) {
+	pm.cachedRedirectIgnoredTotal.WithLabelValues(host).Inc()
 }
 
 // RecordRenderDuration records time taken by render service

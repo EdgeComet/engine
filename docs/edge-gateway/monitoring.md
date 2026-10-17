@@ -45,6 +45,7 @@ All metrics use the `eg_` prefix and include labels for filtering by host, dimen
 | `eg_cache_misses_total` | counter | `host`, `dimension` | Total number of cache misses. |
 | `eg_cache_hit_ratio` | gauge | `host`, `dimension` | Cache hit ratio (0-1) for each host and dimension. |
 | `eg_stale_cache_served_total` | counter | `host`, `dimension` | Total number of stale cache entries served when render fails. |
+| `eg_cached_redirect_ignored_total` | counter | `host` | Requests that ignored a cached redirect to their own URL because another path spelling produced it. See [URL normalization](./url-normalization#cached-redirects-to-the-same-url). |
 | `eg_cache_size_bytes` | gauge | — | Total size of cached content in bytes. |
 
 ### Render service metrics

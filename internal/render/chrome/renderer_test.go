@@ -270,3 +270,70 @@ func TestConvertCDPHeaders(t *testing.T) {
 		assert.Equal(t, []string{"session=abc", "path=/"}, headers["set-cookie"])
 	})
 }
+
+func TestMainDocumentRedirectAndResponse(t *testing.T) {
+	const (
+		mainFrame  = cdp.FrameID("main-frame")
+		childFrame = cdp.FrameID("child-frame")
+		pageURL    = "https://example.com/a%2Cb/53"
+		commaURL   = "https://example.com/a,b/53"
+	)
+
+	redirect := func(resourceType network.ResourceType, frameID cdp.FrameID, documentURL string) *network.EventRequestWillBeSent {
+		return &network.EventRequestWillBeSent{
+			Type:             resourceType,
+			FrameID:          frameID,
+			DocumentURL:      documentURL,
+			Request:          &network.Request{URL: pageURL},
+			RedirectResponse: &network.Response{URL: commaURL, Status: 301},
+		}
+	}
+
+	t.Run("main frame document redirect is captured", func(t *testing.T) {
+		ev := redirect(network.ResourceTypeDocument, mainFrame, pageURL)
+		assert.True(t, isMainDocumentRedirect(ev, commaURL, mainFrame))
+	})
+
+	t.Run("subresource redirect to the page is ignored", func(t *testing.T) {
+		// A fetch of the comma spelling from a page at the %2C spelling: the URL checks fall back to
+		// a decoded comparison and match, and the redirect target equals the document URL.
+		ev := redirect(network.ResourceTypeFetch, mainFrame, pageURL)
+		assert.False(t, isMainDocumentRedirect(ev, pageURL, mainFrame))
+	})
+
+	t.Run("iframe document redirect is ignored", func(t *testing.T) {
+		ev := redirect(network.ResourceTypeDocument, childFrame, pageURL)
+		assert.False(t, isMainDocumentRedirect(ev, commaURL, mainFrame))
+	})
+
+	t.Run("redirect before the main frame is known is ignored", func(t *testing.T) {
+		ev := redirect(network.ResourceTypeDocument, mainFrame, pageURL)
+		assert.False(t, isMainDocumentRedirect(ev, commaURL, ""))
+	})
+
+	t.Run("request without a redirect is not a redirect", func(t *testing.T) {
+		ev := redirect(network.ResourceTypeDocument, mainFrame, pageURL)
+		ev.RedirectResponse = nil
+		assert.False(t, isMainDocumentRedirect(ev, commaURL, mainFrame))
+	})
+
+	response := func(resourceType network.ResourceType, frameID cdp.FrameID) *network.EventResponseReceived {
+		return &network.EventResponseReceived{
+			Type:     resourceType,
+			FrameID:  frameID,
+			Response: &network.Response{URL: pageURL, Status: 200},
+		}
+	}
+
+	t.Run("main frame document response is captured", func(t *testing.T) {
+		assert.True(t, isMainDocumentResponse(response(network.ResourceTypeDocument, mainFrame), pageURL, mainFrame))
+	})
+
+	t.Run("subresource response for the page URL is ignored", func(t *testing.T) {
+		assert.False(t, isMainDocumentResponse(response(network.ResourceTypeXHR, mainFrame), pageURL, mainFrame))
+	})
+
+	t.Run("iframe document response for the page URL is ignored", func(t *testing.T) {
+		assert.False(t, isMainDocumentResponse(response(network.ResourceTypeDocument, childFrame), pageURL, mainFrame))
+	})
+}

@@ -98,6 +98,14 @@ type ResolvedTrackingParams struct {
 	CompiledPatterns []CompiledStripPattern // Pre-compiled patterns for fast matching
 }
 
+// StripPatterns returns the patterns the URL normalizer strips, nil when stripping is off.
+func (tp *ResolvedTrackingParams) StripPatterns() []CompiledStripPattern {
+	if tp == nil || !tp.Enabled {
+		return nil
+	}
+	return tp.CompiledPatterns
+}
+
 // CompiledStripPattern contains pre-compiled pattern matching data for tracking params
 type CompiledStripPattern struct {
 	Compiled *pattern.Pattern // Pre-compiled pattern (handles exact, wildcard, and regexp)

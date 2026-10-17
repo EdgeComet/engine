@@ -98,6 +98,7 @@ func cacheableNon200Context(targetURL string) *edgectx.RenderContext {
 	return &edgectx.RenderContext{
 		TargetURL:   targetURL,
 		OriginalURL: targetURL,
+		FetchURL:    targetURL,
 		URLHash:     4242,
 		Host:        host,
 		Dimension:   "desktop",

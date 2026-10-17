@@ -171,6 +171,7 @@ type TestServer struct {
 	thirdPartyShutdown chan struct{}
 	redisClient        *redis.Client
 	receivedHeaders    *headerRecorder
+	wire               *wireRecorder
 
 	matchUAOriginVersion atomic.Pointer[string]
 }
@@ -186,6 +187,7 @@ func NewTestServer(port, thirdPartyPort int, redisClient *redis.Client) *TestSer
 		thirdPartyShutdown: make(chan struct{}),
 		redisClient:        redisClient,
 		receivedHeaders:    newHeaderRecorder(),
+		wire:               newWireRecorder(),
 	}
 }
 
@@ -1193,7 +1195,7 @@ startxref
 
 	ts.server = &http.Server{
 		Addr:    fmt.Sprintf(":%d", ts.port),
-		Handler: mux,
+		Handler: ts.wrapWire(mux),
 	}
 
 	// Start server in goroutine

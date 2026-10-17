@@ -23,6 +23,12 @@ type NormalizeResult struct {
 	NormalizedURL  string   // Final normalized URL (after stripping + normalization)
 	StrippedParams []string // Tracking parameters that were removed
 	WasModified    bool     // True if tracking params were stripped
+	// FetchURL is the URL to send to the origin. When FetchExact is true it carries the received
+	// path spelling with NormalizedURL's scheme, host and query; otherwise it equals NormalizedURL.
+	FetchURL string
+	// FetchExact reports that FetchURL preserves the received spelling and must be sent with the
+	// exact (non-normalizing) bypass client.
+	FetchExact bool
 }
 
 func NewURLNormalizer() *URLNormalizer {
@@ -42,6 +48,20 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// RawPath holds the received spelling whenever it differs from Go's default encoding; when it
+	// is empty the received spelling is EscapedPath.
+	receivedPath := u.RawPath
+	if receivedPath == "" {
+		receivedPath = u.EscapedPath()
+	}
+	if receivedPath == "" {
+		receivedPath = "/"
+	}
+	decodedPath := u.Path
+	if decodedPath == "" {
+		decodedPath = "/"
 	}
 
 	// Validate host is not empty and looks like a valid domain
@@ -117,6 +137,12 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 	// when the path is malformed or would decode to invalid UTF-8.
 	result.NormalizedURL = decodeURLPathUnicode(u)
 
+	result.FetchURL = result.NormalizedURL
+	if isExactFetchPath(receivedPath, decodedPath) {
+		result.FetchURL = buildURL(u, decodeUnreservedEscapes(receivedPath))
+		result.FetchExact = true
+	}
+
 	return result, nil
 }
 
@@ -132,7 +158,11 @@ func decodeURLPathUnicode(u *url.URL) string {
 	if !utf8.ValidString(path) {
 		path = u.EscapedPath()
 	}
+	return buildURL(u, path)
+}
 
+// buildURL writes u with path in place of its own path. Fragments are already stripped.
+func buildURL(u *url.URL, path string) string {
 	var b strings.Builder
 	b.WriteString(u.Scheme)
 	b.WriteString("://")
@@ -147,6 +177,91 @@ func decodeURLPathUnicode(u *url.URL) string {
 		b.WriteString(u.RawQuery)
 	}
 	return b.String()
+}
+
+// isExactFetchPath reports whether the received path can be sent byte for byte: its decoded form
+// is already normalized, it has no %2F, %2E, %5C or raw backslash, and every byte is unreserved,
+// one of $&+,;=:@/ or part of a %XX escape. Other paths keep the legacy fetch, which resolves
+// traversal payloads and keeps raw sub-delims, spaces and non-ASCII on today's wire.
+func isExactFetchPath(receivedPath, decodedPath string) bool {
+	if normalizePath(decodedPath) != decodedPath {
+		return false
+	}
+	for i := 0; i < len(receivedPath); i++ {
+		c := receivedPath[i]
+		switch {
+		case c == '%':
+			if i+2 >= len(receivedPath) || !isHexDigit(receivedPath[i+1]) || !isHexDigit(receivedPath[i+2]) {
+				return false
+			}
+			if isStructuralEscape(receivedPath[i+1], receivedPath[i+2]) {
+				return false
+			}
+			i += 2
+		case isUnreserved(c) || strings.IndexByte(exactPathDelimiters, c) >= 0:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+const (
+	// exactPathDelimiters are the reserved bytes both transports already send literal in a path.
+	exactPathDelimiters = "$&+,;=:@/"
+	hexLetterValue      = 10
+)
+
+// isStructuralEscape reports %2F, %2E and %5C in either hex case.
+func isStructuralEscape(hi, lo byte) bool {
+	switch unhex(hi)<<4 | unhex(lo) {
+	case '/', '.', '\\':
+		return true
+	}
+	return false
+}
+
+// decodeUnreservedEscapes decodes escapes of unreserved characters (%41 -> A) and keeps every
+// other escape with its hex case. The normalizer decodes them for the cache key too, so the
+// origin receives the same bytes as today.
+func decodeUnreservedEscapes(path string) string {
+	if strings.IndexByte(path, '%') < 0 {
+		return path
+	}
+	var b strings.Builder
+	b.Grow(len(path))
+	for i := 0; i < len(path); i++ {
+		if path[i] == '%' && i+2 < len(path) {
+			if c := unhex(path[i+1])<<4 | unhex(path[i+2]); isUnreserved(c) {
+				b.WriteByte(c)
+				i += 2
+				continue
+			}
+		}
+		b.WriteByte(path[i])
+	}
+	return b.String()
+}
+
+func isUnreserved(c byte) bool {
+	return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || ('0' <= c && c <= '9') ||
+		c == '-' || c == '.' || c == '_' || c == '~'
+}
+
+func isHexDigit(c byte) bool {
+	return ('0' <= c && c <= '9') || ('a' <= c && c <= 'f') || ('A' <= c && c <= 'F')
+}
+
+func unhex(c byte) byte {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0'
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + hexLetterValue
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + hexLetterValue
+	}
+	return 0
 }
 
 // Hash generates XXHash64 of normalized URL
