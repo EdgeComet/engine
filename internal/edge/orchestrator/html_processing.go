@@ -95,7 +95,19 @@ func ProcessContent(
 	}
 
 	if output.Modified {
-		result.HTML = doc.HTML()
+		// nil = html.Render failed; serving it would cache an empty body.
+		modifiedHTML := doc.HTML()
+		if modifiedHTML == nil {
+			logger.Warn("Modified document failed to serialize, serving unmodified content",
+				zap.Int("host_id", hostID),
+				zap.String("url", targetURL),
+			)
+			// Extraction read this unservable tree; its whole-document regexps saw "".
+			result.RuleIDs = nil
+			result.Extraction = nil
+			return result
+		}
+		result.HTML = modifiedHTML
 		result.OriginalPageSEO = pageSEO
 		result.PageSEO = extractPageSEO(doc, statusCode, targetURL, logger)
 		appendLastModifiedDate(result.PageSEO, responseHeaders)

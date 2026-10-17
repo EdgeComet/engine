@@ -11,7 +11,10 @@ import (
 	"github.com/edgecomet/engine/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func sampleHTML(title, body string) []byte {
@@ -571,4 +574,50 @@ func TestProcessContent_SchemaOrgKeepsThePreModificationSnapshot(t *testing.T) {
 		assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.PageSEO.SchemaOrg))
 		assert.Equal(t, []string{"Product"}, schemaOrgTypes(t, result.OriginalPageSEO.SchemaOrg))
 	})
+}
+
+func TestProcessContent_ModifiedDocumentFailsToSerialize(t *testing.T) {
+	const pageURL = "https://example.com/page"
+	const hostID = 42
+	page := []byte(`<!DOCTYPE html><html><head><title>Original</title></head><body><h1>Head</h1><img src="a.png"><script>var a=1;</script></body></html>`)
+	extraction := json.RawMessage(`{"price":"10"}`)
+
+	// An element child under a void element makes html.Render fail.
+	breakingProcessor := func(t *testing.T) ContentProcessor {
+		return &mockContentProcessorFn{
+			fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+				input.Doc.GoQueryDoc().Find("h1").SetText("Changed")
+				input.Doc.GoQueryDoc().Find("img").AppendHtml(`<b class="x">x</b>`)
+				require.Nil(t, input.Doc.HTML(), "fixture must make serialization fail")
+				return &ContentOutput{Modified: true, RuleIDs: []uint32{7}, Extraction: extraction}, nil
+			},
+		}
+	}
+
+	for _, stripScripts := range []bool{false, true} {
+		t.Run(fmt.Sprintf("strip_scripts=%v", stripScripts), func(t *testing.T) {
+			core, logs := observer.New(zapcore.WarnLevel)
+			logger := zap.New(core)
+
+			unmodified := ProcessContent(context.Background(), page, 200, nil, pageURL, stripScripts, hostID, nil, zaptest.NewLogger(t))
+			result := ProcessContent(context.Background(), page, 200, nil, pageURL, stripScripts, hostID, breakingProcessor(t), logger)
+
+			require.NotNil(t, result)
+			require.NotEmpty(t, result.HTML)
+			assert.Equal(t, string(unmodified.HTML), string(result.HTML))
+			assert.Equal(t, unmodified.PageSEO, result.PageSEO)
+			assert.NotContains(t, string(result.HTML), "Changed")
+			assert.Equal(t, !stripScripts, strings.Contains(string(result.HTML), "var a=1;"))
+			assert.Nil(t, result.RuleIDs)
+			assert.Nil(t, result.OriginalPageSEO)
+			assert.Nil(t, result.Override)
+			assert.Nil(t, result.Extraction)
+
+			warnings := logs.FilterMessage("Modified document failed to serialize, serving unmodified content").All()
+			require.Len(t, warnings, 1)
+			fields := warnings[0].ContextMap()
+			assert.EqualValues(t, hostID, fields["host_id"])
+			assert.Equal(t, pageURL, fields["url"])
+		})
+	}
 }
