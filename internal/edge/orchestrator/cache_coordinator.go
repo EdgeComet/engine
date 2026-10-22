@@ -135,6 +135,12 @@ func (cc *CacheCoordinator) SaveCache(
 	}
 
 	isRedirect := isRedirectStatusCode(statusCode)
+	if isRedirect {
+		// A cached redirect is served without a body, so its body is not stored. Readers tell a
+		// fileless entry by DiskSize 0; keeping an origin or Edge SEO body's length here would make
+		// the entry read as a file nobody holds, and every request would go back to origin.
+		content = nil
+	}
 	isMetadataOnly := len(content) == 0
 
 	// Track content to write and disk size (may differ from original due to compression)

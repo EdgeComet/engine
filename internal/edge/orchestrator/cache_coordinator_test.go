@@ -13,6 +13,7 @@ import (
 
 	"github.com/edgecomet/engine/internal/common/config"
 	customredis "github.com/edgecomet/engine/internal/common/redis"
+	"github.com/edgecomet/engine/internal/edge/bypass"
 	"github.com/edgecomet/engine/internal/edge/cache"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/sharding"
@@ -722,6 +723,75 @@ func TestSaveRenderCache_LocationGatedByStatus(t *testing.T) {
 		metaKey := "meta:" + cacheKey.String()
 		assert.Equal(t, "301", mr.HGet(metaKey, "status_code"))
 		assert.Contains(t, mr.HGet(metaKey, "headers"), "https://example.com/new-page")
+	})
+}
+
+const (
+	nginxMovedPermanentlyBody = "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n" +
+		"<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n"
+	// What a content processor serializes after a rule edits a redirect's empty document.
+	serializedRedirectBody = `<html><head><meta name="robots" content="noindex"/></head><body></body></html>`
+)
+
+// A redirect body is never stored or served. Readers tell a fileless entry by DiskSize 0, so an
+// entry that kept the body's length read as a file nobody holds and sent every request to origin.
+func TestSaveCache_RedirectBodyIsNotStored(t *testing.T) {
+	newCtx := func(cacheKey *types.CacheKey) *edgectx.RenderContext {
+		renderCtx := overrideRenderCtx(cacheKey)
+		renderCtx.ResolvedConfig = &config.ResolvedConfig{
+			Compression:         "none",
+			SafeResponseHeaders: []string{"Content-Type", "Location"},
+			Cache:               config.ResolvedCacheConfig{TTL: time.Hour},
+			Bypass:              config.ResolvedBypassConfig{Cache: config.ResolvedBypassCacheConfig{TTL: time.Hour}},
+		}
+		return renderCtx
+	}
+
+	assertFileless := func(t *testing.T, cc *CacheCoordinator, mr *miniredis.Miniredis, renderCtx *edgectx.RenderContext) {
+		t.Helper()
+		metaKey := "meta:" + renderCtx.CacheKey.String()
+		assert.Equal(t, "301", mr.HGet(metaKey, "status_code"))
+		assert.Equal(t, "0", mr.HGet(metaKey, "size"))
+		assert.Equal(t, "0", mr.HGet(metaKey, "disk_size"))
+
+		entry, exists := cc.LookupCacheRaw(renderCtx)
+		require.True(t, exists)
+		assert.Empty(t, entry.EgIDs)
+		absolutePath, err := cc.metadata.GetAbsoluteFilePath(entry.FilePath)
+		require.NoError(t, err)
+		assert.NoFileExists(t, absolutePath)
+	}
+
+	t.Run("bypass redirect with origin body", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+		renderCtx := newCtx(&types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0xb301})
+
+		err := cc.SaveBypassCache(renderCtx, &bypass.BypassResponse{
+			StatusCode: 301,
+			Body:       []byte(nginxMovedPermanentlyBody),
+			Headers: map[string][]string{
+				"Content-Type": {"text/html"},
+				"Location":     {"https://example.com/new-page"},
+			},
+		}, nil)
+		require.NoError(t, err)
+
+		assertFileless(t, cc, mr, renderCtx)
+	})
+
+	t.Run("render redirect with processed body", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+		renderCtx := newCtx(&types.CacheKey{HostID: 1, DimensionID: 1, URLHash: 0x5301})
+
+		err := cc.SaveRenderCache(renderCtx, &RenderServiceResult{
+			HTML:             []byte(serializedRedirectBody),
+			StatusCode:       301,
+			RedirectLocation: "https://example.com/new-page",
+			Headers:          map[string][]string{"Content-Type": {"text/html"}},
+		}, nil)
+		require.NoError(t, err)
+
+		assertFileless(t, cc, mr, renderCtx)
 	})
 }
 

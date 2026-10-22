@@ -94,6 +94,25 @@ var _ = Describe("Bypass Cache", Serial, func() {
 			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
 		})
 
+		It("should cache redirects that carry a body", func() {
+			url := "/bypass-test/with-redirects?status=301&redirect_body=1"
+
+			By("Origin answers 301 with an HTML body")
+			resp301 := testEnv.RequestRenderNoRedirect(url)
+			Expect(resp301.StatusCode).To(Equal(301))
+			Expect(resp301.Body).To(ContainSubstring("301 Moved Permanently"))
+
+			cacheKey, _ := testEnv.GetCacheKey(testEnv.Config.TestPagesURL()+url, "desktop")
+			Expect(testEnv.CacheExists(cacheKey)).To(BeTrue())
+
+			By("Second request - served from cache without the body")
+			resp2 := testEnv.RequestRenderNoRedirect(url)
+			Expect(resp2.StatusCode).To(Equal(301))
+			Expect(resp2.Headers.Get("Location")).To(Equal(resp301.Headers.Get("Location")))
+			Expect(resp2.Headers.Get("EC-Source")).To(Equal("bypass_cache"))
+			Expect(resp2.Body).To(BeEmpty())
+		})
+
 		It("should respect TTL expiration", func() {
 			url := "/bypass-test/ttl-short"
 

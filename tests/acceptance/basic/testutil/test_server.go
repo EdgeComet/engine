@@ -524,7 +524,19 @@ func (ts *TestServer) Start() error {
 		w.Header().Set("Last-Modified", time.Now().Format(time.RFC1123))
 		w.Header().Set("X-Test-Request-ID", uuid.New().String())
 
+		// redirect_body=1 answers a redirect the way nginx does, with an HTML page as its body
+		bodiedRedirect := statusCode >= 300 && statusCode < 400 && r.URL.Query().Get("redirect_body") == "1"
+		if bodiedRedirect {
+			w.Header().Set("Content-Type", "text/html")
+		}
+
 		w.WriteHeader(statusCode)
+
+		if bodiedRedirect {
+			title := fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode))
+			fmt.Fprintf(w, "<html>\r\n<head><title>%s</title></head>\r\n<body>\r\n<center><h1>%s</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n", title, title)
+			return
+		}
 
 		// Return JSON body (except for redirects)
 		if statusCode < 300 || statusCode >= 400 {
