@@ -122,6 +122,69 @@ func TestExtractBodyWords_MatchesCloneBasedOracleOnDensePage(t *testing.T) {
 	assert.Equal(t, want, extractBodyWords(parseGoQueryDoc(t, markup)))
 }
 
+// The walk behind link anchors, headings and tag_value extraction reads what a browser
+// shows: a non-rendered subtree inside the selection contributes no text.
+func TestBreakAwareText_SkipsNonRenderedDescendants(t *testing.T) {
+	cases := map[string]string{
+		"script":   `<span>before <script>var hidden = 1;</script>after</span>`,
+		"style":    `<span>before <style>.hidden { width: 324px; }</style>after</span>`,
+		"noscript": `<span>before <noscript><img src="hidden.jpg"></noscript>after</span>`,
+		"template": `<span>before <template><p>hidden</p></template>after</span>`,
+		"iframe":   `<span>before <iframe src="/frame">hidden fallback</iframe>after</span>`,
+		"nested":   `<span>before <b><i><script>hidden()</script></i></b>after</span>`,
+	}
+	for name, markup := range cases {
+		t.Run(name, func(t *testing.T) {
+			doc := parseGoQueryDoc(t, `<html><body>`+markup+`</body></html>`)
+			assert.Equal(t, "before after", BreakAwareText(doc.Find("body > span")))
+		})
+	}
+}
+
+// The selected node itself is never skipped, only what sits below it: a tag_value rule on
+// script[type="application/ld+json"] must keep returning the JSON.
+func TestBreakAwareText_SelectedNonRenderedNodeKeepsItsText(t *testing.T) {
+	cases := []struct {
+		name     string
+		markup   string
+		selector string
+		want     string
+	}{
+		{
+			name:     "json-ld script",
+			markup:   `<script type="application/ld+json">{"@type":"Product","name":"Dolly"}</script>`,
+			selector: `script[type="application/ld+json"]`,
+			want:     `{"@type":"Product","name":"Dolly"}`,
+		},
+		{
+			name:     "style",
+			markup:   `<style>.c { width: 1px; }</style>`,
+			selector: "style",
+			want:     `.c { width: 1px; }`,
+		},
+		{
+			name:     "noscript",
+			markup:   `<noscript><img src="p.jpg"></noscript>`,
+			selector: "noscript",
+			want:     `<img src="p.jpg">`,
+		},
+		{
+			name:     "template exempt but its nested script is not",
+			markup:   `<template><span>shown</span><script>hidden()</script></template>`,
+			selector: "template",
+			want:     "shown",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := parseGoQueryDoc(t, `<html><body>`+tc.markup+`</body></html>`)
+			sel := doc.Find(tc.selector)
+			require.Equal(t, 1, sel.Length())
+			assert.Equal(t, tc.want, BreakAwareText(sel))
+		})
+	}
+}
+
 // BenchmarkExtractBodyWords pairs with BenchmarkExtractBodyWordsCloneBased so the
 // cost of the replaced implementation stays measurable rather than remembered.
 func BenchmarkExtractBodyWords(b *testing.B) {

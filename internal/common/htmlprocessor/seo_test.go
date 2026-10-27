@@ -579,6 +579,13 @@ func TestExtractHeadings(t *testing.T) {
 			expected: []string{"Inline spancase"},
 		},
 		{
+			name:     "inline style and script inside heading are not text",
+			html:     `<html><body><h1>Clean<style>.title { color: red; }</style> <script>track("h1")</script>title</h1></body></html>`,
+			tag:      "h1",
+			maxCount: 5,
+			expected: []string{"Clean title"},
+		},
+		{
 			name:     "br only heading returns nil",
 			html:     `<html><body><h1><br></h1></body></html>`,
 			tag:      "h1",

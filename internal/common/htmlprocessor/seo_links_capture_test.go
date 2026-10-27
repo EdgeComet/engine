@@ -281,6 +281,34 @@ func TestCaptureLinks_AnchorLineBreaksSeparateWords(t *testing.T) {
 	assert.Equal(t, "Inline spancase", byTgt["https://example.com/inline"].Anchor, "inline children fuse as a browser renders them")
 }
 
+// Shaped like a Magento product card: one <a> wraps the image, the inline sizing <style> and
+// <script>, a <noscript> image fallback, then the product name. Before the fix the CSS and
+// JavaScript filled all MaxAnchorLength runes and the name never made it into the anchor.
+func TestCaptureLinks_AnchorSkipsInlineScriptStyleNoscript(t *testing.T) {
+	html := `<html><body>
+		<a href="https://shop.example/p.html" class="product-item-info">
+			<span class="product-image-container product-image-container-17181">
+				<img src="p.jpg" alt="SJOEF Dolly">
+			</span>
+			<style>.product-image-container-17181 { width: 324px; }</style>
+			<script type="text/javascript">prodImageContainers = document.querySelectorAll(".product-image-container-17181");</script>
+			<noscript><img src="p.jpg"></noscript>
+			<strong class="product-item-name">SJOEF Dolly Meisjesfiets 14 inch</strong>
+		</a>
+	</body></html>`
+	doc := parseGoQueryDoc(t, html)
+	seo := &types.PageSEO{}
+	extractLinkMetrics(doc, "https://shop.example/", "https://shop.example/", seo)
+
+	require.Len(t, seo.PageLinks, 1)
+	anchor := seo.PageLinks[0].Anchor
+	assert.Equal(t, "SJOEF Dolly Meisjesfiets 14 inch", anchor)
+	assert.NotContains(t, anchor, "{", "inline <style> CSS leaked into the anchor")
+	assert.NotContains(t, anchor, "querySelectorAll", "inline <script> JavaScript leaked into the anchor")
+	assert.NotContains(t, anchor, "<img", "<noscript> raw markup leaked into the anchor")
+	assert.True(t, seo.PageLinks[0].IsImage, "the card still counts as an image link")
+}
+
 func TestCaptureLinks_WhitespaceHrefJoinsRealTarget(t *testing.T) {
 	// A wrapped/padded href must produce the same target as its clean form: same
 	// placement plus same target means the two anchors merge into one PageLink.

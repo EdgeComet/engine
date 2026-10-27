@@ -42,11 +42,31 @@ var lineBreakingTags = map[string]struct{}{
 	"td": {}, "tfoot": {}, "th": {}, "thead": {}, "tr": {}, "ul": {},
 }
 
+// nonRenderedTextTags are the elements whose content a browser never shows as text, so
+// innerText leaves it out. noscript is here because the parser runs with scripting enabled
+// and keeps its content as raw text, escaped markup included. An iframe's own content is
+// never rendered either: the frame shows the embedded page instead.
+//
+// Deliberately separate from bodyBoilerplateTags: that set is frozen into the fingerprint
+// format and also drops visible landmarks (nav, header, footer, aside, form) whose text a
+// link anchor or a heading must keep.
+var nonRenderedTextTags = map[string]struct{}{
+	"script":   {},
+	"style":    {},
+	"noscript": {},
+	"template": {},
+	"iframe":   {},
+}
+
 // BreakAwareText returns a selection's text with every line-breaking element boundary turned
 // into an ASCII space. goquery's Text() concatenates descendant text nodes with nothing between
 // them, which fuses words across a break that a reader plainly sees: "analyzer<br>for crawl"
 // comes back as "analyzerfor crawl", and a two-cell row as "ab". Inline elements still fuse,
 // which is what a browser shows too - "Inline <span>span</span>case" stays "Inline spancase".
+//
+// Descendants in nonRenderedTextTags are skipped, so an anchor wrapping an inline <style> and
+// <script> reads as its visible label rather than as CSS and JavaScript. A selected node is
+// never skipped itself: a rule that selects script[type="application/ld+json"] gets the JSON.
 //
 // Whitespace is deliberately NOT collapsed here: the caller owns that policy. The enterprise
 // extraction engine collapses ASCII whitespace only, because NBSP and its narrow/thin siblings
@@ -56,12 +76,12 @@ var lineBreakingTags = map[string]struct{}{
 func BreakAwareText(s *goquery.Selection) string {
 	var text strings.Builder
 	for _, node := range s.Nodes {
-		appendTextWithBreaks(&text, node)
+		appendTextWithBreaks(&text, node, true)
 	}
 	return text.String()
 }
 
-func appendTextWithBreaks(text *strings.Builder, n *html.Node) {
+func appendTextWithBreaks(text *strings.Builder, n *html.Node, isRoot bool) {
 	if n.Type == html.TextNode {
 		text.WriteString(n.Data)
 		return
@@ -69,13 +89,16 @@ func appendTextWithBreaks(text *strings.Builder, n *html.Node) {
 
 	breaks := false
 	if n.Type == html.ElementNode {
+		if _, hidden := nonRenderedTextTags[n.Data]; hidden && !isRoot {
+			return
+		}
 		_, breaks = lineBreakingTags[n.Data]
 	}
 	if breaks {
 		text.WriteByte(' ')
 	}
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
-		appendTextWithBreaks(text, child)
+		appendTextWithBreaks(text, child, false)
 	}
 	if breaks {
 		text.WriteByte(' ')
