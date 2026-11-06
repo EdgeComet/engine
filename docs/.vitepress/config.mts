@@ -34,7 +34,7 @@ export default withMermaid(defineConfig({
                 text: 'Overview',
                 items: [
                     {text: 'Introduction', link: '/'},
-                    {text: 'Use Cases', link: '/use-cases'},
+                    {text: 'When to use the engine', link: '/use-cases'},
                 ]
             },
             {

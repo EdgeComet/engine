@@ -1,6 +1,6 @@
 ---
 title: Port reference
-description: Default network ports used by EdgeComet services
+description: Default network ports used by the EdgeComet engine services
 ---
 
 # Port reference

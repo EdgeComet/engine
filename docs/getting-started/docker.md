@@ -1,7 +1,9 @@
 ---
 title: Docker setup
-description: Run EdgeComet with Docker Compose
+description: Run the EdgeComet engine with Docker Compose
 ---
+
+# Docker setup
 
 You can run EdgeComet with Docker Compose to start Redis, Render Service, and Edge Gateway with one command. The Cache Daemon service is included as an optional block in the compose file.
 

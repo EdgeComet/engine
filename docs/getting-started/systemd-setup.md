@@ -1,6 +1,6 @@
 ---
 title: Systemd setup
-description: Configure systemd services for EdgeComet.
+description: Configure systemd services for the EdgeComet engine.
 ---
 
 # Systemd setup

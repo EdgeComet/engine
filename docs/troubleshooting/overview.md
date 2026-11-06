@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting overview
-description: How to diagnose and resolve common issues in EdgeComet
+description: How to diagnose and resolve common issues in the EdgeComet engine
 ---
 
 # Troubleshooting overview

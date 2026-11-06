@@ -1,9 +1,9 @@
 ---
-title: Configuration
+title: Edge Gateway configuration
 description: How to structure Edge Gateway configuration files
 ---
 
-# Configuration
+# Edge Gateway configuration
 
 ## Overview
 

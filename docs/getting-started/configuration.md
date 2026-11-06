@@ -1,6 +1,6 @@
 ---
 title: Quick Configuration basics
-description: Essential configuration to get EdgeComet running
+description: Essential configuration to get the EdgeComet engine running
 ---
 
 # Configuration basics

@@ -19,8 +19,23 @@ The engine degrades gracefully under component failure. Redis outages, missing
 cache files, and Chrome pool breakdowns each have a fallback path, and requests
 continue to be served.
 
-The engine is published under Apache-2.0. Run it yourself, or use the managed
-service documented at [edgecomet.com/docs](https://edgecomet.com/docs/).
+## The engine and EdgeComet cloud
+
+The engine is the caching, pre-caching, and rendering core of EdgeComet, and
+EdgeComet cloud runs the same engine in production. EdgeComet publishes it under
+Apache-2.0 to share that technology with teams who want to own their stack.
+
+- **What you get**: the complete engine source, which you run on your own
+  servers. It needs no EdgeComet account or subscription, and it makes no
+  requests to EdgeComet.
+- **What you run yourself**: Redis, the Chrome pool for rendering, the servers,
+  and the routing rule in your CDN or proxy. See [System
+  requirements](#system-requirements) and [When to use the
+  engine](./use-cases.md).
+- **What EdgeComet cloud adds**: a dashboard, bot analytics, a site audit,
+  Search Console reports, Edge SEO, alerts, and an AI SEO agent, on top of the
+  same engine. The [EdgeComet cloud documentation](https://edgecomet.com/docs/)
+  covers them.
 
 ## What the engine does
 
@@ -43,8 +58,9 @@ service documented at [edgecomet.com/docs](https://edgecomet.com/docs/).
   mobile with device-specific rendering for old websites
 - **Chrome pool management**: Reusable Chrome instances with automatic lifecycle
   management and restart policies
-- **Production monitoring**: Prometheus metrics, structured logging, distributed
-  tracing
+- **Production monitoring**: Prometheus metrics, structured logging, and an
+  `EC-Request-ID` header on every response that ties logs together across
+  services
 - **Open source (Apache-2.0)**: Inspect, self-host, and extend the full engine
 
 ## Request flow
@@ -128,33 +144,7 @@ To maintain system efficiency, the Cache Daemon supports configurable concurrenc
 
 **Distributed (production)**: Deploy Edge Gateway alongside Render Services, using multiple Render Service instances to scale Chrome capacity. Dedicate machines to Cache Daemon (optional) and Redis with persistence enabled.
 
-**High availability (enterprise)**: Deploy multiple Edge Gateway instances with cache sharding and multiple Render Service instances. Use Redis cluster or sentinel for redundancy and place a load balancer in front of Edge Gateway instances.
-
-
-## Part of the broader EdgeComet platform
-
-This repository is the engine: Edge Gateway, Render Service, and Cache Daemon.
-Together they handle caching, pre-caching, and rendering in the bot request
-path, and you can run them yourself under Apache-2.0.
-
-The managed EdgeComet platform runs this same engine and adds modules that are
-not part of this repository:
-
-- **Bot analytics**: per-bot crawl behavior and crawl waste from real in-path
-  traffic
-- **Continuous site audit**: indexation, on-page tags, canonicals, hreflang, and
-  internal linking, computed from the pages bots actually received
-- **Search analytics**: Google Search Console data joined with EdgeComet's own
-  page data
-- **Edge SEO**: change titles, meta descriptions, canonicals, hreflang,
-  redirects, and page elements without a deploy
-- **Action Board**: an AI agent that ranks issues by the traffic at stake and
-  drafts the fix
-- **Alerts**: anomaly detection on live bot traffic
-
-Run the engine on its own, or read the [platform
-documentation](https://edgecomet.com/docs/) when you want these modules without
-operating the infrastructure yourself.
+**High availability**: Deploy multiple Edge Gateway instances with cache sharding and multiple Render Service instances. Use Redis cluster or sentinel for redundancy and place a load balancer in front of Edge Gateway instances.
 
 
 ## Community and support
@@ -167,10 +157,8 @@ Key development standards:
 
 - Go 1.21+ with standard formatting (gofmt, goimports)
 - Ginkgo/Gomega for BDD-style testing
-- Structured logging with Zap (no obvious comments, critical parts only)
+- Structured logging with Zap
 - Error handling with wrapped errors and context
-- Test after implementation, not before
-- DRY principle and code reuse
 
 ### License
 

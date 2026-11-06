@@ -1,3 +1,8 @@
+---
+title: Quick start
+description: Build the EdgeComet engine, run it locally, and make your first render request.
+---
+
 # Quick Start
 
 Get EdgeComet running locally and make your first render request in under 10 minutes.
@@ -19,8 +24,8 @@ Get EdgeComet running locally and make your first render request in under 10 min
 
 ### Clone Repository
 ```bash
-git clone <repository-url>
-cd edgecomet
+git clone https://github.com/EdgeComet/engine.git
+cd engine
 ```
 
 ### Build All Services

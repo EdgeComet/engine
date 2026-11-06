@@ -1,6 +1,6 @@
 ---
 title: Metrics reference
-description: Prometheus metrics exposed by EdgeComet services
+description: Prometheus metrics exposed by the EdgeComet engine services
 ---
 
 # Metrics reference

@@ -1,6 +1,6 @@
 ---
 title: Production installation
-description: Install EdgeComet for production use
+description: Install the EdgeComet engine for production use
 ---
 
 # Production installation
@@ -37,8 +37,8 @@ apt-get update && apt-get install -y google-chrome-stable
 
 ```bash
 # Clone repository
-git clone <repository-url>
-cd edgecomet
+git clone https://github.com/EdgeComet/engine.git
+cd engine
 
 # Build all services
 GOOS=linux GOARCH=amd64 go build -o bin/edge-gateway ./cmd/edge-gateway

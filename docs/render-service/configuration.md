@@ -1,9 +1,9 @@
 ---
-title: Configuration
+title: Render Service configuration
 description: How to configure Render Service settings
 ---
 
-# Configuration
+# Render Service configuration
 
 ## Overview
 

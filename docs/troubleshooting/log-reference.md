@@ -1,6 +1,6 @@
 ---
 title: Log reference
-description: Understanding EdgeComet log messages
+description: Understanding EdgeComet engine log messages
 ---
 
 # Log reference

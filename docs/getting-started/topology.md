@@ -1,6 +1,6 @@
 ---
 title: Deployment topology
-description: Architectural patterns for EdgeComet deployments.
+description: Architectural patterns for EdgeComet engine deployments.
 ---
 
 # Deployment topology
