@@ -18,8 +18,8 @@ func ExtractURL(renderCtx *edgectx.RenderContext, ssrfProtection bool) (string, 
 
 	targetURL := string(urlParam)
 
-	if len(targetURL) > 2048 {
-		return "", fmt.Errorf("URL exceeds maximum length of 2048 characters")
+	if len(targetURL) > urlutil.MaxURLLength {
+		return "", fmt.Errorf("URL exceeds maximum length of %d characters", urlutil.MaxURLLength)
 	}
 
 	parsedURL, err := url.Parse(targetURL)

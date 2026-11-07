@@ -9,6 +9,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/edgecomet/engine/tests/acceptance/basic/testutil"
 )
 
 var _ = Describe("Console Messages Capture", Serial, func() {
@@ -16,8 +18,8 @@ var _ = Describe("Console Messages Capture", Serial, func() {
 	var internalAuthKey string
 
 	BeforeEach(func() {
-		internalBaseURL = "http://localhost:10071"
-		internalAuthKey = "test-auth-key-12345"
+		internalBaseURL = testutil.EGInternalBaseURL
+		internalAuthKey = testutil.EGInternalAuthKey
 	})
 
 	// HARMetadata mirrors the HAR metadata structure for assertions

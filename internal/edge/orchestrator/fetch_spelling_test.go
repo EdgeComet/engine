@@ -22,12 +22,14 @@ import (
 )
 
 const (
-	spellingEncoded  = "https://example.com/a%2Cb/53"
-	spellingComma    = "https://example.com/a,b/53"
-	spellingLower    = "https://example.com/a%2cb/53"
-	spellingWriterID = "writer-req"
-	spellingDomain   = "example.com"
-	spellingMetric   = `fetch_spelling_test_eg_cached_redirect_ignored_total{host="example.com"} 1`
+	spellingEncoded      = "https://example.com/a%2Cb/53"
+	spellingComma        = "https://example.com/a,b/53"
+	spellingLower        = "https://example.com/a%2cb/53"
+	spellingQueryEncoded = "https://example.com/q?brand=a%2Cb"
+	spellingQueryComma   = "https://example.com/q?brand=a,b"
+	spellingWriterID     = "writer-req"
+	spellingDomain       = "example.com"
+	spellingMetric       = `fetch_spelling_test_eg_cached_redirect_ignored_total{host="example.com"} 1`
 )
 
 var spellingMetrics = metrics.NewMetricsCollector("fetch_spelling_test", zap.NewNop())
@@ -55,6 +57,15 @@ func spellingRequestCtx(t *testing.T, fetchURL string, exact, strip bool) *edgec
 	renderCtx.ResolvedConfig.TrackingParams = trackingParams
 	renderCtx.WithFetchURL(fetchURL, exact)
 	return renderCtx
+}
+
+// spellingNormalizedCtx is a request for requestURL carrying the fetch URL the normalizer derives.
+func spellingNormalizedCtx(t *testing.T, requestURL string, strip bool) *edgectx.RenderContext {
+	t.Helper()
+	renderCtx := spellingRequestCtx(t, requestURL, true, strip)
+	result, err := hash.NewURLNormalizer().Normalize(requestURL, renderCtx.ResolvedConfig.TrackingParams.StripPatterns())
+	require.NoError(t, err)
+	return renderCtx.WithFetchURL(result.FetchURL, result.FetchExact)
 }
 
 func spellingEntry(status int, location, fetchURL, fetchURLRequestID string) *cache.CacheMetadata {
@@ -131,6 +142,26 @@ func TestIgnoreCachedRedirect(t *testing.T) {
 		{name: "non-redirect status", entry: spellingEntry(http.StatusOK, spellingEncoded, "", "")},
 		{name: "304 is not a cached redirect", entry: spellingEntry(http.StatusNotModified, spellingEncoded, "", "")},
 		{name: "redirect without Location", entry: spellingEntry(http.StatusMovedPermanently, "", "", "")},
+		{
+			name: "query comma Location against an encoded entry", requestURL: spellingQueryComma,
+			entry: spellingEntry(http.StatusMovedPermanently, spellingQueryComma, spellingQueryEncoded, spellingWriterID), want: true,
+		},
+		{
+			name: "query encoded Location against a comma entry", requestURL: spellingQueryEncoded,
+			entry: spellingEntry(http.StatusMovedPermanently, spellingQueryEncoded, spellingQueryComma, spellingWriterID), want: true,
+		},
+		{
+			name: "relative query-only Location keeps the base path", requestURL: spellingQueryComma,
+			entry: spellingEntry(http.StatusMovedPermanently, "?brand=a,b", spellingQueryEncoded, spellingWriterID), want: true,
+		},
+		{
+			name: "query Location with another value", requestURL: spellingQueryComma,
+			entry: spellingEntry(http.StatusMovedPermanently, "?brand=a,c", spellingQueryEncoded, spellingWriterID),
+		},
+		{
+			name: "equal query spelling is a genuine loop", requestURL: spellingQueryComma,
+			entry: spellingEntry(http.StatusMovedPermanently, spellingQueryComma, spellingQueryComma, spellingWriterID),
+		},
 	}
 
 	for _, tt := range tests {
@@ -261,6 +292,30 @@ func TestSaveCache_RecordsFetchSpelling(t *testing.T) {
 		assert.True(t, mr.Exists(metaKey))
 		assert.Equal(t, "", mr.HGet(metaKey, "fetch_url"))
 		assert.Equal(t, "", mr.HGet(metaKey, "fetch_url_rid"))
+	})
+
+	t.Run("query-only respelling records its spelling", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+		renderCtx := spellingNormalizedCtx(t, spellingQueryComma, true)
+		require.Equal(t, spellingQueryEncoded, renderCtx.TargetURL)
+
+		require.NoError(t, cc.SaveOverrideCache(renderCtx, override, cache.SourceBypass, time.Hour, types.CacheExpiredConfig{}))
+
+		queryMetaKey := "meta:" + renderCtx.CacheKey.String()
+		assert.Equal(t, spellingQueryComma, mr.HGet(queryMetaKey, "fetch_url"))
+		assert.Equal(t, renderCtx.RequestID, mr.HGet(queryMetaKey, "fetch_url_rid"))
+	})
+
+	t.Run("query that fell back records only its request ID", func(t *testing.T) {
+		cc, mr := newOverrideCacheCoordinator(t)
+		renderCtx := spellingNormalizedCtx(t, "https://example.com/q?id=5;x=1&a=1", true)
+		require.True(t, renderCtx.FetchExact)
+
+		require.NoError(t, cc.SaveOverrideCache(renderCtx, override, cache.SourceBypass, time.Hour, types.CacheExpiredConfig{}))
+
+		queryMetaKey := "meta:" + renderCtx.CacheKey.String()
+		assert.Equal(t, "", mr.HGet(queryMetaKey, "fetch_url"))
+		assert.Equal(t, renderCtx.RequestID, mr.HGet(queryMetaKey, "fetch_url_rid"))
 	})
 
 	t.Run("legacy save clears the spelling an exact save left", func(t *testing.T) {

@@ -2,6 +2,9 @@ package recache
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,6 +193,73 @@ func TestResolveFetchURL(t *testing.T) {
 	}
 }
 
+// TestResolveFetchURL_QuerySpellings saves each live request the way the cache coordinator does and
+// recaches the entry's queue URL, which carries the normalized query.
+func TestResolveFetchURL_QuerySpellings(t *testing.T) {
+	patterns, err := config.CompileStripPatterns([]string{"utm_*"})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		liveURL   string
+		wantFetch string
+	}{
+		{name: "stripped name absent from the stored spelling", liveURL: "https://example.com/q?utm_source=x&brand=a,b", wantFetch: "https://example.com/q?brand=a,b"},
+		{name: "duplicate values of one name", liveURL: "https://example.com/q?b=1&a=2,1&%61=1", wantFetch: "https://example.com/q?b=1&a=2,1&%61=1"},
+		{name: "empty value", liveURL: "https://example.com/q?key=", wantFetch: "https://example.com/q?key="},
+		{name: "escaped space", liveURL: "https://example.com/q?q=a%20b", wantFetch: "https://example.com/q?q=a%20b"},
+		{name: "query that fell back", liveURL: "https://example.com/q?id=5;x=1&a=1", wantFetch: "https://example.com/q?a=1"},
+		{name: "query that fell back next to a respelled path", liveURL: "https://example.com/a%2Cb/53?id=5;x=1&a=1", wantFetch: "https://example.com/a%2Cb/53?a=1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			live, err := hash.NewURLNormalizer().Normalize(tt.liveURL, patterns)
+			require.NoError(t, err)
+			require.True(t, live.FetchExact)
+			require.Equal(t, tt.wantFetch, live.FetchURL)
+
+			rs, _ := fetchURLService(t)
+			renderCtx := fetchURLContext(t, live.NormalizedURL)
+			spelling := ""
+			if live.FetchURL != live.NormalizedURL {
+				spelling = live.FetchURL
+			}
+			seedFetchSpelling(t, rs, renderCtx, spelling, fetchWriterID)
+
+			rs.resolveFetchURL(renderCtx)
+
+			assert.Equal(t, tt.wantFetch, renderCtx.FetchURL)
+			assert.True(t, renderCtx.FetchExact)
+		})
+	}
+}
+
+func TestProcessRecacheKeepsStoredQuerySpelling(t *testing.T) {
+	const (
+		queueURL = "https://example.com/q?brand=a%2Cb"
+		spelling = "https://example.com/q?brand=a,b"
+	)
+	rs, _, sentRequest := stampRenderRecacheService(t, types.RenderResponse{
+		Success: true,
+		HTML:    "<html><head><title>Page</title></head><body>rendered</body></html>",
+		Metrics: types.PageMetrics{StatusCode: 200},
+	})
+	renderCtx := fetchURLContext(t, queueURL)
+	seedFetchSpelling(t, rs, renderCtx, spelling, fetchWriterID)
+
+	for pass := range 2 {
+		require.NoError(t, rs.ProcessRecache(context.Background(), queueURL, 1, fetchDimensionID, types.RecacheModeRender))
+		assert.Equal(t, spelling, sentRequest().URL, "pass %d", pass)
+
+		entry, err := rs.metadataStore.GetCacheEntry(context.Background(), renderCtx.CacheKey)
+		require.NoError(t, err)
+		require.NotNil(t, entry)
+		assert.Equal(t, queueURL, entry.URL)
+		assert.Equal(t, spelling, entry.EffectiveFetchURL(), "pass %d", pass)
+	}
+}
+
 func TestProcessRecacheRenderFetchesStoredSpelling(t *testing.T) {
 	rs, _, sentRequest := stampRenderRecacheService(t, types.RenderResponse{
 		Success: true,
@@ -208,4 +278,95 @@ func TestProcessRecacheRenderFetchesStoredSpelling(t *testing.T) {
 	require.NotNil(t, entry)
 	assert.Equal(t, fetchQueueURL, entry.URL)
 	assert.Equal(t, fetchEncodedURL, entry.EffectiveFetchURL(), "the recache save keeps the spelling for the next pass")
+}
+
+// TestProcessBypassRecacheNeverServedQuery recaches a URL no live request has saved, against an origin
+// that redirects the encoded comma to the raw one.
+func TestProcessBypassRecacheNeverServedQuery(t *testing.T) {
+	const (
+		queuePath     = "/shop/?brand=a%2Cb"
+		commaPath     = "/shop/?brand=a,b"
+		commaLocation = "?brand=a,b"
+		encodedComma  = "%2C"
+		passesBefore  = 2
+	)
+
+	var requestURI string
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestURI = r.RequestURI
+		if strings.Contains(r.URL.RawQuery, encodedComma) {
+			w.Header().Set("Location", commaLocation)
+			w.WriteHeader(http.StatusMovedPermanently)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<html><head><title>Shop</title></head><body>shop</body></html>"))
+	}))
+	t.Cleanup(origin.Close)
+	queueURL := origin.URL + queuePath
+
+	tests := []struct {
+		name          string
+		cacheable     []int
+		wantErrorType string
+	}{
+		{name: "cacheable redirect is cached", cacheable: []int{http.StatusOK, http.StatusMovedPermanently}},
+		{name: "uncacheable redirect is a permanent failure", cacheable: []int{http.StatusOK}, wantErrorType: types.ErrorTypeOriginRedirect},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rs, _ := fetchURLService(t)
+			rs.bypassSvc = stampBypassService()
+
+			newContext := func() *edgectx.RenderContext {
+				renderCtx := fetchURLContext(t, queueURL)
+				renderCtx.ResolvedConfig = &config.ResolvedConfig{
+					Action:      types.ActionBypass,
+					Compression: types.CompressionNone,
+					Bypass: config.ResolvedBypassConfig{Cache: config.ResolvedBypassCacheConfig{
+						Enabled: true, TTL: fetchStoredTTL, StatusCodes: tt.cacheable,
+					}},
+				}
+				return renderCtx
+			}
+			recache := func() (*cache.CacheMetadata, error) {
+				renderCtx := newContext()
+				rs.resolveFetchURL(renderCtx)
+				err := rs.processBypassRecache(context.Background(), queueURL, renderCtx, time.Now())
+				entry, lookupErr := rs.metadataStore.GetCacheEntry(context.Background(), renderCtx.CacheKey)
+				require.NoError(t, lookupErr)
+				return entry, err
+			}
+
+			for pass := range passesBefore {
+				entry, err := recache()
+				assert.Equal(t, queuePath, requestURI, "pass %d", pass)
+
+				if tt.wantErrorType == "" {
+					require.NoError(t, err, "pass %d", pass)
+					require.NotNil(t, entry)
+					assert.Equal(t, http.StatusMovedPermanently, entry.StatusCode)
+					assert.Equal(t, []string{commaLocation}, entry.Headers["Location"])
+					assert.Empty(t, entry.EffectiveFetchURL(), "a recache save records no spelling, so the next pass fetches the queue URL again")
+					continue
+				}
+				var failure *recacheError
+				require.ErrorAs(t, err, &failure, "pass %d", pass)
+				assert.Equal(t, tt.wantErrorType, failure.errorType)
+				assert.True(t, failure.permanent)
+				assert.Equal(t, commaLocation, failure.redirectTo)
+				assert.Nil(t, entry)
+			}
+
+			seedFetchSpelling(t, rs, newContext(), origin.URL+commaPath, fetchWriterID)
+
+			entry, err := recache()
+			require.NoError(t, err)
+			assert.Equal(t, commaPath, requestURI, "the live save's spelling reaches the origin")
+			require.NotNil(t, entry)
+			assert.Equal(t, http.StatusOK, entry.StatusCode)
+			assert.Equal(t, origin.URL+commaPath, entry.EffectiveFetchURL())
+		})
+	}
 }

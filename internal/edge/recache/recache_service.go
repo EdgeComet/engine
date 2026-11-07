@@ -645,7 +645,7 @@ func (rs *RecacheService) resolveFetchURL(renderCtx *edgectx.RenderContext) {
 
 // storedFetchURL returns the entry's spelling and, when it still normalizes to this cache key, the
 // exact fetch URL built from it; otherwise the reason it cannot be used. Recache normalizes with nil
-// strip patterns because a stored fetch URL already carries the normalized query.
+// strip patterns because a stored fetch URL already carries the stripped query.
 func (rs *RecacheService) storedFetchURL(renderCtx *edgectx.RenderContext) (stored, fetchURL, reason string) {
 	entry, exists := rs.cacheCoord.LookupCacheRaw(renderCtx)
 	if !exists {

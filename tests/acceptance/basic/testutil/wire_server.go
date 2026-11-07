@@ -23,6 +23,8 @@ const (
 	WireKindRender      = "render"
 	WireKindBypassStale = "bypass-stale"
 	WireKindRenderStale = "render-stale"
+	// WireKindBypassNoStrip is WireKindBypass with tracking parameter stripping disabled.
+	WireKindBypassNoStrip = "bypass-nostrip"
 
 	// WireModeOK answers 200 with a page that loads no subresources.
 	WireModeOK = "ok"
@@ -32,7 +34,8 @@ const (
 	// WireModeStatus answers with the status, Location and delay registered for the token.
 	WireModeStatus = "status"
 	// WireModeFetchSelf is WireModeCanon whose 200 page fetches the decoded spelling of its own
-	// path, which the canon rule answers with a 301 back to the page.
+	// path, or the target set with SetWireFetch, which the canon rule answers with a 301 back to
+	// the page.
 	WireModeFetchSelf = "fetchself"
 
 	wireTokenSegment = 3
@@ -79,6 +82,7 @@ type wireRecorder struct {
 	mu        sync.Mutex
 	requests  map[string][]string
 	canonical map[string]string
+	fetches   map[string]string
 	responses map[string]wireResponse
 }
 
@@ -86,6 +90,7 @@ func newWireRecorder() *wireRecorder {
 	return &wireRecorder{
 		requests:  make(map[string][]string),
 		canonical: make(map[string]string),
+		fetches:   make(map[string]string),
 		responses: make(map[string]wireResponse),
 	}
 }
@@ -126,6 +131,7 @@ func (wr *wireRecorder) record(token, requestURI string) {
 func (wr *wireRecorder) serve(w http.ResponseWriter, r *http.Request, token, mode string) {
 	wr.mu.Lock()
 	canonical := wr.canonical[token]
+	fetchTarget := wr.fetches[token]
 	response, hasResponse := wr.responses[token]
 	wr.mu.Unlock()
 
@@ -140,7 +146,7 @@ func (wr *wireRecorder) serve(w http.ResponseWriter, r *http.Request, token, mod
 		}
 		script := ""
 		if mode == WireModeFetchSelf {
-			script = wireFetchSelf(canonical)
+			script = wireFetchSelf(canonical, fetchTarget)
 		}
 		writeWirePage(w, http.StatusOK, script)
 	case WireModeStatus:
@@ -162,13 +168,17 @@ func (wr *wireRecorder) serve(w http.ResponseWriter, r *http.Request, token, mod
 	}
 }
 
-func wireFetchSelf(canonical string) string {
-	decoded, err := url.PathUnescape(canonical)
-	if err != nil {
-		decoded = canonical
+// wireFetchSelf fetches target, or the decoded spelling of canonical when target is empty.
+func wireFetchSelf(canonical, target string) string {
+	if target == "" {
+		decoded, err := url.PathUnescape(canonical)
+		if err != nil {
+			decoded = canonical
+		}
+		target = decoded
 	}
-	target, _ := json.Marshal(decoded)
-	return fmt.Sprintf(wireFetchSelfScript, target)
+	quoted, _ := json.Marshal(target)
+	return fmt.Sprintf(wireFetchSelfScript, quoted)
 }
 
 // writeWirePage sends redirects without a body: the gateway stores a bypass redirect body's length
@@ -188,6 +198,13 @@ func (ts *TestServer) SetWireCanonical(token, requestTarget string) {
 	ts.wire.mu.Lock()
 	defer ts.wire.mu.Unlock()
 	ts.wire.canonical[token] = requestTarget
+}
+
+// SetWireFetch sets the request-target the fetchself page fetches in place of its decoded path.
+func (ts *TestServer) SetWireFetch(token, requestTarget string) {
+	ts.wire.mu.Lock()
+	defer ts.wire.mu.Unlock()
+	ts.wire.fetches[token] = requestTarget
 }
 
 // SetWireResponse sets the status and Location the status mode answers with. An empty location

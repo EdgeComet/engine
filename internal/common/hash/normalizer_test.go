@@ -1,12 +1,15 @@
 package hash
 
 import (
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/edgecomet/engine/internal/common/config"
+	"github.com/edgecomet/engine/internal/common/urlutil"
 )
 
 func TestURLNormalization(t *testing.T) {
@@ -741,21 +744,19 @@ func TestStripTrackingParams_CaseInsensitive(t *testing.T) {
 	}
 }
 
-// TestNormalizeFrozen pins NormalizedURL and the hash, both of which key every cache entry in
+type frozenCase struct {
+	input      string
+	strip      bool
+	normalized string
+	hash       uint64
+	wantErr    bool
+}
+
+// frozenCases pins NormalizedURL and the hash, both of which key every cache entry in
 // production. Expected values were generated once from the normalizer and must never be
 // regenerated: a changed row orphans every cached entry of that URL shape.
-func TestNormalizeFrozen(t *testing.T) {
-	patterns, err := config.CompileStripPatterns([]string{"utm_*", "gclid"})
-	require.NoError(t, err)
-	normalizer := NewURLNormalizer()
-
-	tests := []struct {
-		input      string
-		strip      bool
-		normalized string
-		hash       uint64
-		wantErr    bool
-	}{
+func frozenCases() []frozenCase {
+	return []frozenCase{
 		{input: "https://example.com/p%20q", strip: false, normalized: "https://example.com/p q", hash: 11128299243850293701},
 		{input: "https://example.com/p%21q", strip: false, normalized: "https://example.com/p!q", hash: 1203222061682795741},
 		{input: "https://example.com/p%22q", strip: false, normalized: "https://example.com/p\"q", hash: 16190004269989876625},
@@ -943,9 +944,72 @@ func TestNormalizeFrozen(t *testing.T) {
 		{input: "https://localhost:9081/p", strip: false, normalized: "https://localhost:9081/p", hash: 5942143357622008740},
 		{input: "http://127.0.0.1:9081/p", strip: false, normalized: "http://127.0.0.1:9081/p", hash: 4424400293002618748},
 		{input: "https://meblini.pl/pl/blog/Rozowy-pokoj-dla-dziewczynki-jak-polaczyc-kolory%2C-meble-i-dodatki/53", strip: false, normalized: "https://meblini.pl/pl/blog/Rozowy-pokoj-dla-dziewczynki-jak-polaczyc-kolory,-meble-i-dodatki/53", hash: 540108179028897811},
+		{input: "https://example.com/p?brand=a,b", strip: false, normalized: "https://example.com/p?brand=a%2Cb", hash: 9451782090967888083},
+		{input: "https://example.com/p?brand=a,b", strip: true, normalized: "https://example.com/p?brand=a%2Cb", hash: 9451782090967888083},
+		{input: "https://example.com/p?brand=a%2cb", strip: false, normalized: "https://example.com/p?brand=a%2Cb", hash: 9451782090967888083},
+		{input: "https://example.com/p?brand=a%2cb", strip: true, normalized: "https://example.com/p?brand=a%2Cb", hash: 9451782090967888083},
+		{input: "https://example.com/p?b=2&a=1", strip: true, normalized: "https://example.com/p?a=1&b=2", hash: 1026708374973747941},
+		{input: "https://example.com/p?q=a%20b", strip: false, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=a%20b", strip: true, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=a+b", strip: false, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=a+b", strip: true, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=a%2Bb", strip: false, normalized: "https://example.com/p?q=a%2Bb", hash: 14854085206437239714},
+		{input: "https://example.com/p?q=a%2Bb", strip: true, normalized: "https://example.com/p?q=a%2Bb", hash: 14854085206437239714},
+		{input: "https://example.com/p?key=", strip: false, normalized: "https://example.com/p?key", hash: 3786871070702489921},
+		{input: "https://example.com/p?key=", strip: true, normalized: "https://example.com/p?key", hash: 3786871070702489921},
+		{input: "https://example.com/p?utm_source=x&brand=a,b", strip: false, normalized: "https://example.com/p?brand=a%2Cb&utm_source=x", hash: 4967446433750369359},
+		{input: "https://example.com/p?utm_source=x&brand=a,b", strip: true, normalized: "https://example.com/p?brand=a%2Cb", hash: 9451782090967888083},
+		{input: "https://example.com/p?r=a:b@c/d?e", strip: false, normalized: "https://example.com/p?r=a%3Ab%40c%2Fd%3Fe", hash: 14290828327226872846},
+		{input: "https://example.com/p?r=a:b@c/d?e", strip: true, normalized: "https://example.com/p?r=a%3Ab%40c%2Fd%3Fe", hash: 14290828327226872846},
+		{input: "https://example.com/p?q='x'(y)*!", strip: false, normalized: "https://example.com/p?q=%27x%27%28y%29%2A%21", hash: 13476643924704987932},
+		{input: "https://example.com/p?q='x'(y)*!", strip: true, normalized: "https://example.com/p?q=%27x%27%28y%29%2A%21", hash: 13476643924704987932},
+		{input: "https://example.com/p?%61=1", strip: false, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?%61=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?q=a%26b", strip: false, normalized: "https://example.com/p?q=a%26b", hash: 2538455612884046687},
+		{input: "https://example.com/p?q=a%26b", strip: true, normalized: "https://example.com/p?q=a%26b", hash: 2538455612884046687},
+		{input: "https://example.com/p?a=b=c", strip: false, normalized: "https://example.com/p?a=b%3Dc", hash: 7950746554196553892},
+		{input: "https://example.com/p?a=b=c", strip: true, normalized: "https://example.com/p?a=b%3Dc", hash: 7950746554196553892},
+		{input: "https://example.com/p?=1", strip: false, normalized: "https://example.com/p?=1", hash: 9015552509471258524},
+		{input: "https://example.com/p?=1", strip: true, normalized: "https://example.com/p?=1", hash: 9015552509471258524},
+		{input: "https://example.com/p?=", strip: false, normalized: "https://example.com/p", hash: 3139857920743470576},
+		{input: "https://example.com/p?=", strip: true, normalized: "https://example.com/p", hash: 3139857920743470576},
+		{input: "https://example.com/p?=&a=1", strip: false, normalized: "https://example.com/p?&a=1", hash: 10658336179597265421},
+		{input: "https://example.com/p?=&a=1", strip: true, normalized: "https://example.com/p?&a=1", hash: 10658336179597265421},
+		{input: "https://example.com/p?a=1&=", strip: false, normalized: "https://example.com/p?&a=1", hash: 10658336179597265421},
+		{input: "https://example.com/p?a=1&=", strip: true, normalized: "https://example.com/p?&a=1", hash: 10658336179597265421},
+		{input: "https://example.com/p?key=&k2", strip: false, normalized: "https://example.com/p?k2&key", hash: 10290633726049642977},
+		{input: "https://example.com/p?key=&k2", strip: true, normalized: "https://example.com/p?k2&key", hash: 10290633726049642977},
+		{input: "https://example.com/p?id=5;x=1&a=1", strip: false, normalized: "https://example.com/p?id=5;x=1&a=1", hash: 18136994932572709062},
+		{input: "https://example.com/p?id=5;x=1&a=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?q=%zz&a=1", strip: false, normalized: "https://example.com/p?q=%zz&a=1", hash: 5794270300527794471},
+		{input: "https://example.com/p?q=%zz&a=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?x=%2&a=1", strip: false, normalized: "https://example.com/p?x=%2&a=1", hash: 180127021181501191},
+		{input: "https://example.com/p?x=%2&a=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?q=a b", strip: false, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=a b", strip: true, normalized: "https://example.com/p?q=a+b", hash: 12538111667622408097},
+		{input: "https://example.com/p?q=café", strip: false, normalized: "https://example.com/p?q=caf%C3%A9", hash: 5710140773391778237},
+		{input: "https://example.com/p?q=café", strip: true, normalized: "https://example.com/p?q=caf%C3%A9", hash: 5710140773391778237},
+		{input: "https://example.com/p?q=a;b c&a=1", strip: false, normalized: "https://example.com/p?q=a;b c&a=1", hash: 4474492611783290983},
+		{input: "https://example.com/p?q=a;b c&a=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?a=1&%61=2", strip: false, normalized: "https://example.com/p?a=1&a=2", hash: 3661030670328691467},
+		{input: "https://example.com/p?a=1&%61=2", strip: true, normalized: "https://example.com/p?a=1&a=2", hash: 3661030670328691467},
+		{input: "https://example.com/p?a=1&&b=2", strip: false, normalized: "https://example.com/p?a=1&b=2", hash: 1026708374973747941},
+		{input: "https://example.com/p?a=1&&b=2", strip: true, normalized: "https://example.com/p?a=1&b=2", hash: 1026708374973747941},
+		{input: "https://example.com/p?utm%5Fsource=x&a=1", strip: false, normalized: "https://example.com/p?a=1&utm_source=x", hash: 17583161400586318570},
+		{input: "https://example.com/p?utm%5Fsource=x&a=1", strip: true, normalized: "https://example.com/p?a=1", hash: 17212736928487900873},
+		{input: "https://example.com/p?utm_source=x", strip: false, normalized: "https://example.com/p?utm_source=x", hash: 7183956095093817473},
+		{input: "https://example.com/p?utm_source=x", strip: true, normalized: "https://example.com/p", hash: 3139857920743470576},
+		{input: "https://example.com/p?kinkiety_material[0]=&amp=", strip: false, normalized: "https://example.com/p?amp&kinkiety_material%5B0%5D", hash: 14055671294835477194},
+		{input: "https://example.com/p?kinkiety_material[0]=&amp=", strip: true, normalized: "https://example.com/p?amp&kinkiety_material%5B0%5D", hash: 14055671294835477194},
 	}
+}
 
-	for _, tt := range tests {
+func TestNormalizeFrozen(t *testing.T) {
+	patterns, err := config.CompileStripPatterns([]string{"utm_*", "gclid"})
+	require.NoError(t, err)
+	normalizer := NewURLNormalizer()
+
+	for _, tt := range frozenCases() {
 		t.Run(tt.input, func(t *testing.T) {
 			var stripPatterns []config.CompiledStripPattern
 			if tt.strip {
@@ -963,18 +1027,17 @@ func TestNormalizeFrozen(t *testing.T) {
 	}
 }
 
-func TestNormalizeFetchURL(t *testing.T) {
-	patterns, err := config.CompileStripPatterns([]string{"utm_source"})
-	require.NoError(t, err)
-	normalizer := NewURLNormalizer()
+type fetchURLCase struct {
+	name       string
+	input      string
+	strip      bool
+	wantExact  bool
+	wantFetch  string
+	wantReason string
+}
 
-	tests := []struct {
-		name      string
-		input     string
-		strip     bool
-		wantExact bool
-		wantFetch string
-	}{
+func fetchURLCases() []fetchURLCase {
+	return []fetchURLCase{
 		{name: "reported meblini URL", input: "https://meblini.pl/pl/blog/a%2Cb/53", wantExact: true, wantFetch: "https://meblini.pl/pl/blog/a%2Cb/53"},
 		{name: "lowercase hex kept", input: "https://example.com/a%2cb", wantExact: true, wantFetch: "https://example.com/a%2cb"},
 		{name: "literal comma", input: "https://example.com/a,b", wantExact: true, wantFetch: "https://example.com/a,b"},
@@ -1009,8 +1072,8 @@ func TestNormalizeFetchURL(t *testing.T) {
 		{name: "raw backslash", input: "https://example.com/a\\b"},
 		{name: "raw space", input: "https://example.com/a b"},
 		{name: "raw UTF-8", input: "https://example.com/café"},
-		{name: "query normalized and stripped", input: "https://example.com/p?b=2&a=1&utm_source=x", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1&b=2"},
-		{name: "query normalized next to an exact path", input: "https://example.com/a%2Cb?b=2&a=1", wantExact: true, wantFetch: "https://example.com/a%2Cb?a=1&b=2"},
+		{name: "query stripped in received order", input: "https://example.com/p?b=2&a=1&utm_source=x", strip: true, wantExact: true, wantFetch: "https://example.com/p?b=2&a=1"},
+		{name: "query received order next to an exact path", input: "https://example.com/a%2Cb?b=2&a=1", wantExact: true, wantFetch: "https://example.com/a%2Cb?b=2&a=1"},
 		{name: "force query kept", input: "https://example.com/a%2Cb?", wantExact: true, wantFetch: "https://example.com/a%2Cb?"},
 		{name: "fragment dropped", input: "https://example.com/a%2Cb#frag", wantExact: true, wantFetch: "https://example.com/a%2Cb"},
 		{name: "empty path", input: "https://example.com", wantExact: true, wantFetch: "https://example.com/"},
@@ -1022,9 +1085,62 @@ func TestNormalizeFetchURL(t *testing.T) {
 		{name: "default port removed", input: "https://example.com:443/a%2Cb", wantExact: true, wantFetch: "https://example.com/a%2Cb"},
 		{name: "scheme and host lowercased", input: "HTTPS://EXAMPLE.COM./A%2Cb", wantExact: true, wantFetch: "https://example.com/A%2Cb"},
 		{name: "no scheme", input: "example.com/a%2Cb", wantExact: true, wantFetch: "https://example.com/a%2Cb"},
+		{name: "query comma kept", input: "https://example.com/p?brand=a,b", strip: true, wantExact: true, wantFetch: "https://example.com/p?brand=a,b"},
+		{name: "query lowercase hex kept", input: "https://example.com/p?brand=a%2cb", strip: true, wantExact: true, wantFetch: "https://example.com/p?brand=a%2cb"},
+		{name: "query pairs keep received order", input: "https://example.com/p?b=2&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?b=2&a=1"},
+		{name: "query escaped space kept", input: "https://example.com/p?q=a%20b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%20b"},
+		{name: "query plus kept", input: "https://example.com/p?q=a+b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a+b"},
+		{name: "query escaped plus kept", input: "https://example.com/p?q=a%2Bb", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%2Bb"},
+		{name: "query empty value kept", input: "https://example.com/p?key=", strip: true, wantExact: true, wantFetch: "https://example.com/p?key="},
+		{name: "query tracking param stripped", input: "https://example.com/p?utm_source=x&brand=a,b", strip: true, wantExact: true, wantFetch: "https://example.com/p?brand=a,b"},
+		{name: "query tracking param kept without stripping", input: "https://example.com/p?utm_source=x&brand=a,b", wantExact: true, wantFetch: "https://example.com/p?utm_source=x&brand=a,b"},
+		{name: "query gen-delims kept", input: "https://example.com/p?r=a:b@c/d?e", strip: true, wantExact: true, wantFetch: "https://example.com/p?r=a:b@c/d?e"},
+		{name: "query sub-delims kept", input: "https://example.com/p?q='x'(y)*!", strip: true, wantExact: true, wantFetch: "https://example.com/p?q='x'(y)*!"},
+		{name: "query escaped name kept", input: "https://example.com/p?%61=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?%61=1"},
+		{name: "query escaped ampersand kept", input: "https://example.com/p?q=a%26b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%26b"},
+		{name: "query equals sign in a value kept", input: "https://example.com/p?a=b=c", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=b=c"},
+		{name: "query empty name kept", input: "https://example.com/p?=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?=1"},
+		{name: "query lone equals sign kept", input: "https://example.com/p?=", strip: true, wantExact: true, wantFetch: "https://example.com/p?="},
+		{name: "query empty pair kept first", input: "https://example.com/p?=&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?=&a=1"},
+		{name: "query empty pair kept last", input: "https://example.com/p?a=1&=", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1&="},
+		{name: "query empty value next to a bare name", input: "https://example.com/p?key=&k2", strip: true, wantExact: true, wantFetch: "https://example.com/p?key=&k2"},
+		{name: "query one name in two spellings", input: "https://example.com/p?a=1&%61=2", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1&%61=2"},
+		{name: "query duplicate names keep received order", input: "https://example.com/p?b=1&a=2&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?b=1&a=2&a=1"},
+		{name: "query empty segment skipped", input: "https://example.com/p?a=1&&b=2", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1&b=2"},
+		{name: "query escaped tracking name stripped", input: "https://example.com/p?utm%5Fsource=x&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1"},
+		{name: "query stripped to nothing", input: "https://example.com/p?utm_source=x", strip: true, wantExact: true, wantFetch: "https://example.com/p"},
+		{name: "query brackets and empty values kept", input: "https://example.com/p?kinkiety_material[0]=&amp=", strip: true, wantExact: true, wantFetch: "https://example.com/p?kinkiety_material[0]=&amp="},
+		{name: "query traversal payload kept", input: "https://example.com/p?path=../../.env", strip: true, wantExact: true, wantFetch: "https://example.com/p?path=../../.env"},
+		{name: "query colon kept", input: "https://example.com/p?q=site:x", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=site:x"},
+		{name: "query fragment dropped", input: "https://example.com/p?brand=a,b#frag", strip: true, wantExact: true, wantFetch: "https://example.com/p?brand=a,b"},
+		{name: "query respelled next to an exact path", input: "https://example.com/a%2Cb?brand=a,b", strip: true, wantExact: true, wantFetch: "https://example.com/a%2Cb?brand=a,b"},
+		{name: "path fallback keeps the normalized query", input: "https://example.com/a!b?brand=a,b", strip: true},
+		{name: "semicolon falls back", input: "https://example.com/p?id=5;x=1&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "semicolon falls back without stripping", input: "https://example.com/p?id=5;x=1&a=1", wantExact: true, wantFetch: "https://example.com/p?id=5;x=1&a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "malformed escape falls back", input: "https://example.com/p?q=%zz&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "malformed escape falls back without stripping", input: "https://example.com/p?q=%zz&a=1", wantExact: true, wantFetch: "https://example.com/p?q=%zz&a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "truncated escape falls back", input: "https://example.com/p?x=%2&a=1", strip: true, wantExact: true, wantFetch: "https://example.com/p?a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "truncated escape falls back without stripping", input: "https://example.com/p?x=%2&a=1", wantExact: true, wantFetch: "https://example.com/p?x=%2&a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "trailing percent falls back", input: "https://example.com/p?q=50%", strip: true, wantExact: true, wantFetch: "https://example.com/p", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw space falls back", input: "https://example.com/p?q=a b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a+b", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw space next to a semicolon passes through without stripping", input: "https://example.com/p?q=a;b c&a=1", wantExact: true, wantFetch: "https://example.com/p?q=a;b c&a=1", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw UTF-8 falls back", input: "https://example.com/p?q=café", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=caf%C3%A9", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw braces fall back", input: "https://example.com/p?q={x}", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=%7Bx%7D", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw pipe falls back", input: "https://example.com/p?q=a|b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%7Cb", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw caret falls back", input: "https://example.com/p?q=a^b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%5Eb", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw double quotes fall back", input: "https://example.com/p?q=\"x\"", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=%22x%22", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw angle brackets fall back", input: "https://example.com/p?q=<x>", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=%3Cx%3E", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw backslash falls back", input: "https://example.com/p?q=a\\b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%5Cb", wantReason: fetchQueryReasonUnsafeByte},
+		{name: "raw backtick falls back", input: "https://example.com/p?q=a`b", strip: true, wantExact: true, wantFetch: "https://example.com/p?q=a%60b", wantReason: fetchQueryReasonUnsafeByte},
 	}
+}
 
-	for _, tt := range tests {
+func TestNormalizeFetchURL(t *testing.T) {
+	patterns, err := config.CompileStripPatterns([]string{"utm_source"})
+	require.NoError(t, err)
+	normalizer := NewURLNormalizer()
+
+	for _, tt := range fetchURLCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			var stripPatterns []config.CompiledStripPattern
 			if tt.strip {
@@ -1039,10 +1155,161 @@ func TestNormalizeFetchURL(t *testing.T) {
 			} else {
 				assert.Equal(t, result.NormalizedURL, result.FetchURL)
 			}
+			assert.Equal(t, tt.wantReason, result.FetchQueryReason)
 
 			fetchResult, err := normalizer.Normalize(result.FetchURL, stripPatterns)
 			require.NoError(t, err)
 			assert.Equal(t, result.NormalizedURL, fetchResult.NormalizedURL, "the fetch URL must share the request's cache key")
 		})
+	}
+}
+
+// queryStripPatterns is the tracking-parameter list production hosts carry by default.
+var queryStripPatterns = []string{"utm_*", "gclid", "fbclid", "ref"}
+
+// TestFetchQueryRoundTrip checks that a fetch URL built from the received query re-normalizes to
+// the same key and the same fetch URL: with nil patterns as recache does, and with the request's
+// own patterns as the cached-redirect check does.
+func TestFetchQueryRoundTrip(t *testing.T) {
+	patterns, err := config.CompileStripPatterns(queryStripPatterns)
+	require.NoError(t, err)
+	normalizer := NewURLNormalizer()
+
+	var inputs []string
+	for _, tt := range frozenCases() {
+		if !tt.wantErr {
+			inputs = append(inputs, tt.input)
+		}
+	}
+	for _, tt := range fetchURLCases() {
+		inputs = append(inputs, tt.input)
+	}
+	inputs = append(inputs, maxPairsURL())
+
+	for _, input := range inputs {
+		for _, stripPatterns := range [][]config.CompiledStripPattern{nil, patterns} {
+			result, err := normalizer.Normalize(input, stripPatterns)
+			require.NoError(t, err, input)
+			// A path fallback keeps NormalizedURL, whose own idempotence is not this test's subject.
+			if !result.FetchExact || result.FetchQueryReason != "" {
+				continue
+			}
+			assertFetchRoundTrip(t, normalizer, result, stripPatterns, input)
+		}
+	}
+}
+
+// maxPairsURL is the gateway's longest URL packed with unsorted, respelled pairs: the most pairs
+// fetchQuery sees behind the gateway.
+func maxPairsURL() string {
+	const pairs = "b=,&a&"
+	return fuzzBaseURL + strings.Repeat(pairs, (urlutil.MaxURLLength-len(fuzzBaseURL))/len(pairs))
+}
+
+func assertFetchRoundTrip(t *testing.T, normalizer *URLNormalizer, result *NormalizeResult, stripPatterns []config.CompiledStripPattern, input string) {
+	t.Helper()
+	for _, again := range [][]config.CompiledStripPattern{nil, stripPatterns} {
+		fetchResult, err := normalizer.Normalize(result.FetchURL, again)
+		require.NoError(t, err, input)
+		assert.Equal(t, result.NormalizedURL, fetchResult.NormalizedURL, "key of the fetch URL for %q", input)
+		assert.Equal(t, result.FetchURL, fetchResult.FetchURL, "fetch URL of the fetch URL for %q", input)
+	}
+}
+
+const (
+	fuzzBaseURL = "https://example.com/p?"
+	// fuzzAllowedQueryBytes restates the received-query byte set independently of the code under test.
+	fuzzAllowedQueryBytes = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,=:@/?[]"
+)
+
+func FuzzFetchQuery(f *testing.F) {
+	for _, seed := range []string{
+		"brand=a,b", "brand=a%2cb", "b=2&a=1", "q=a%20b", "q=a+b", "q=a%2Bb", "key=",
+		"utm_source=x&brand=a,b", "r=a:b@c/d?e", "q='x'(y)*!", "%61=1", "q=a%26b", "a=b=c", "=1", "=",
+		"=&a=1", "a=1&=", "key=&k2", "id=5;x=1&a=1", "q=%zz&a=1", "x=%2&a=1", "q=a b", "q=café",
+		"q=a;b c&a=1", "a=1&%61=2", "a=1&&b=2", "utm%5Fsource=x&a=1", "=&a=1&bad=%zz",
+		"kinkiety_material[0]=&amp=", "a+b=1&a%20b=2", "q=1#frag", "",
+	} {
+		f.Add(seed)
+	}
+	patterns, err := config.CompileStripPatterns(queryStripPatterns)
+	require.NoError(f, err)
+	normalizer := NewURLNormalizer()
+
+	f.Fuzz(func(t *testing.T, query string) {
+		input := fuzzBaseURL + query
+		// The gateway rejects longer URLs; the limit also keeps the query under url.ParseQuery's
+		// 10,000 pairs.
+		if len(input) > urlutil.MaxURLLength {
+			return
+		}
+		u, err := url.Parse(input)
+		if err != nil {
+			return
+		}
+
+		for _, stripPatterns := range [][]config.CompiledStripPattern{nil, patterns} {
+			result, err := normalizer.Normalize(input, stripPatterns)
+			require.NoError(t, err)
+			require.True(t, result.FetchExact)
+
+			if !isFuzzAllowedQuery(u.RawQuery) {
+				assert.Equal(t, fetchQueryReasonUnsafeByte, result.FetchQueryReason)
+				assert.Equal(t, result.NormalizedURL, result.FetchURL)
+				continue
+			}
+			require.Empty(t, result.FetchQueryReason)
+
+			_, fetchQuery, _ := strings.Cut(result.FetchURL, "?")
+			assertPairsReceived(t, u.RawQuery, fetchQuery)
+
+			want, err := url.ParseQuery(u.RawQuery)
+			require.NoError(t, err)
+			for name := range want {
+				if config.ShouldStripParam(name, stripPatterns) {
+					delete(want, name)
+				}
+			}
+			got, err := url.ParseQuery(fetchQuery)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+
+			assertFetchRoundTrip(t, normalizer, result, stripPatterns, input)
+		}
+	})
+}
+
+func isFuzzAllowedQuery(query string) bool {
+	for i := 0; i < len(query); i++ {
+		if query[i] == '%' {
+			if i+2 >= len(query) || !isHexDigit(query[i+1]) || !isHexDigit(query[i+2]) {
+				return false
+			}
+			i += 2
+			continue
+		}
+		if strings.IndexByte(fuzzAllowedQueryBytes, query[i]) < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// assertPairsReceived checks that the pairs of fetchQuery are received pairs, byte for byte and in
+// received order.
+func assertPairsReceived(t *testing.T, receivedQuery, fetchQuery string) {
+	t.Helper()
+	if fetchQuery == "" {
+		return
+	}
+	received := strings.Split(receivedQuery, "&")
+	next := 0
+	for pair := range strings.SplitSeq(fetchQuery, "&") {
+		require.NotEmpty(t, pair, "empty segment in %q", fetchQuery)
+		for next < len(received) && received[next] != pair {
+			next++
+		}
+		require.Less(t, next, len(received), "pair %q of %q was not received in order", pair, fetchQuery)
+		next++
 	}
 }

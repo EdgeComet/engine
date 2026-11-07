@@ -926,6 +926,12 @@ hosts:
             ttl: 5m
             status_codes: [200, 301, 302, 404]
 
+      # No strip patterns: a query url.ParseQuery rejects stays raw in the cache key.
+      - match: "/wire/bypass-nostrip/*"
+        action: "bypass"
+        tracking_params:
+          strip: false
+
       - match: "/wire/bypass-stale/*"
         action: "bypass"
         bypass:

@@ -8,6 +8,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
 
+	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/edge/clientip"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
 	"github.com/edgecomet/engine/internal/edge/events"
@@ -19,6 +20,20 @@ type requestError struct {
 	statusCode int
 	message    string
 	category   string
+}
+
+// applyFetchURL stores the origin fetch URL on renderCtx and logs it; fetch_query_reason is
+// written only when the received query was not used.
+func applyFetchURL(renderCtx *edgectx.RenderContext, result *hash.NormalizeResult) {
+	renderCtx.WithFetchURL(result.FetchURL, result.FetchExact)
+	fields := []zap.Field{
+		zap.String("fetch_url", result.FetchURL),
+		zap.Bool("fetch_exact", result.FetchExact),
+	}
+	if result.FetchQueryReason != "" {
+		fields = append(fields, zap.String("fetch_query_reason", result.FetchQueryReason))
+	}
+	renderCtx.Logger.Debug("Origin fetch URL resolved", fields...)
 }
 
 // handleRequestError writes error response, logs, records metrics, and emits error event

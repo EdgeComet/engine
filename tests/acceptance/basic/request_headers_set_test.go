@@ -21,8 +21,8 @@ import (
 // what EdgeComet actually put on the wire.
 var _ = Describe("Request Headers Set", Serial, func() {
 	const (
-		internalBaseURL = "http://localhost:10071"
-		internalAuthKey = "test-auth-key-12345"
+		internalBaseURL = testutil.EGInternalBaseURL
+		internalAuthKey = testutil.EGInternalAuthKey
 
 		desktopDimensionID = 1
 		forwardedAPIKey    = "forwarded-by-the-bot"

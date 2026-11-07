@@ -24,11 +24,16 @@ type NormalizeResult struct {
 	StrippedParams []string // Tracking parameters that were removed
 	WasModified    bool     // True if tracking params were stripped
 	// FetchURL is the URL to send to the origin. When FetchExact is true it carries the received
-	// path spelling with NormalizedURL's scheme, host and query; otherwise it equals NormalizedURL.
+	// path spelling with NormalizedURL's scheme and host, and the query pairs NormalizedURL kept,
+	// each spelled as received and in received order; with FetchQueryReason set it carries
+	// NormalizedURL's query instead. Otherwise it equals NormalizedURL.
 	FetchURL string
 	// FetchExact reports that FetchURL preserves the received spelling and must be sent with the
 	// exact (non-normalizing) bypass client.
 	FetchExact bool
+	// FetchQueryReason says why an exact FetchURL carries NormalizedURL's query; empty when it
+	// carries the received pairs or FetchExact is false.
+	FetchQueryReason string
 }
 
 func NewURLNormalizer() *URLNormalizer {
@@ -49,6 +54,7 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %w", err)
 	}
+	receivedQuery := u.RawQuery
 
 	// RawPath holds the received spelling whenever it differs from Go's default encoding; when it
 	// is empty the received spelling is EscapedPath.
@@ -139,7 +145,9 @@ func (n *URLNormalizer) Normalize(rawURL string, stripPatterns []config.Compiled
 
 	result.FetchURL = result.NormalizedURL
 	if isExactFetchPath(receivedPath, decodedPath) {
-		result.FetchURL = buildURL(u, decodeUnreservedEscapes(receivedPath))
+		var query string
+		query, result.FetchQueryReason = fetchQuery(receivedQuery, u.RawQuery, stripPatterns)
+		result.FetchURL = buildURL(u, decodeUnreservedEscapes(receivedPath), query)
 		result.FetchExact = true
 	}
 
@@ -158,11 +166,11 @@ func decodeURLPathUnicode(u *url.URL) string {
 	if !utf8.ValidString(path) {
 		path = u.EscapedPath()
 	}
-	return buildURL(u, path)
+	return buildURL(u, path, u.RawQuery)
 }
 
-// buildURL writes u with path in place of its own path. Fragments are already stripped.
-func buildURL(u *url.URL, path string) string {
+// buildURL writes u with path and query in place of its own. Fragments are already stripped.
+func buildURL(u *url.URL, path, query string) string {
 	var b strings.Builder
 	b.WriteString(u.Scheme)
 	b.WriteString("://")
@@ -172,9 +180,9 @@ func buildURL(u *url.URL, path string) string {
 	}
 	b.WriteString(u.Host)
 	b.WriteString(path)
-	if u.ForceQuery || u.RawQuery != "" {
+	if u.ForceQuery || query != "" {
 		b.WriteByte('?')
-		b.WriteString(u.RawQuery)
+		b.WriteString(query)
 	}
 	return b.String()
 }
@@ -184,21 +192,59 @@ func buildURL(u *url.URL, path string) string {
 // one of $&+,;=:@/ or part of a %XX escape. Other paths keep the legacy fetch, which resolves
 // traversal payloads and keeps raw sub-delims, spaces and non-ASCII on today's wire.
 func isExactFetchPath(receivedPath, decodedPath string) bool {
-	if normalizePath(decodedPath) != decodedPath {
-		return false
+	return normalizePath(decodedPath) == decodedPath && hasOnlyWireBytes(receivedPath, exactPathDelimiters, true)
+}
+
+// fetchQuery returns the received pairs the key kept, spelled as received and in received order.
+// A bare "=" pair is kept: the key serializes it to nothing, but both parse to the same values. It
+// returns keyQuery when a byte is neither unreserved, one of fetchQueryDelimiters nor part of a %XX
+// escape: that set excludes every byte url.ParseQuery rejects and every byte that breaks the request
+// line, which fasthttp writes verbatim.
+// Above url.ParseQuery's 10,000 pairs the key keeps or drops the raw query and the result no longer
+// round-trips; the gateway's URL length limit keeps every request below that.
+func fetchQuery(receivedQuery, keyQuery string, stripPatterns []config.CompiledStripPattern) (query, reason string) {
+	if receivedQuery == "" {
+		return keyQuery, ""
 	}
-	for i := 0; i < len(receivedPath); i++ {
-		c := receivedPath[i]
+	if !hasOnlyWireBytes(receivedQuery, fetchQueryDelimiters, false) {
+		return keyQuery, fetchQueryReasonUnsafeByte
+	}
+
+	var b strings.Builder
+	b.Grow(len(receivedQuery))
+	for raw := range strings.SplitSeq(receivedQuery, querySeparator) {
+		if raw == "" {
+			continue
+		}
+		rawName, _, _ := strings.Cut(raw, queryNameValueSeparator)
+		// Cannot fail: hasOnlyWireBytes rejected malformed escapes.
+		name, _ := url.QueryUnescape(rawName)
+		if shouldStripParam(name, stripPatterns) {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString(querySeparator)
+		}
+		b.WriteString(raw)
+	}
+	return b.String(), ""
+}
+
+// hasOnlyWireBytes reports whether every byte of s is unreserved, one of delimiters or part of a
+// %XX escape; with rejectStructural, %2F, %2E and %5C are rejected too.
+func hasOnlyWireBytes(s, delimiters string, rejectStructural bool) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
 		switch {
 		case c == '%':
-			if i+2 >= len(receivedPath) || !isHexDigit(receivedPath[i+1]) || !isHexDigit(receivedPath[i+2]) {
+			if i+2 >= len(s) || !isHexDigit(s[i+1]) || !isHexDigit(s[i+2]) {
 				return false
 			}
-			if isStructuralEscape(receivedPath[i+1], receivedPath[i+2]) {
+			if rejectStructural && isStructuralEscape(s[i+1], s[i+2]) {
 				return false
 			}
 			i += 2
-		case isUnreserved(c) || strings.IndexByte(exactPathDelimiters, c) >= 0:
+		case isUnreserved(c) || strings.IndexByte(delimiters, c) >= 0:
 		default:
 			return false
 		}
@@ -209,7 +255,15 @@ func isExactFetchPath(receivedPath, decodedPath string) bool {
 const (
 	// exactPathDelimiters are the reserved bytes both transports already send literal in a path.
 	exactPathDelimiters = "$&+,;=:@/"
-	hexLetterValue      = 10
+	// fetchQueryDelimiters are the reserved bytes a received query may carry to the origin. ';' is
+	// absent because url.ParseQuery rejects it.
+	fetchQueryDelimiters = "!$&'()*+,=:@/?[]"
+	hexLetterValue       = 10
+
+	querySeparator          = "&"
+	queryNameValueSeparator = "="
+
+	fetchQueryReasonUnsafeByte = "unsafe_byte"
 )
 
 // isStructuralEscape reports %2F, %2E and %5C in either hex case.

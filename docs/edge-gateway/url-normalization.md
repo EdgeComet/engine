@@ -43,6 +43,8 @@ The decoded path is the cache key. The origin can receive a different spelling, 
 - Names and values re-encoded with uppercase hex (`a=1,2` → `a=1%2C2`, `q=%ce%b1` → `q=%CE%B1`, a space → `+`)
 - Empty values handled (`?key` vs `?key=`)
 
+These rules build the cache key, not the query the origin receives. The origin can receive each parameter as the bot spelled it, see [What the origin receives](#what-the-origin-receives).
+
 ### Fragments
 
 - Removed by default (content after `#`)
@@ -202,11 +204,12 @@ The hash is used in:
 
 ## What the origin receives
 
-The normalized URL is the cache key, not always the URL Edge Gateway fetches. Origins can treat spellings of one path differently: some answer `/a,b` with a 301 to `/a%2Cb`, and fetching the decoded path would send the bot a redirect to the URL it requested. So when it is safe, Edge Gateway sends the origin the path as the bot spelled it, on render, bypass and recache:
+The normalized URL is the cache key, not always the URL Edge Gateway fetches. Origins can treat spellings of one URL differently: some answer `/a,b` with a 301 to `/a%2Cb`, others answer `?brand=a%2Cb` with a 301 to `?brand=a,b`. Fetching the normalized spelling from such an origin sends the bot a redirect to the URL it requested. So when it is safe, Edge Gateway sends the origin the path and the query as the bot spelled them, on render, bypass and recache. Scheme and host come from the normalized URL.
+
+### Path spelling
 
 - Percent-escapes keep their spelling and hex case (`%2C` stays `%2C`, `%2c` stays `%2c`)
 - Escapes of unreserved characters (letters, digits, `-`, `.`, `_`, `~`) are decoded (`%41` → `A`, `%7E` → `~`), as before
-- Scheme, host and query come from the normalized URL: the query is sorted and tracking parameters are stripped
 
 Edge Gateway sends the normalized path instead when the received path:
 
@@ -224,13 +227,41 @@ Edge Gateway sends the normalized path instead when the received path:
 | `/a//b%2Cc` | normalized path | `/a/b,c` |
 | `/a!b` | normalized path | `/a!b` |
 
-The received path is the `url` parameter after Edge Gateway decodes it once. Integrations that encode the target URL (Cloudflare Worker, CloudFront, Fastly) keep the bot's spelling. The nginx and HAProxy examples pass the target URL unencoded, so escapes in its path are decoded on arrival and the origin receives the decoded path.
+### Query spelling
+
+When Edge Gateway sends the received path, it builds the query from the received query:
+
+- Tracking parameters are stripped, as in the cache key. Names match in decoded form, so `utm%5Fsource` is stripped like `utm_source`
+- Parameters keep their received order. The cache key sorts them; the request to the origin does not
+- Each remaining parameter keeps the bot's spelling: escapes keep their hex case, `,` and other sub-delimiters stay raw, `%20` stays `%20`, and `key=` keeps its `=`
+
+Edge Gateway sends the normalized query instead when:
+
+- the received query contains a character other than letters, digits, `-._~`, `!$&'()*+,=:@/?[]` and a `%` followed by two hex digits. This covers a parameter the normalizer cannot parse (`;`, a malformed escape such as `%zz`), a raw space, `"`, `<`, `>`, `\`, `^`, `` ` ``, `{`, `|`, `}`, control characters and non-ASCII text
+- Edge Gateway sends the normalized path
+
+| Query received | Query sent to the origin | Cache key query |
+|----------------|--------------------------|-----------------|
+| `?brand=a,b` | `?brand=a,b` | `?brand=a%2Cb` |
+| `?brand=a%2cb` | `?brand=a%2cb` | `?brand=a%2Cb` |
+| `?key=` | `?key=` | `?key` |
+| `?q=a%20b` | `?q=a%20b` | `?q=a+b` |
+| `?b=2&a=1` | `?b=2&a=1` | `?a=1&b=2` |
+| `?id=5;x=1&a=1` | normalized query: `?a=1` | `?a=1` |
+
+In the last row the normalizer cannot parse `id=5;x=1`. With tracking parameter stripping on (the default), it drops that parameter from the cache key, and the origin does not receive it either. With stripping off, the cache key and the origin both get the received query unchanged.
+
+On render, Chrome escapes a raw `'` in the query as `%27` before the request reaches the origin.
+
+### Received spelling
+
+The received path and query come from the `url` parameter after Edge Gateway decodes it once. Integrations that encode the target URL (Cloudflare Worker, CloudFront, Fastly) keep the bot's spelling. The nginx and HAProxy examples pass the target URL unencoded, so escapes in its path are decoded on arrival and the origin receives the decoded path.
 
 Recache has no incoming request, so it fetches the spelling stored with the cache entry by the request that produced it, as long as that spelling still maps to the same cache key. Otherwise it fetches the normalized URL, as it does for a URL that was never requested live.
 
 ### Cached redirects to the same URL
 
-All spellings of a path share one cache entry, so a 301 that the origin returned for `/a,b` would be served to a request for `/a%2Cb` and point the bot back at its own URL. When a request keeps its spelling, Edge Gateway ignores a cached 301, 302, 307 or 308 whose `Location` normalizes to the request's own cache key, unless the same spelling produced it. It fetches the origin instead, and a cacheable response replaces the entry. This also covers lock waiters and stale fallbacks: an ignored entry is never served as stale.
+All spellings of a path or a query share one cache entry, so a 301 that the origin returned for `/a,b` would be served to a request for `/a%2Cb`, and one returned for `?brand=a%2Cb` to a request for `?brand=a,b`, pointing the bot back at its own URL. When a request keeps its spelling, Edge Gateway ignores a cached 301, 302, 307 or 308 whose `Location` normalizes to the request's own cache key, unless the same spelling produced it. It fetches the origin instead, and a cacheable response replaces the entry. This also covers lock waiters and stale fallbacks: an ignored entry is never served as stale.
 
 A URL that redirects to itself for its own spelling is fetched once more and then cached and served as usual.
 

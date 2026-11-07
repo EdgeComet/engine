@@ -6,10 +6,15 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/edgecomet/engine/internal/common/config"
 	"github.com/edgecomet/engine/internal/common/configtypes"
+	"github.com/edgecomet/engine/internal/common/hash"
 	"github.com/edgecomet/engine/internal/common/redis"
 	"github.com/edgecomet/engine/internal/edge/device"
 	"github.com/edgecomet/engine/internal/edge/edgectx"
@@ -193,4 +198,61 @@ func TestHandleRequestError(t *testing.T) {
 
 	assert.Equal(t, fasthttp.StatusBadRequest, ctx.Response.StatusCode())
 	assert.Contains(t, string(ctx.Response.Body()), "Invalid URL")
+}
+
+func TestApplyFetchURL(t *testing.T) {
+	const (
+		message     = "Origin fetch URL resolved"
+		reasonField = "fetch_query_reason"
+	)
+	patterns, err := config.CompileStripPatterns([]string{"utm_*"})
+	require.NoError(t, err)
+	tests := []struct {
+		name       string
+		input      string
+		wantFetch  string
+		wantExact  bool
+		wantReason string
+	}{
+		{
+			name:      "received query",
+			input:     "https://example.com/p?utm_source=x&brand=a,b&b=2",
+			wantFetch: "https://example.com/p?brand=a,b&b=2", wantExact: true,
+		},
+		{
+			name:      "query fallback",
+			input:     "https://example.com/p?id=5;x=1&a=1",
+			wantFetch: "https://example.com/p?a=1", wantExact: true, wantReason: "unsafe_byte",
+		},
+		{
+			name:      "path fallback",
+			input:     "https://example.com/a//b?brand=a,b",
+			wantFetch: "https://example.com/a/b?brand=a%2Cb",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := hash.NewURLNormalizer().Normalize(tt.input, patterns)
+			require.NoError(t, err)
+			core, logs := observer.New(zapcore.DebugLevel)
+			renderCtx := edgectx.NewRenderContext("test-req", &fasthttp.RequestCtx{}, zap.New(core), 30*time.Second)
+
+			applyFetchURL(renderCtx, result)
+
+			assert.Equal(t, tt.wantFetch, renderCtx.FetchURL)
+			assert.Equal(t, tt.wantExact, renderCtx.FetchExact)
+			entries := logs.FilterMessage(message).All()
+			require.Len(t, entries, 1)
+			fields := entries[0].ContextMap()
+			assert.Equal(t, tt.wantFetch, fields["fetch_url"])
+			assert.Equal(t, tt.wantExact, fields["fetch_exact"])
+			reason, logged := fields[reasonField]
+			if tt.wantReason == "" {
+				assert.False(t, logged, "%s is written only on a query fallback", reasonField)
+				return
+			}
+			assert.Equal(t, tt.wantReason, reason)
+		})
+	}
 }

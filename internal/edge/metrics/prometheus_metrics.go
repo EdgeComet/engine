@@ -130,7 +130,7 @@ func NewPrometheusMetricsWithRegistry(namespace string, registerer prometheus.Re
 			Namespace: namespace,
 			Subsystem: "eg",
 			Name:      "cached_redirect_ignored_total",
-			Help:      "Total number of requests that ignored a cached redirect to their own cache key produced by a different path spelling",
+			Help:      "Total number of requests that ignored a cached redirect to their own cache key produced by a different spelling of the path or query",
 		},
 		[]string{"host"},
 	)

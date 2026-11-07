@@ -28,6 +28,16 @@ const (
 	wireCommaRest   = "a,b/53"
 	wireEncodedRest = "a%2Cb/53"
 
+	// wireCommaQueryRest and wireEncodedQueryRest spell one cache key's query two ways.
+	wireCommaQueryRest   = "q?brand=a,b"
+	wireEncodedQueryRest = "q?brand=a%2Cb"
+
+	// wireReceivedQueryRest reaches the origin as wireSentQueryRest; wireKeyQueryRest is its cache
+	// key form.
+	wireReceivedQueryRest = "q?b=2&a=1,2&c="
+	wireSentQueryRest     = "q?b=2&a=1,2&c="
+	wireKeyQueryRest      = "q?a=1%2C2&b=2&c"
+
 	wireConcurrentRequests = 5
 	wireOriginDelay        = 2 * time.Second
 
@@ -374,6 +384,123 @@ var _ = Describe("URL wire spelling", Serial, Label(wireSpellingLabel), func() {
 			},
 			escapeEntries("RF-19", renderKind, []string{"%3F", "%23", "%2541"}),
 		)
+
+		DescribeTable("RF-20 bypass: the query arrives in received order with each pair spelled as sent",
+			func(rest, expectedRest string) {
+				expectEncodedArrival("rf20", testutil.WireKindBypass, rest, expectedRest)
+			},
+			Entry("RF-20 bypass comma and empty value", wireReceivedQueryRest, wireSentQueryRest),
+			Entry("RF-20 bypass lowercase hex", "q?brand=a%2cb", "q?brand=a%2cb"),
+			Entry("RF-20 bypass %20", "q?q=a%20b", "q?q=a%20b"),
+			Entry("RF-20 bypass brackets", "q?m[0]=a/b", "q?m[0]=a/b"),
+			Entry("RF-20 bypass sub-delims", "q?x='a'(b)*!", "q?x='a'(b)*!"),
+			Entry("RF-20 bypass :@/?", "q?r=a:b@c/d?e", "q?r=a:b@c/d?e"),
+			Entry("RF-20 bypass escaped name", "q?%61=1&b=2", "q?%61=1&b=2"),
+		)
+
+		DescribeTable("RF-21 render: the query arrives through Chrome with each pair spelled as sent",
+			func(rest, expectedRest string) {
+				expectEncodedArrival("rf21", testutil.WireKindRender, rest, expectedRest)
+			},
+			Entry("RF-21 render comma and empty value", wireReceivedQueryRest, wireSentQueryRest),
+			Entry("RF-21 render lowercase hex", "q?brand=a%2cb", "q?brand=a%2cb"),
+			Entry("RF-21 render %20", "q?q=a%20b", "q?q=a%20b"),
+			Entry("RF-21 render brackets", "q?m[0]=a/b", "q?m[0]=a/b"),
+			// Chrome escapes a raw ' in a query itself.
+			Entry("RF-21 render apostrophe", "q?x='a',b", "q?x=%27a%27,b"),
+			Entry("RF-21 render sub-delims", "q?x='a'(b)*!", "q?x=%27a%27(b)*!"),
+			Entry("RF-21 render :@/?", "q?r=a:b@c/d?e", "q?r=a:b@c/d?e"),
+			Entry("RF-21 render escaped name", "q?%61=1&b=2", "q?%61=1&b=2"),
+		)
+
+		It("RF-21 render: a subresource %2C redirect to the comma page is not taken for the document's", func() {
+			token := wireToken("rf21")
+			commaPath := testutil.WirePath(testutil.WireKindRender, token, testutil.WireModeFetchSelf, wireCommaQueryRest)
+			encodedPath := testutil.WirePath(testutil.WireKindRender, token, testutil.WireModeFetchSelf, wireEncodedQueryRest)
+			testEnv.TestServer.SetWireCanonical(token, commaPath)
+			testEnv.TestServer.SetWireFetch(token, encodedPath)
+
+			resp := requestWire(testEnv.RequestRenderEncoded, commaPath)
+
+			Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			Expect(resp.Headers.Get("EC-Source")).To(Equal(wireSourceRender))
+			Expect(testEnv.TestServer.WireRequests(token)).To(ContainElement(encodedPath),
+				"the page script must have fetched the escaped spelling")
+		})
+
+		It("RF-22 bypass: the canonical comma query is served 200 twice", func() {
+			token := wireToken("rf22")
+			path := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeCanon, wireCommaQueryRest)
+			testEnv.TestServer.SetWireCanonical(token, path)
+
+			first := requestWire(testEnv.RequestRenderEncoded, path)
+			Expect(first.StatusCode).To(Equal(http.StatusOK))
+			Expect(first.Headers.Get("EC-Source")).To(Equal(wireSourceBypass))
+
+			second := requestWire(testEnv.RequestRenderEncoded, path)
+			Expect(second.StatusCode).To(Equal(http.StatusOK))
+			Expect(second.Headers.Get("EC-Source")).To(Equal(wireSourceBypassCache))
+		})
+
+		It("RF-23 bypass: a %2C-canonical query redirects the comma spelling once", func() {
+			token := wireToken("rf23")
+			commaPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeCanon, wireCommaQueryRest)
+			encodedPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeCanon, wireEncodedQueryRest)
+			testEnv.TestServer.SetWireCanonical(token, encodedPath)
+
+			By("Requesting the comma spelling, which the origin redirects to %2C")
+			comma := requestWire(testEnv.RequestRenderEncoded, commaPath)
+			Expect(comma.StatusCode).To(Equal(http.StatusMovedPermanently))
+			Expect(comma.Headers.Get("Location")).To(Equal(wireURL(encodedPath)))
+
+			By("Requesting the %2C spelling")
+			encoded := requestWire(testEnv.RequestRenderEncoded, encodedPath)
+			Expect(encoded.StatusCode).To(Equal(http.StatusOK))
+
+			By("Requesting the comma spelling again")
+			again := requestWire(testEnv.RequestRenderEncoded, commaPath)
+			Expect(again.StatusCode).To(Equal(http.StatusOK))
+			Expect(again.Headers.Get("EC-Source")).To(Equal(wireSourceBypassCache))
+		})
+
+		It("RF-24 bypass: a cached %2C query redirect does not loop the comma spelling", func() {
+			token := wireToken("rf24")
+			commaPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeCanon, wireCommaQueryRest)
+			encodedPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeCanon, wireEncodedQueryRest)
+			testEnv.TestServer.SetWireCanonical(token, commaPath)
+
+			By("Requesting the %2C spelling, which the origin redirects to the comma")
+			encoded := requestWire(testEnv.RequestRenderEncoded, encodedPath)
+			Expect(encoded.StatusCode).To(Equal(http.StatusMovedPermanently))
+			Expect(encoded.Headers.Get("Location")).To(Equal(wireURL(commaPath)))
+
+			By("Requesting the comma spelling")
+			comma := requestWire(testEnv.RequestRenderEncoded, commaPath)
+			Expect(comma.StatusCode).To(Equal(http.StatusOK))
+			Expect(comma.Headers.Get("EC-Source")).To(Equal(wireSourceBypass))
+
+			By("Requesting the %2C spelling again")
+			again := requestWire(testEnv.RequestRenderEncoded, encodedPath)
+			Expect(again.StatusCode).To(Equal(http.StatusOK))
+			Expect(again.Headers.Get("EC-Source")).To(Equal(wireSourceBypassCache))
+			Expect(testEnv.TestServer.WireRequests(token)).To(Equal([]string{encodedPath, commaPath}))
+		})
+
+		It("RF-25 bypass: a recache of the normalized URL fetches the query spelling served live", func() {
+			token := wireToken("rf25")
+			receivedPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeOK, wireReceivedQueryRest)
+			sentPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeOK, wireSentQueryRest)
+			keyPath := testutil.WirePath(testutil.WireKindBypass, token, testutil.WireModeOK, wireKeyQueryRest)
+
+			live := requestWire(testEnv.RequestRenderEncoded, receivedPath)
+			Expect(live.StatusCode).To(Equal(http.StatusOK))
+
+			recache := requestWireRecache(wireURL(keyPath))
+			Expect(recache.Error).NotTo(HaveOccurred())
+			Expect(recache.StatusCode).To(Equal(http.StatusOK), recache.Body)
+
+			Expect(testEnv.TestServer.WireRequests(token)).To(Equal([]string{sentPath, sentPath}))
+		})
 	})
 
 	Context("GREEN: everything else keeps today's wire and cache behaviour", func() {
@@ -385,10 +512,6 @@ var _ = Describe("URL wire spelling", Serial, Label(wireSpellingLabel), func() {
 			Entry("GP-01 bypass", testutil.WireKindBypass),
 			Entry("GP-01 render", testutil.WireKindRender),
 		)
-
-		It("GP-02 bypass: the query arrives normalized as on master", func() {
-			expectEncodedArrival("gp02", testutil.WireKindBypass, "q?b=2&a=1,2&c=", "q?a=1%2C2&b=2&c")
-		})
 
 		DescribeTable("GP-03 utm_source is stripped on the wire",
 			func(kind string) {
@@ -597,6 +720,37 @@ var _ = Describe("URL wire spelling", Serial, Label(wireSpellingLabel), func() {
 			Entry("GP-17 bypass +", "a+b", "a%20b"),
 			Entry("GP-17 bypass %20", "a%20b", "a%20b"),
 			Entry("GP-17 bypass query", "q?x=1&y=2", "q?x=1"),
+		)
+
+		DescribeTable("GP-18 tracking parameters are stripped and the other pairs keep their spelling",
+			func(kind, rest, expectedRest string) {
+				expectEncodedArrival("gp18", kind, rest, expectedRest)
+			},
+			Entry("GP-18 bypass utm_source", testutil.WireKindBypass, "p?utm_source=x&brand=a,b&q=a%20b", "p?brand=a,b&q=a%20b"),
+			Entry("GP-18 bypass escaped utm_source", testutil.WireKindBypass, "p?utm%5Fsource=x&a=1", "p?a=1"),
+			Entry("GP-18 render utm_source", testutil.WireKindRender, "p?utm_source=x&brand=a,b&q=a%20b", "p?brand=a,b&q=a%20b"),
+		)
+
+		DescribeTable("GP-19 a query with ; or a malformed escape arrives as on master",
+			func(kind, rest, expectedRest string) {
+				expectEncodedArrival("gp19", kind, rest, expectedRest)
+			},
+			// With strip patterns the cache key drops the pair url.ParseQuery rejects.
+			Entry("GP-19 bypass ;", testutil.WireKindBypass, "p?id=5;x=1&a=1", "p?a=1"),
+			Entry("GP-19 bypass %zz", testutil.WireKindBypass, "p?q=%zz&a=1", "p?a=1"),
+			Entry("GP-19 render ;", testutil.WireKindRender, "p?id=5;x=1&a=1", "p?a=1"),
+			Entry("GP-19 render %zz", testutil.WireKindRender, "p?q=%zz&a=1", "p?a=1"),
+			// Without strip patterns the cache key is the raw query.
+			Entry("GP-19 bypass-nostrip ;", testutil.WireKindBypassNoStrip, "p?id=5;x=1&a=1", "p?id=5;x=1&a=1"),
+			Entry("GP-19 bypass-nostrip %zz", testutil.WireKindBypassNoStrip, "p?q=%zz&a=1", "p?q=%zz&a=1"),
+		)
+
+		DescribeTable("GP-20 a path that falls back keeps the normalized query",
+			func(kind string) {
+				expectEncodedArrival("gp20", kind, "a//b?brand=a,b&c=", "a/b?brand=a%2Cb&c")
+			},
+			Entry("GP-20 bypass", testutil.WireKindBypass),
+			Entry("GP-20 render", testutil.WireKindRender),
 		)
 	})
 })

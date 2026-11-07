@@ -270,11 +270,8 @@ func (s *Server) processRenderRequest(ctx *fasthttp.RequestCtx, requestID string
 
 	// Store in context
 	renderCtx.WithProcessedURL(normalizeResult.NormalizedURL).
-		WithFetchURL(normalizeResult.FetchURL, normalizeResult.FetchExact).
 		WithURLHash(urlHash)
-	renderCtx.Logger.Debug("Origin fetch URL resolved",
-		zap.String("fetch_url", renderCtx.FetchURL),
-		zap.Bool("fetch_exact", renderCtx.FetchExact))
+	applyFetchURL(renderCtx, normalizeResult)
 
 	// Handle status actions before dimension branching
 	if resolved.Action.IsStatusAction() {

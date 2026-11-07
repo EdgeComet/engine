@@ -52,9 +52,6 @@ const (
 // The HAR debug endpoint is the only channel that exposes lifecycle events and the timed-out
 // flag; the served body carries neither.
 const (
-	prerenderInternalBaseURL = "http://localhost:10071"
-	prerenderInternalAuthKey = "test-auth-key-12345"
-
 	prerenderHARClientTimeout = 90 * time.Second
 )
 
@@ -94,9 +91,9 @@ func renderPrerenderHAR(targetPath string, timeout time.Duration) prerenderHAR {
 	params.Set("dimension", "desktop")
 	params.Set("timeout", timeout.String())
 
-	req, err := http.NewRequest("GET", prerenderInternalBaseURL+"/debug/har/render?"+params.Encode(), nil)
+	req, err := http.NewRequest("GET", testutil.EGInternalBaseURL+"/debug/har/render?"+params.Encode(), nil)
 	Expect(err).To(BeNil())
-	req.Header.Set("X-Internal-Auth", prerenderInternalAuthKey)
+	req.Header.Set("X-Internal-Auth", testutil.EGInternalAuthKey)
 
 	client := &http.Client{Timeout: prerenderHARClientTimeout}
 	resp, err := client.Do(req)

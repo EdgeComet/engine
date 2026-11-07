@@ -31,7 +31,7 @@ type RenderContext struct {
 	TargetURL          string
 	OriginalURL        string // Original client-requested URL, preserved before normalization
 	FetchURL           string // URL sent to the origin; equals TargetURL unless FetchExact
-	FetchExact         bool   // FetchURL keeps the received path spelling and needs the exact bypass client
+	FetchExact         bool   // FetchURL keeps the received path spelling and, when eligible, the received query pairs; needs the exact bypass client
 	URLHash            uint64
 	Host               *types.Host
 	Dimension          string
@@ -87,7 +87,7 @@ func (rc *RenderContext) WithProcessedURL(processedURL string) *RenderContext {
 	return rc
 }
 
-// WithFetchURL sets the URL the origin fetch uses and whether it keeps the received path spelling.
+// WithFetchURL sets the URL the origin fetch uses and whether it keeps the received spelling.
 func (rc *RenderContext) WithFetchURL(fetchURL string, exact bool) *RenderContext {
 	rc.FetchURL = fetchURL
 	rc.FetchExact = exact

@@ -20,9 +20,11 @@ const (
 	EGMetricsPath   = "/metrics"
 )
 
-// Edge Gateway internal API, as the cache daemon and other gateways call it.
+// Edge Gateway internal API, as the cache daemon and other gateways call it. The port stays in
+// the suite's 9xxx range: a local dev gateway on the default 10071 would answer spec requests
+// with its own auth key and fail them with 401.
 const (
-	egInternalPort = "10071"
+	egInternalPort = "9131"
 
 	EGInternalListen     = "0.0.0.0:" + egInternalPort
 	EGInternalBaseURL    = "http://localhost:" + egInternalPort
