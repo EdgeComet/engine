@@ -109,7 +109,7 @@ func ProcessContent(
 		}
 		result.HTML = modifiedHTML
 		result.OriginalPageSEO = pageSEO
-		result.PageSEO = extractPageSEO(doc, statusCode, targetURL, logger)
+		result.PageSEO = modifiedPageSEO(doc, output, statusCode, targetURL, logger)
 		appendLastModifiedDate(result.PageSEO, responseHeaders)
 		return result
 	}
@@ -140,10 +140,25 @@ func ProcessContent(
 // page is stored as one nothing ever inspected.
 func extractPageSEO(doc htmlprocessor.Document, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
 	seo := doc.ExtractPageSEO(statusCode, targetURL)
+	warnDroppedCapture(seo, targetURL, logger)
+	return seo
+}
+
+func warnDroppedCapture(seo *types.PageSEO, targetURL string, logger *zap.Logger) {
 	if seo.SchemaOrg == nil {
 		logger.Warn("Structured data capture dropped", zap.String("url", targetURL))
 	}
-	return seo
+}
+
+// modifiedPageSEO describes the document a processor modified in place. A processor that
+// captured the document itself and changed nothing afterwards hands that capture on, and
+// a second capture of the same tree is skipped.
+func modifiedPageSEO(doc htmlprocessor.Document, output *ContentOutput, statusCode int, targetURL string, logger *zap.Logger) *types.PageSEO {
+	if output.PageSEOSnapshot == nil || !output.UnchangedSinceSnapshot {
+		return extractPageSEO(doc, statusCode, targetURL, logger)
+	}
+	warnDroppedCapture(output.PageSEOSnapshot, targetURL, logger)
+	return output.PageSEOSnapshot
 }
 
 // appendLastModifiedDate records the origin's Last-Modified value as a date candidate.

@@ -29,6 +29,15 @@ type ContentOutput struct {
 	Override   *ResponseOverride
 	Modified   bool
 	Extraction json.RawMessage
+	// PageSEOSnapshot is a capture the processor took itself from the edited Doc, as
+	// Doc.ExtractPageSEO(StatusCode, URL) and nothing more: the caller adds the
+	// Last-Modified candidate and logs a dropped capture. It must be a new value, never
+	// the input PageSEO. Read only with Modified set.
+	PageSEOSnapshot *types.PageSEO
+	// UnchangedSinceSnapshot reports that the processor did not change Doc after it took
+	// PageSEOSnapshot. Only then does the caller use the snapshot in place of its own
+	// re-capture of the modified document.
+	UnchangedSinceSnapshot bool
 }
 
 type ResponseOverride struct {

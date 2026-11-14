@@ -317,6 +317,23 @@ func TestProcessContent_PageSEOExtractedBeforeScriptStripping(t *testing.T) {
 		"JSON-LD script should be preserved after stripping")
 }
 
+func TestProcessContent_MicrodataTypesFollowTheReExtract(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	html := sampleHTML("Bike", `<div id="p" itemscope itemtype="https://schema.org/Product"></div>`)
+
+	cp := &mockContentProcessorFn{fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+		input.Doc.GoQueryDoc().Find("#p").SetAttr("itemtype", "https://schema.org/IndividualProduct")
+		return &ContentOutput{Modified: true}, nil
+	}}
+
+	result := ProcessContent(context.Background(), html, 200, nil, "https://example.com/bike", false, 1, cp, logger)
+
+	require.NotNil(t, result.PageSEO)
+	require.NotNil(t, result.OriginalPageSEO)
+	assert.Equal(t, []string{"IndividualProduct"}, result.PageSEO.MicrodataTypes)
+	assert.Equal(t, []string{"Product"}, result.OriginalPageSEO.MicrodataTypes)
+}
+
 func TestProcessContent_LastModifiedHeaderCaptured(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	html := sampleHTML("Title", "<p>Body</p>")
@@ -618,6 +635,145 @@ func TestProcessContent_ModifiedDocumentFailsToSerialize(t *testing.T) {
 			fields := warnings[0].ContextMap()
 			assert.EqualValues(t, hostID, fields["host_id"])
 			assert.Equal(t, pageURL, fields["url"])
+		})
+	}
+}
+
+// TestProcessContent_ProcessorSnapshot covers when the processor's own capture of the
+// edited document stands in for the re-capture: only when the processor took it and
+// reports no change to the document after it.
+func TestProcessContent_ProcessorSnapshot(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	const pageURL = "https://example.com/page"
+
+	tests := []struct {
+		name      string
+		snapshot  bool
+		unchanged bool
+		editAfter bool
+		wantTitle string
+		wantReuse bool
+	}{
+		{
+			name:      "no snapshot: the modified document is captured again",
+			wantTitle: "Edited",
+		},
+		{
+			name:      "a snapshot with no change after it is reused",
+			snapshot:  true,
+			unchanged: true,
+			wantTitle: "Edited",
+			wantReuse: true,
+		},
+		{
+			name:      "a snapshot the document changed after is not reused",
+			snapshot:  true,
+			editAfter: true,
+			wantTitle: "Final",
+		},
+		{
+			name:      "the flag without a snapshot captures again",
+			unchanged: true,
+			wantTitle: "Edited",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var taken *types.PageSEO
+			cp := &mockContentProcessorFn{fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+				doc := input.Doc.GoQueryDoc()
+				doc.Find("title").SetText("Edited")
+				out := &ContentOutput{Modified: true, RuleIDs: []uint32{5}, UnchangedSinceSnapshot: tt.unchanged}
+				if tt.snapshot {
+					taken = input.Doc.ExtractPageSEO(input.StatusCode, input.URL)
+					out.PageSEOSnapshot = taken
+				}
+				if tt.editAfter {
+					doc.Find("title").SetText("Final")
+				}
+				return out, nil
+			}}
+
+			result := ProcessContent(context.Background(), sampleHTML("Old", "<p>Body</p>"), 200, nil,
+				pageURL, false, 1, cp, logger)
+
+			require.NotNil(t, result.PageSEO)
+			require.NotNil(t, result.OriginalPageSEO)
+			assert.Contains(t, string(result.HTML), "<title>"+tt.wantTitle+"</title>")
+			assert.Equal(t, tt.wantTitle, result.PageSEO.Title)
+			assert.Equal(t, "Old", result.OriginalPageSEO.Title)
+			assert.Equal(t, []uint32{5}, result.RuleIDs)
+			if tt.wantReuse {
+				assert.Same(t, taken, result.PageSEO)
+			} else if taken != nil {
+				assert.NotSame(t, taken, result.PageSEO)
+			}
+		})
+	}
+}
+
+// TestProcessContent_ProcessorSnapshotIgnoredWithoutModified pins that a snapshot only
+// describes a modified document: with Modified unset the served page is the original.
+func TestProcessContent_ProcessorSnapshotIgnoredWithoutModified(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	cp := &mockContentProcessor{output: &ContentOutput{
+		RuleIDs:                []uint32{5},
+		PageSEOSnapshot:        &types.PageSEO{Title: "Snapshot"},
+		UnchangedSinceSnapshot: true,
+	}}
+
+	result := ProcessContent(context.Background(), sampleHTML("Old", "<p>Body</p>"), 200, nil,
+		"https://example.com/page", false, 1, cp, logger)
+
+	assert.Equal(t, "Old", result.PageSEO.Title)
+	assert.Nil(t, result.OriginalPageSEO)
+}
+
+// TestProcessContent_ReusedSnapshotGetsThePostSteps covers the two steps the gateway owns
+// on every capture of the served page: the processor's snapshot carries neither the
+// origin's Last-Modified candidate nor a log line for a dropped capture.
+func TestProcessContent_ReusedSnapshotGetsThePostSteps(t *testing.T) {
+	const pageURL = "https://example.com/page"
+	headers := originHeaders(types.LastModifiedHeader, testLastModified)
+
+	tests := []struct {
+		name         string
+		dropCapture  bool
+		wantWarnings int
+	}{
+		{name: "a whole capture logs nothing"},
+		{name: "a dropped capture is logged once", dropCapture: true, wantWarnings: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.WarnLevel)
+
+			var taken *types.PageSEO
+			cp := &mockContentProcessorFn{fn: func(_ context.Context, input *ContentInput) (*ContentOutput, error) {
+				input.Doc.GoQueryDoc().Find("title").SetText("Edited")
+				taken = input.Doc.ExtractPageSEO(input.StatusCode, input.URL)
+				if tt.dropCapture {
+					taken.SchemaOrg = nil
+				}
+				return &ContentOutput{Modified: true, PageSEOSnapshot: taken, UnchangedSinceSnapshot: true}, nil
+			}}
+
+			result := ProcessContent(context.Background(), schemaOrgPage("Product"), 200, headers,
+				pageURL, false, 1, cp, zap.New(core))
+
+			require.Same(t, taken, result.PageSEO)
+			expected := []types.DateCandidate{lastModifiedCandidate(testLastModified)}
+			assert.Equal(t, expected, result.PageSEO.Dates)
+			assert.Equal(t, expected, result.OriginalPageSEO.Dates)
+
+			warnings := logs.FilterMessage("Structured data capture dropped").All()
+			require.Len(t, warnings, tt.wantWarnings)
+			for _, w := range warnings {
+				assert.Equal(t, pageURL, w.ContextMap()["url"])
+			}
 		})
 	}
 }
