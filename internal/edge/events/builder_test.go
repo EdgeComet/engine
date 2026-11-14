@@ -738,6 +738,32 @@ func TestConvertPageSEO_TruncationFlagReachesTheWire(t *testing.T) {
 	assert.NotContains(t, string(complete), "page_links_truncated")
 }
 
+// TestBuildRequestEvent_MicrodataTypesOnBothSnapshots pins that the extractor's microdata
+// types leave the gateway on page_seo and on page_seo_original.
+func TestBuildRequestEvent_MicrodataTypesOnBothSnapshots(t *testing.T) {
+	result := &orchestrator.RenderResult{
+		Source:          orchestrator.ServedFromRender,
+		StatusCode:      200,
+		PageSEO:         &types.PageSEO{Title: "Modified", MicrodataTypes: []string{"Product", "BreadcrumbList"}},
+		OriginalPageSEO: &types.PageSEO{Title: "Original", MicrodataTypes: []string{"Product"}},
+	}
+
+	event := BuildRequestEvent(createTestRenderContext(), result, 100*time.Millisecond, "eg-1")
+
+	require.NotNil(t, event.PageSEO)
+	assert.Equal(t, []string{"Product", "BreadcrumbList"}, event.PageSEO.MicrodataTypes)
+	require.NotNil(t, event.PageSEOOriginal)
+	assert.Equal(t, []string{"Product"}, event.PageSEOOriginal.MicrodataTypes)
+
+	data, err := json.Marshal(event.PageSEO)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"microdata_types":["Product","BreadcrumbList"]`)
+
+	none, err := json.Marshal(convertPageSEO(&types.PageSEO{Title: "Plain"}))
+	require.NoError(t, err)
+	assert.NotContains(t, string(none), "microdata_types")
+}
+
 func TestBuildRequestEvent_RedirectTo(t *testing.T) {
 	renderCtx := createTestRenderContext()
 

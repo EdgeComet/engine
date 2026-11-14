@@ -171,6 +171,7 @@ type PageSEOEvent struct {
 	HreflangSelf        string                 `json:"hreflang_self,omitempty"`
 	StructuredDataTypes []string               `json:"structured_data_types,omitempty"`
 	Breadcrumbs         []BreadcrumbEntryEvent `json:"breadcrumbs,omitempty"`
+	MicrodataTypes      []string               `json:"microdata_types,omitempty"`
 	// Dates carries every captured date signal. The tag is omitzero, not omitempty:
 	// an inspected page with no signal keeps its empty array, which is itself the
 	// finding, while a blob that never went through content processing - the minimal

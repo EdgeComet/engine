@@ -311,6 +311,7 @@ func convertPageSEOWithoutLinks(seo *types.PageSEO) *PageSEOEvent {
 		PageMinHash:         seo.PageMinHash,
 		HreflangSelf:        seo.HreflangSelf,
 		StructuredDataTypes: seo.StructuredDataTypes,
+		MicrodataTypes:      seo.MicrodataTypes,
 		PageLinksTruncated:  seo.PageLinksTruncated,
 	}
 

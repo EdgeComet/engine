@@ -140,6 +140,14 @@ const (
 	MaxSchemaOrgNodeDepth = 16
 )
 
+// Microdata capture limits. A page carries a handful of distinct top-level types and a
+// schema.org type name is far shorter than the length cap; both caps bound adversarial
+// markup.
+const (
+	MaxMicrodataTypes      = 20  // distinct types kept per page, first ones in document order
+	MaxMicrodataTypeLength = 100 // bytes; a longer local name is dropped, never truncated
+)
+
 // SchemaOrgError.Reason values, naming why a block yielded no node.
 const (
 	SchemaOrgErrorParse    = "parse"    // decode failed, or content followed the first value; Offset set
@@ -217,6 +225,11 @@ type PageSEO struct {
 	// Structured data
 	StructuredDataTypes []string          `json:"structured_data_types,omitempty"`
 	Breadcrumbs         []BreadcrumbEntry `json:"breadcrumbs,omitempty"`
+	// MicrodataTypes holds the schema.org types of the top-level microdata items and RDFa
+	// typed resources as local names ("Product", never "https://schema.org/Product"), each
+	// once, in document order. Unlike StructuredDataTypes it is neither sorted nor read
+	// from nested items.
+	MicrodataTypes []string `json:"microdata_types,omitempty"`
 	// SchemaOrg is the page's JSON-LD envelope. In-process signal only (json:"-"):
 	// the event builder marshals it into its own event field, and the serialized SEO
 	// snapshot has no member for it.
