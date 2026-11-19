@@ -155,7 +155,7 @@ Contribution guidelines are being developed. This project follows standard Go co
 
 Key development standards:
 
-- Go 1.21+ with standard formatting (gofmt, goimports)
+- Go 1.27.4+ with standard formatting (gofmt, goimports)
 - Ginkgo/Gomega for BDD-style testing
 - Structured logging with Zap
 - Error handling with wrapped errors and context

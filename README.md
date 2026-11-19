@@ -34,7 +34,7 @@ This approach allows bots to see your content, metadata, and structured data as 
 
 ### Prerequisites
 
-- Go 1.24.2 or higher
+- Go 1.27.4 or higher
 - Chrome or Chromium browser (headless mode)
 - Redis 6.0 or higher
 

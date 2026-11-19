@@ -11,7 +11,7 @@ Depending on your installation scheme (single machine, distributed renders, mult
 
 ## Prerequisites
 
-- Go 1.21+ (for building)
+- Go 1.27.4+ (for building)
 - Redis 6.0+
 - Google Chrome (latest stable) - for Render Service machines
 - Linux (Ubuntu LTS recommended)

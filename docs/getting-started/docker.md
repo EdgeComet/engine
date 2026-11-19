@@ -7,7 +7,7 @@ description: Run the EdgeComet engine with Docker Compose
 
 You can run EdgeComet with Docker Compose to start Redis, Render Service, and Edge Gateway with one command. The Cache Daemon service is included as an optional block in the compose file.
 
-The Dockerfile uses the official `golang:1.24` image for builds and a Debian Bookworm runtime. Google Chrome is installed in the Render Service runtime image.
+The Dockerfile uses the official `golang:1.27.4-bookworm` image for builds and a Debian Bookworm runtime. Google Chrome is installed in the Render Service runtime image.
 
 ## Prerequisites
 

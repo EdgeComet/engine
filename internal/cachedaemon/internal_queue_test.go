@@ -252,7 +252,7 @@ func TestInternalQueue_WaitingCountsByHostID(t *testing.T) {
 	entries := []InternalQueueEntry{
 		{HostID: 1, Priority: redis.PriorityHigh},
 		{HostID: 1, Priority: redis.PriorityNormal},
-		{HostID: 1, Priority: ""},                                                               // ranks as normal
+		{HostID: 1, Priority: ""}, // ranks as normal
 		{HostID: 1, Priority: redis.PriorityAutorecache, NextRetryAfter: now.Add(-time.Second)}, // backoff over
 		{HostID: 1, Priority: redis.PriorityNormal, NextRetryAfter: now.Add(time.Minute)},       // still in backoff
 		{HostID: 2, Priority: redis.PriorityHigh, NextRetryAfter: now.Add(time.Minute)},

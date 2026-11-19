@@ -10,7 +10,7 @@ Get EdgeComet running locally and make your first render request in under 10 min
 ## Prerequisites
 
 ### Required Software
-- **Go 1.21+**: For building services
+- **Go 1.27.4+**: For building services
 
 - **Redis 6.0+**: For coordination and caching
 
