@@ -402,7 +402,8 @@ func TestScrollIsSkippedWhenNotRequested(t *testing.T) {
 	instance := newTestInstance()
 	var metrics types.PageMetrics
 
-	require.NoError(t, instance.scrollIfRequested(newScrollRequest(false), &metrics).Do(context.Background()))
+	_, err := instance.scrollIfRequested(newScrollRequest(false), &metrics)(context.Background(), nil)
+	require.NoError(t, err)
 
 	assert.False(t, metrics.ScrollPerformed)
 	assert.Zero(t, metrics.ScrollSteps)

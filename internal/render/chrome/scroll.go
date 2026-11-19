@@ -389,36 +389,38 @@ func (l scrollLoop) advancePhase(mode string, stable int, grew bool, state scrol
 
 // scrollIfRequested runs the scroll pass when the request asks for it, and is a no-op otherwise,
 // so an unconfigured host keeps exactly its current render behavior.
-func (ci *ChromeInstance) scrollIfRequested(req *types.RenderRequest, metrics *types.PageMetrics) chromedp.ActionFunc {
+func (ci *ChromeInstance) scrollIfRequested(req *types.RenderRequest, metrics *types.PageMetrics) chromedp.Action[chromedp.Void] {
 	if !req.Scroll {
-		return func(context.Context) error { return nil }
+		return chromedp.Steps()
 	}
 	return ci.scrollPage(req, metrics)
 }
 
 // scrollPage scrolls the page to the bottom before capture so content gated on scroll events is
 // present in the HTML. It never fails the render: every failure is logged and capture proceeds.
-func (ci *ChromeInstance) scrollPage(req *types.RenderRequest, metrics *types.PageMetrics) chromedp.ActionFunc {
-	loop := scrollLoop{
-		step: func(ctx context.Context, mode string, stepPx int) (scrollState, error) {
-			var state scrollState
-			if err := chromedp.Evaluate(scrollStepJS(mode, stepPx), &state).Do(ctx); err != nil {
-				return state, fmt.Errorf("scroll step evaluation failed: %w", err)
-			}
-			return state, nil
-		},
-		pause: func(ctx context.Context, d time.Duration) error {
-			return chromedp.Sleep(d).Do(ctx)
-		},
-		restore: func(ctx context.Context) error {
-			return chromedp.Evaluate(scrollRestoreJS, nil).Do(ctx)
-		},
-		now: time.Now,
-	}
+func (ci *ChromeInstance) scrollPage(req *types.RenderRequest, metrics *types.PageMetrics) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		loop := scrollLoop{
+			step: func(ctx context.Context, mode string, stepPx int) (scrollState, error) {
+				state, err := chromedp.Evaluate[scrollState](scrollStepJS(mode, stepPx))(ctx, t)
+				if err != nil {
+					return state, fmt.Errorf("scroll step evaluation failed: %w", err)
+				}
+				return state, nil
+			},
+			pause: func(ctx context.Context, d time.Duration) error {
+				_, err := chromedp.Sleep(d)(ctx, t)
+				return err
+			},
+			restore: func(ctx context.Context) error {
+				_, err := chromedp.Evaluate[chromedp.Void](scrollRestoreJS)(ctx, t)
+				return err
+			},
+			now: time.Now,
+		}
 
-	return func(ctx context.Context) error {
 		return ci.runScroll(ctx, loop, req, metrics)
-	}
+	})
 }
 
 // runScroll executes one scroll pass, records the outcome on the render metrics and reports it.

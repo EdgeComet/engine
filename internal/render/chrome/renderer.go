@@ -21,6 +21,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+	"github.com/chromedp/sysutil"
 	"go.uber.org/zap"
 
 	"github.com/edgecomet/engine/internal/common/urlutil"
@@ -33,6 +34,9 @@ const (
 	maxHTMLResponseSize    = 20971520 // Maximum HTML response size in bytes (20MB)
 	millisPerSecond        = 1000.0   // CDP timings arrive in milliseconds, render metrics carry seconds
 )
+
+// bootTime is the zero of CDP monotonic timestamps.
+var bootTime = sysutil.BootTime()
 
 // Render performs page rendering with the Chrome instance
 // Context cancellation is supported - will abort rendering and return partial results if possible
@@ -79,7 +83,7 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 	}
 
 	// Execute rendering tasks with merged context
-	err := chromedp.Run(tabCtx, ci.buildTasks(req, resp, blocklist, &statusCodeMu, harCollector, metricsCollector))
+	err := chromedp.Do(tabCtx, ci.buildTasks(req, resp, blocklist, &statusCodeMu, harCollector, metricsCollector))
 
 	resp.RenderTime = time.Since(start)
 
@@ -235,7 +239,7 @@ func (ci *ChromeInstance) Render(ctx context.Context, req *types.RenderRequest) 
 
 // buildTasks creates the chromedp task sequence for rendering
 func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.RenderResponse, blocklist *Blocklist,
-	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Tasks {
+	statusCodeMu *sync.Mutex, harCollector *har.HARCollector, metricsCollector *NetworkMetricsCollector) chromedp.Action[chromedp.Void] {
 	timeOrigin := time.Now().UnixMilli()
 	targetHost := urlutil.ExtractHost(req.URL)
 	injectedHeaders := req.InjectedHeaders()
@@ -247,10 +251,10 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 	// request apart from subresources and iframes that request or redirect to the same URL.
 	var mainFrameID atomic.Value
 
-	return chromedp.Tasks{
+	return chromedp.Steps(
 		// Set up event listeners FIRST - before any CDP commands
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			chromedp.ListenTarget(ctx, func(event interface{}) {
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			return chromedp.Listen(ctx, func(event any) {
 				switch ev := event.(type) {
 				case *fetch.EventRequestPaused:
 					// Handle each fetch event in a goroutine to avoid blocking
@@ -262,10 +266,6 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 						// Create timeout context for CDP commands to prevent goroutine leaks
 						cmdCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 						defer cancel()
-
-						// Get executor context for CDP commands
-						c := chromedp.FromContext(cmdCtx)
-						ctxExecutor := cdp.WithExecutor(cmdCtx, c.Target)
 
 						// Check if request should be blocked by URL pattern or resource type
 						blockedByURL := blocklist.IsBlocked(event.Request.URL)
@@ -294,7 +294,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 							metricsCollector.OnRequestBlocked(string(event.RequestID), requestHost)
 
 							// Block the request - use ErrorReasonAborted (like production code)
-							err := fetch.FailRequest(event.RequestID, network.ErrorReasonAborted).Do(ctxExecutor)
+							err := failRequest(cmdCtx, t, event.RequestID)
 							if err != nil {
 								ci.logger.Warn("Failed to block request",
 									zap.String("request_id", req.RequestID),
@@ -308,18 +308,18 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 							// (platform.example.com), and origins gate those calls on the render key
 							// too - excluding them silently returns geo/bot-filtered data.
 							headers := mergeRequestHeaders(event.Request.Headers, injectedHeaders)
-							err := fetch.ContinueRequest(event.RequestID).WithHeaders(headers).Do(ctxExecutor)
+							err := continueRequest(cmdCtx, t, event.RequestID, headers)
 							if err != nil {
 								ci.logger.Warn("Failed to continue request with headers, failing instead",
 									zap.String("request_id", req.RequestID),
 									zap.Int("instance_id", ci.ID),
 									zap.String("url", event.Request.URL),
 									zap.Error(err))
-								fetch.FailRequest(event.RequestID, network.ErrorReasonAborted).Do(ctxExecutor)
+								failRequest(cmdCtx, t, event.RequestID)
 							}
 						} else {
 							// Allow the request to continue without modification
-							err := fetch.ContinueRequest(event.RequestID).Do(ctxExecutor)
+							err := continueRequest(cmdCtx, t, event.RequestID, nil)
 							if err != nil {
 								ci.logger.Warn("Failed to continue request, failing instead to prevent hang",
 									zap.String("request_id", req.RequestID),
@@ -327,7 +327,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 									zap.String("url", event.Request.URL),
 									zap.Error(err))
 								// Fallback: fail the request to prevent it from hanging in paused state
-								fetch.FailRequest(event.RequestID, network.ErrorReasonAborted).Do(ctxExecutor)
+								failRequest(cmdCtx, t, event.RequestID)
 							}
 						}
 					}(ev)
@@ -350,7 +350,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 							ev.Request.Method,
 							headers,
 							string(ev.Type),
-							float64(ev.Timestamp.Time().UnixMilli())/1000,
+							monotonicSeconds(ev.Timestamp),
 						)
 					}
 
@@ -445,9 +445,9 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 					// Capture console errors and warnings
 					var consoleType string
 					switch ev.Type {
-					case cdpruntime.APITypeError:
+					case cdpruntime.ConsoleAPICalledTypeError:
 						consoleType = types.ConsoleTypeError
-					case cdpruntime.APITypeWarning:
+					case cdpruntime.ConsoleAPICalledTypeWarning:
 						consoleType = types.ConsoleTypeWarning
 					default:
 						return // Ignore other console types (log, info, debug, etc.)
@@ -493,7 +493,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 						harCollector.OnLoadingFinished(
 							string(ev.RequestID),
 							int64(ev.EncodedDataLength),
-							float64(ev.Timestamp.Time().UnixMilli())/1000,
+							monotonicSeconds(ev.Timestamp),
 						)
 					}
 
@@ -507,7 +507,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 							string(ev.RequestID),
 							ev.ErrorText,
 							ev.Canceled,
-							float64(ev.Timestamp.Time().UnixMilli())/1000,
+							monotonicSeconds(ev.Timestamp),
 						)
 					}
 
@@ -515,47 +515,46 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 					metricsCollector.OnRequestFailed(string(ev.RequestID))
 				}
 			})
-			return nil
 		}),
 
-		network.Enable(),
+		command(network.Enable, network.EnableParams{}),
 
 		// Route requests straight to the network instead of through a page's service worker.
 		// Service worker fetches originate from their own CDP target, so the interception below
 		// never sees them and cannot inject the render key: origins that gate on X-Render-Key
 		// reject those requests.
-		network.SetBypassServiceWorker(true),
+		command(network.SetBypassServiceWorker, network.SetBypassServiceWorkerParams{Bypass: true}),
 
 		// Enable fetch interception for request blocking
-		fetch.Enable(),
+		command(fetch.Enable, fetch.EnableParams{}),
 
 		// Add X-Edge-Render header to prevent nginx loop
-		network.SetExtraHTTPHeaders(network.Headers{
+		command(network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers{
 			headerEdgeRender: ci.serviceID,
-		}),
+		}}),
 
-		network.ClearBrowserCookies(),
-		page.Enable(),
-		css.Disable(),
+		command(network.ClearBrowserCookies, cdp.Empty{}),
+		command(page.Enable, page.EnableParams{}),
+		command(css.Disable, cdp.Empty{}),
 
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			tree, err := page.GetFrameTree().Do(ctx)
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			tree, err := cdp.Call(ctx, t, page.GetFrameTree, cdp.Empty{})
 			if err != nil {
 				return fmt.Errorf("failed to read the main frame: %w", err)
 			}
-			mainFrameID.Store(tree.Frame.ID)
+			mainFrameID.Store(tree.FrameTree.Frame.ID)
 			return nil
 		}),
 
 		enableLifeCycle(),
 
-		emulation.SetUserAgentOverride(req.UserAgent),
-		emulation.SetDeviceMetricsOverride(
-			int64(req.ViewportWidth),
-			int64(req.ViewportHeight),
-			1.0,                     // Default device scale
-			req.ViewportWidth < 768, // Mobile if width < 768px
-		),
+		command(emulation.SetUserAgentOverride, emulation.SetUserAgentOverrideParams{UserAgent: req.UserAgent}),
+		command(emulation.SetDeviceMetricsOverride, emulation.SetDeviceMetricsOverrideParams{
+			Width:             int64(req.ViewportWidth),
+			Height:            int64(req.ViewportHeight),
+			DeviceScaleFactor: 1.0,                     // Default device scale
+			Mobile:            req.ViewportWidth < 768, // Mobile if width < 768px
+		}),
 
 		// Must precede navigation: the flag has to be in place before the page's own bootstrap
 		// reads it, which is the first thing that script does.
@@ -564,8 +563,8 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 		// Navigate and wait for page ready (with soft timeout)
 		ci.navigateAndWait(req, timeOrigin, &resp.Metrics),
 
-		chromedp.WaitReady("body", chromedp.ByQuery),
-		chromedp.WaitVisible("body", chromedp.ByQuery),
+		chromedp.WaitReady(chromedp.CSS("body")),
+		chromedp.WaitVisible(chromedp.CSS("body")),
 
 		// Runs regardless of a soft timeout, unlike the extra wait in navigateAndWait: the hosts
 		// that need scrolling are the ones whose lifecycle event never fires, so gating this on
@@ -574,18 +573,24 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 
 		ci.extractHTML(&resp.HTML),
 
-		chromedp.Location(&resp.Metrics.FinalURL),
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			location, err := chromedp.Location()(ctx, t)
+			if err != nil {
+				return err
+			}
+			resp.Metrics.FinalURL = location
+			return nil
+		}),
 
 		// Fallback status code retrieval (if event listener missed it)
-		chromedp.ActionFunc(func(ctx context.Context) error {
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 			statusCodeMu.Lock()
 			currentStatusCode := resp.Metrics.StatusCode
 			statusCodeMu.Unlock()
 
 			if currentStatusCode == 0 {
 				// Event listener missed the status code - use fallback via Performance API
-				var statusCodeResult int64
-				err := chromedp.Evaluate(`
+				statusCodeResult, err := chromedp.Evaluate[int64](`
 					(function() {
 						try {
 							var navEntry = performance.getEntriesByType('navigation')[0];
@@ -597,7 +602,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 							return 0;
 						}
 					})()
-				`, &statusCodeResult).Do(ctx)
+				`)(ctx, t)
 
 				if err != nil {
 					ci.logger.Warn("Failed to retrieve status code via Performance API fallback",
@@ -627,7 +632,7 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 
 		// Wait for all fetch handlers to complete BEFORE closing page
 		// This ensures all CDP commands finish before tab is destroyed
-		chromedp.ActionFunc(func(ctx context.Context) error {
+		chromedp.Func(func(ctx context.Context, _ *chromedp.Target) error {
 			// Wait for all fetch handler goroutines to finish
 			timeout := time.After(5 * time.Second)
 			ticker := time.NewTicker(100 * time.Millisecond)
@@ -654,26 +659,27 @@ func (ci *ChromeInstance) buildTasks(req *types.RenderRequest, resp *types.Rende
 			}
 		}),
 
-		page.Close(),
-	}
+		command(page.Close, cdp.Empty{}),
+	)
 }
 
 // navigateAndWait navigates to URL and waits for the page to be ready
 // Supported waits: the lifecycle events "DOMContentLoaded", "load", "networkIdle",
 // "networkAlmostIdle", and the readiness properties (see types.IsPrerenderWait)
 // Uses soft timeout - if wait exceeds timeout, it sets metrics.TimedOut=true but continues
-func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin int64, metrics *types.PageMetrics) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
+func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin int64, metrics *types.PageMetrics) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 		// Navigate and capture frame/loader IDs
-		frameId, loaderId, _, _, err := page.Navigate(req.URL).Do(ctx)
+		nav, err := cdp.Call(ctx, t, page.Navigate, page.NavigateParams{URL: req.URL})
 		if err != nil {
 			return errors.Join(ErrNavigateFailed, err)
 		}
+		frameId, loaderId := nav.FrameID, nav.LoaderID
 
 		// Wait for the page to be ready with timeout (soft - we continue on timeout)
 		var parkedURL string
 		if types.IsPrerenderWait(req.WaitFor) {
-			parkedURL, err = waitForPrerenderReady(ctx, req.WaitFor, string(frameId), string(loaderId),
+			parkedURL, err = waitForPrerenderReady(ctx, t, req.WaitFor, string(frameId), string(loaderId),
 				req.Timeout, metrics, timeOrigin)
 		} else {
 			err = waitForEvent(ctx, req.WaitFor, string(frameId), string(loaderId), req.Timeout, metrics, timeOrigin)
@@ -713,7 +719,7 @@ func (ci *ChromeInstance) navigateAndWait(req *types.RenderRequest, timeOrigin i
 		}
 
 		return nil
-	}
+	})
 }
 
 // lifecycleRecorder collects every page lifecycle event of one navigation onto the render metrics
@@ -745,19 +751,22 @@ func newLifecycleRecorder(metrics *types.PageMetrics, stop context.CancelFunc) *
 // records only and never signals. The returned cancel func must be called by the caller: the
 // recorder cancels the listener itself only when its target arrives.
 func recordLifecycleEvents(ctx context.Context, frameID, loaderID, targetEvent string,
-	metrics *types.PageMetrics, timeOrigin int64) (*lifecycleRecorder, context.CancelFunc) {
+	metrics *types.PageMetrics, timeOrigin int64) (*lifecycleRecorder, context.CancelFunc, error) {
 	listenerCtx, cancel := context.WithCancel(ctx)
 	recorder := newLifecycleRecorder(metrics, cancel)
 
-	chromedp.ListenTarget(listenerCtx, recorder.listener(frameID, loaderID, targetEvent, timeOrigin))
+	if err := chromedp.Listen(listenerCtx, recorder.listener(frameID, loaderID, targetEvent, timeOrigin)); err != nil {
+		cancel()
+		return nil, nil, fmt.Errorf("failed to listen for lifecycle events: %w", err)
+	}
 
-	return recorder, cancel
+	return recorder, cancel, nil
 }
 
 // listener returns the event handler, separated from installation so the matching and signalling
 // rules can be exercised without a browser.
-func (r *lifecycleRecorder) listener(frameID, loaderID, targetEvent string, timeOrigin int64) func(ev interface{}) {
-	return func(ev interface{}) {
+func (r *lifecycleRecorder) listener(frameID, loaderID, targetEvent string, timeOrigin int64) func(ev any) {
+	return func(ev any) {
 		e, ok := ev.(*page.EventLifecycleEvent)
 		// Both IDs must match: a frame can be reused across navigations, so the loader is what
 		// pins the events to this one.
@@ -801,7 +810,10 @@ func (r *lifecycleRecorder) signal() <-chan struct{} {
 // waitForEvent waits for a specific page lifecycle event matching frameId and loaderId
 // Tracks ALL lifecycle events for the page and signals completion when the target event arrives
 func waitForEvent(ctx context.Context, eventName, frameId, loaderId string, timeout time.Duration, metrics *types.PageMetrics, timeOrigin int64) error {
-	recorder, cancel := recordLifecycleEvents(ctx, frameId, loaderId, eventName, metrics, timeOrigin)
+	recorder, cancel, err := recordLifecycleEvents(ctx, frameId, loaderId, eventName, metrics, timeOrigin)
+	if err != nil {
+		return err
+	}
 	defer cancel()
 
 	select {
@@ -816,13 +828,13 @@ func waitForEvent(ctx context.Context, eventName, frameId, loaderId string, time
 }
 
 // extractHTML extracts the page HTML with retry logic
-func (ci *ChromeInstance) extractHTML(output *string) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
+func (ci *ChromeInstance) extractHTML(output *string) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 		var lastErr error
 
 		for attempt := 0; attempt < 3; attempt++ {
 			// Get document root node
-			rootNode, err := dom.GetDocument().Do(ctx)
+			doc, err := cdp.Call(ctx, t, dom.GetDocument, dom.GetDocumentParams{})
 			if err != nil {
 				lastErr = err
 				time.Sleep(300 * time.Millisecond)
@@ -830,29 +842,57 @@ func (ci *ChromeInstance) extractHTML(output *string) chromedp.ActionFunc {
 			}
 
 			// Extract HTML
-			html, err := dom.GetOuterHTML().WithNodeID(rootNode.NodeID).Do(ctx)
+			html, err := cdp.Call(ctx, t, dom.GetOuterHTML, dom.GetOuterHTMLParams{NodeID: doc.Root.NodeID})
 			if err != nil {
 				lastErr = err
 				time.Sleep(300 * time.Millisecond)
 				continue
 			}
 
-			*output = html
+			*output = html.OuterHTML
 			return nil
 		}
 
 		return fmt.Errorf("%w after 3 attempts: %v", ErrExtractHTML, lastErr)
-	}
+	})
 }
 
 // enableLifeCycle enables page lifecycle events
-func enableLifeCycle() chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		if err := page.Enable().Do(ctx); err != nil {
+func enableLifeCycle() chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		if _, err := cdp.Call(ctx, t, page.Enable, page.EnableParams{}); err != nil {
 			return err
 		}
-		return page.SetLifecycleEventsEnabled(true).Do(ctx)
-	}
+		_, err := cdp.Call(ctx, t, page.SetLifecycleEventsEnabled, page.SetLifecycleEventsEnabledParams{Enabled: true})
+		return err
+	})
+}
+
+// command makes a render step of one CDP command whose result the render does not use.
+func command[P, R any](cmd cdp.Command[P, R], params P) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+		_, err := cdp.Call(ctx, t, cmd, params)
+		return err
+	})
+}
+
+// failRequest aborts a paused request.
+func failRequest(ctx context.Context, t *chromedp.Target, id fetch.RequestID) error {
+	_, err := cdp.Call(ctx, t, fetch.FailRequest, fetch.FailRequestParams{RequestID: id, ErrorReason: network.ErrorReasonAborted})
+	return err
+}
+
+// continueRequest releases a paused request, with its headers replaced when headers is non-nil.
+func continueRequest(ctx context.Context, t *chromedp.Target, id fetch.RequestID, headers []*fetch.HeaderEntry) error {
+	_, err := cdp.Call(ctx, t, fetch.ContinueRequest, fetch.ContinueRequestParams{RequestID: id, Headers: headers})
+	return err
+}
+
+// monotonicSeconds converts a CDP monotonic timestamp (seconds since boot) to Unix seconds at
+// millisecond precision, the scale the HAR collector also gets from wall-clock times. cdproto
+// did this conversion itself before its time types became plain seconds.
+func monotonicSeconds(ts cdp.MonotonicTime) float64 {
+	return float64(bootTime.Add(time.Duration(float64(ts)*float64(time.Second))).UnixMilli()) / millisPerSecond
 }
 
 // convertCDPHeaders converts a CDP response header map into the multi-value form used by
@@ -891,7 +931,7 @@ func convertCDPHeaders(cdpHeaders network.Headers) map[string][]string {
 // mergeRequestHeaders merges original Chrome headers with injected client headers.
 // Injected headers override originals (case-insensitive match).
 // Cookie values use "; " separator (RFC 6265), others use ", " (RFC 7230).
-func mergeRequestHeaders(original map[string]interface{}, injected map[string][]string) []*fetch.HeaderEntry {
+func mergeRequestHeaders(original network.Headers, injected map[string][]string) []*fetch.HeaderEntry {
 	headers := make([]*fetch.HeaderEntry, 0, len(original)+len(injected))
 
 	// Build lowercase lookup of headers to inject (for deduplication)

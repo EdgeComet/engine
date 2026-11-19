@@ -126,7 +126,7 @@ func TestFormatConsoleArg(t *testing.T) {
 		},
 		{
 			name:     "object with type only",
-			arg:      &cdpruntime.RemoteObject{Type: cdpruntime.TypeObject},
+			arg:      &cdpruntime.RemoteObject{Type: cdpruntime.RemoteObjectTypeObject},
 			expected: "[object]",
 		},
 		{

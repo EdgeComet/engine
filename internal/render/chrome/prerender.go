@@ -69,12 +69,12 @@ type prerenderState struct {
 type prerenderProbe func(ctx context.Context) (prerenderState, error)
 
 // evaluatePrerenderState returns the Chrome-backed probe for one readiness property.
-func evaluatePrerenderState(name string) prerenderProbe {
-	script := fmt.Sprintf(prerenderPollTemplate, name)
+func evaluatePrerenderState(t *chromedp.Target, name string) prerenderProbe {
+	evaluate := chromedp.Evaluate[prerenderState](fmt.Sprintf(prerenderPollTemplate, name))
 
 	return func(ctx context.Context) (prerenderState, error) {
-		var state prerenderState
-		if err := chromedp.Evaluate(script, &state).Do(ctx); err != nil {
+		state, err := evaluate(ctx, t)
+		if err != nil {
 			return prerenderState{}, fmt.Errorf("prerender state evaluation failed: %w", err)
 		}
 		return state, nil
@@ -138,12 +138,15 @@ func probeWithin(ctx context.Context, probe prerenderProbe, limit time.Duration)
 // events, but a render still has to carry its load and networkIdle timings. The readiness entry is
 // recorded alongside them, which is what makes a page that stopped setting the property
 // distinguishable from a page whose lifecycle event never fired.
-func waitForPrerenderReady(ctx context.Context, name, frameID, loaderID string, timeout time.Duration,
+func waitForPrerenderReady(ctx context.Context, t *chromedp.Target, name, frameID, loaderID string, timeout time.Duration,
 	metrics *types.PageMetrics, timeOrigin int64) (string, error) {
-	recorder, cancel := recordLifecycleEvents(ctx, frameID, loaderID, "", metrics, timeOrigin)
+	recorder, cancel, err := recordLifecycleEvents(ctx, frameID, loaderID, "", metrics, timeOrigin)
+	if err != nil {
+		return "", err
+	}
 	defer cancel()
 
-	redirectURL, err := pollPrerenderReady(ctx, evaluatePrerenderState(name), timeout)
+	redirectURL, err := pollPrerenderReady(ctx, evaluatePrerenderState(t, name), timeout)
 	if err != nil || redirectURL != "" {
 		return redirectURL, err
 	}
@@ -156,13 +159,14 @@ func waitForPrerenderReady(ctx context.Context, name, frameID, loaderID string, 
 // seedPrerenderFlag installs window.isPrerender at document-start for a request that waits on a
 // readiness property, and is a no-op for every other request, so a host that did not ask for it
 // renders exactly as before.
-func (ci *ChromeInstance) seedPrerenderFlag(req *types.RenderRequest) chromedp.ActionFunc {
+func (ci *ChromeInstance) seedPrerenderFlag(req *types.RenderRequest) chromedp.Action[chromedp.Void] {
 	if !types.IsPrerenderWait(req.WaitFor) {
-		return func(context.Context) error { return nil }
+		return chromedp.Steps()
 	}
 
-	return func(ctx context.Context) error {
-		if _, err := page.AddScriptToEvaluateOnNewDocument(prerenderSeedScript).Do(ctx); err != nil {
+	return chromedp.Func(func(ctx context.Context, _ *chromedp.Target) error {
+		params := page.AddScriptToEvaluateOnNewDocumentParams{Source: prerenderSeedScript}
+		if _, err := chromedp.Call(ctx, page.AddScriptToEvaluateOnNewDocument, params); err != nil {
 			// The render continues without the flag: the page will very likely never signal
 			// readiness and the wait will time out, but a partial capture beats no capture.
 			ci.logger.Warn("Failed to seed window.isPrerender, the page may never signal readiness",
@@ -173,5 +177,5 @@ func (ci *ChromeInstance) seedPrerenderFlag(req *types.RenderRequest) chromedp.A
 				zap.Error(err))
 		}
 		return nil
-	}
+	})
 }

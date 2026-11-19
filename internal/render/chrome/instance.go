@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/browser"
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/chromedp"
 	"go.uber.org/zap"
 )
@@ -69,22 +70,18 @@ func (ci *ChromeInstance) createBrowser(config *Config) error {
 	ci.ctx, ci.cancel = chromedp.NewContext(ci.allocatorCtx)
 
 	// Start the browser (this doesn't navigate anywhere yet)
-	if err := chromedp.Run(ci.ctx); err != nil {
+	if err := chromedp.Do(ci.ctx); err != nil {
 		return fmt.Errorf("failed to start Chrome: %w", err)
 	}
 
 	// Capture browser version for HAR metadata
-	if err := chromedp.Run(ci.ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, product, _, _, _, err := browser.GetVersion().Do(ctx)
-		if err != nil {
-			return err
-		}
-		ci.browserVersion = product
-		return nil
-	})); err != nil {
+	version, err := chromedp.CallBrowser(ci.ctx, browser.GetVersion, cdp.Empty{})
+	if err != nil {
 		ci.logger.Warn("Failed to capture browser version",
 			zap.Int("instance_id", ci.ID),
 			zap.Error(err))
+	} else {
+		ci.browserVersion = version.Product
 	}
 
 	return nil
@@ -95,7 +92,7 @@ func (ci *ChromeInstance) Warmup(config *Config) error {
 	ctx, cancel := context.WithTimeout(ci.ctx, config.WarmupTimeout)
 	defer cancel()
 
-	err := chromedp.Run(ctx, chromedp.Navigate(config.WarmupURL))
+	err := chromedp.Do(ctx, chromedp.Navigate(config.WarmupURL))
 	if err != nil {
 		return fmt.Errorf("warmup navigation failed: %w", err)
 	}
@@ -117,15 +114,7 @@ func (ci *ChromeInstance) IsAlive() bool {
 	ctx, cancel := context.WithTimeout(ci.ctx, 5*time.Second)
 	defer cancel()
 
-	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		_, product, _, _, _, err := browser.GetVersion().Do(ctx)
-		if err != nil {
-			return err
-		}
-		// Successfully got version
-		_ = product
-		return nil
-	}))
+	_, err := chromedp.CallBrowser(ctx, browser.GetVersion, cdp.Empty{})
 
 	return err == nil
 }

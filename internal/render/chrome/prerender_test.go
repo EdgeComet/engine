@@ -182,7 +182,8 @@ func TestSeedPrerenderFlagIsGatedOnTheWait(t *testing.T) {
 		instance := &ChromeInstance{ID: 1, logger: zap.New(core)}
 
 		action := instance.seedPrerenderFlag(&types.RenderRequest{RequestID: "test", WaitFor: waitFor})
-		assert.NoError(t, action(context.Background()), "a failed install must never fail the render")
+		_, err := action(context.Background(), nil)
+		assert.NoError(t, err, "a failed install must never fail the render")
 
 		return logs.All()
 	}
